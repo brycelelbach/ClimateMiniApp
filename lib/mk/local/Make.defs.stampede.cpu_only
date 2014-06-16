@@ -1,0 +1,27 @@
+## This file defines variables for TACC's Stampede supercomputer. This build targets
+## CPU cores only.
+
+makefiles+=local/Make.defs.stampede.cpu_only
+
+CXX=icpc
+FC=ifort
+MPICXX=mpiicpc
+USE_64=TRUE
+
+CH_CPP=$(CXX) -E -P -C
+
+RUN = ibrun -n 16 -o 0 ./#
+
+cxxoptflags += -O3 
+foptflags += -O2 
+XTRALDFLAGS += -mkl 
+syslibflags = 
+
+USE_HDF=TRUE
+HDF5_DIR=$(TACC_HDF5_DIR)
+
+HDFLIBFLAGS=   -L$(HDF5_DIR)/lib     $(HDF_POST_LINK_OPTS)  -lhdf5 -lz
+HDFMPILIBFLAGS=-L$(HDF5_DIR)/lib     $(HDF_POST_LINK_OPTS)  -lhdf5 -lz
+HDFINCFLAGS=   -I$(HDF5_DIR)/include $(HDF_INCLUDE_OPTS) 
+HDFMPIINCFLAGS=-I$(HDF5_DIR)/include $(HDF_INCLUDE_OPTS) 
+

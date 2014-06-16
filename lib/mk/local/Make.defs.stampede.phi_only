@@ -1,0 +1,33 @@
+## This file defines variables for TACC's Stampede supercomputer. This build targets
+## Phi co-processors only.
+
+## Non-default Stampede modules required:
+##
+## module swap mvapich2 impi
+
+makefiles+=local/Make.defs.stampede.phi_only
+
+CXX=icpc
+FC=ifort
+MPICXX=mpic++
+USE_64=TRUE
+
+CH_CPP=$(CXX) -E -P -C
+
+# Wrapper to deal with TACC launching procedures for Phi MPI runs.
+# Calling convention is stampede_phi_only_run.sh <# of ranks> <# of OMP threads per rank> <program> 
+#
+# Note that the Knight's Corner cores are effectively barrel processors at the
+# hardware level; The instruction decoder is a 2-cycle, pipelined unit. This
+# means that the core cannot issue instructions from the same hardware context
+# in back-to-back-cycles. Users must utilize at least two hardware contexts per
+# core; at one hardware context per core, half the cycles are wasted. More info
+# can be found in the Xeon Phi system software manual (2.1.2).
+RUN = $(CHOMBO_HOME)/mk/local/stampede_phi_only_run.sh 120 2 ./#
+
+cxxoptflags += -O3 -mmic 
+foptflags += -O2 -mmic 
+XTRALDFLAGS += -mmic -mkl 
+syslibflags = 
+
+USE_HDF=FALSE
