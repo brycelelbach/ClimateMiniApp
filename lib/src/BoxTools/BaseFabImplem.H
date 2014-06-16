@@ -22,15 +22,8 @@
 // BaseFab<Real> specializations
 //
 
-template < > void BaseFab<Real>::define();
-
-template < > void BaseFab<Real>::undefine();
-
 template < > void BaseFab<Real>::setVal (Real val);
-
-template < > void BaseFab<int>::define();
-
-template < > void BaseFab<int>::undefine();
+template < > void BaseFab<Real>::initVal ();
 
 template < > int BaseFab<int>::test();
 
@@ -197,7 +190,7 @@ template <class T> inline int BaseFab<T>::nComp() const
   return m_nvar;
 }
 
-template <class T> Arena* BaseFab<T>::s_Arena = NULL;
+//template <class T> Arena* BaseFab<T>::s_Arena = NULL;
 
 template <class T> inline const Box& BaseFab<T>::box() const
 {
@@ -531,59 +524,31 @@ template <class T> inline void BaseFab<T>::define()
   CH_assert(!m_aliased);
   //CH_assert(!(The_FAB_Arena == 0));// not a sufficient test !!!
 
-#ifdef CH_USE_MEMORY_TRACKING
-  if (s_Arena == NULL)
-  {
-    s_Arena = new BArena(name().c_str());
-  }
-#else
-  if (s_Arena == NULL)
-  {
-    s_Arena = new BArena("");
-  }
-#endif
-
-  if (s_Arena == NULL)
-  {
-    MayDay::Error("malloc in basefab failed");
-  }
-
   m_truesize = m_nvar * m_numpts;
-  if (m_truesize > 0)
-    {
-      m_dptr     = static_cast<T*>(s_Arena->alloc(m_truesize * sizeof(T)));
+  if (m_truesize == 0) return;
 
-#ifdef CH_USE_MEMORY_TRACKING
-      s_Arena->bytes += m_truesize * sizeof(T) + sizeof(BaseFab<T>);
-      CH_assert(s_Arena->bytes > 0);
-      if (s_Arena->bytes > s_Arena->peak)
-        {
-          s_Arena->peak = s_Arena->bytes;
-        }
+  // ISO/IEC 14882:2003, Section 5.3.4 [expr.new], paragraph 15: If the new-initializer
+  // is omitted, and T is not a (possibly cv-qualified) non-POD class type,
+  // then the initial value of the items is unspecified. This specific language
+  // was selected to allow compilers/stdlib runtimes to /not/ call constructors
+  // for POD-types (e.g. double, int, etc). Every major compiler/stdlib vendor
+  // has implemented this optimization for at least a decade (MSVC, Intel,
+  // GCC, xlc, suncc, pathscale, pgi); such a constructor is said to be trivial
+  // (section 12.1 [class.ctor] provides the relevant definition). 
+  //
+  // tl;dr - In release builds, constructors will be called if they are
+  // non-trivial. For POD-types (double, int, etc) and classes with trivial
+  // constructors, this operation will not perform an expensive O(n)
+  // initialization.
+  m_dptr = new T [m_truesize];
+
+#ifdef CH_USE_SETVAL
+  initVal(); // no-op if T != Real
 #endif
-    }
-  else
-    { // m_truesize == 0: allocating no space
-      m_dptr = NULL;
-    }
-
-  //
-  // Now call T::T() on the raw memo'ry so we have valid Ts.
-  //
-  T* ptr = m_dptr;
-
-  for (long int i = 0; i < m_truesize; i++, ptr++)
-  {
-    new (ptr) T;
-  }
 }
 
 template <class T> inline void BaseFab<T>::undefine()
 {
-  //CH_assert(!(The_FAB_Arena == 0));
-  //
-  // Call T::~T() on the to-be-destroyed memory.
-  //
   if (m_aliased)
   {
     m_dptr = 0;
@@ -595,19 +560,13 @@ template <class T> inline void BaseFab<T>::undefine()
     return;
   }
 
-  T* ptr = m_dptr;
-
-  for (long int i = 0; i < m_truesize; i++, ptr++)
-  {
-    ptr->~T();
-  }
-
-  s_Arena->free(m_dptr);
-
-#ifdef CH_USE_MEMORY_TRACKING
-  s_Arena->bytes -= m_truesize * sizeof(T) + sizeof(BaseFab<T>);
-  CH_assert(s_Arena->bytes >= 0);
-#endif
+  // See note in BaseFab<T>::define(). In release builds, this will call
+  // non-trivial destructors (including the correct ones when T is a polymorphic
+  // base-class). For POD-types (doubles, int, etc) and classes with trivial
+  // destructors, this operation will not perform an expensive O(n)
+  // destruction; memory will simply be freed. ISO/IEC 14882:2003, Section
+  // 5.3.5 [expr.delete] and Section 12.4 [class.dtor]. 
+  delete[] m_dptr;
 
   m_dptr = 0;
 }
@@ -686,6 +645,7 @@ BaseFab<T>::degenerate(  BaseFab<T>& a_slice,
   a_slice.copy( *this, degenerateBox );
 }
 
+template <class T> void BaseFab<T>::initVal () {}
 #include "NamespaceFooter.H"
 
 #endif

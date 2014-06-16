@@ -525,6 +525,11 @@ public:
   static int testBoxAndComp();
 protected:
   //
+  // If T == Real, then setVal(BASEFAB_REAL_SETVAL) is called.
+  //
+  void initVal();
+
+  //
   // Allocates memory for the `BaseFab<T>'.
   //
   void define();
@@ -559,7 +564,7 @@ protected:
   // work with all compilers.  It has been in the draft standard
   // for some time
   //
-  static Arena* s_Arena;
+  //static Arena* s_Arena;
 
   Box  m_domain;   // My index space.
   int  m_nvar;     // Number components.

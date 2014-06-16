@@ -29,27 +29,27 @@ include $(CHOMBO_HOME)/mk/Make.defs.defaults
 ##[NOTE: if you change the names, change the dependencies below.]
 
 ifeq ($(DIM),1)
-lib_ch_targets := BaseTools
+lib_ch_targets := BaseTools BoxTools
 extra_test_targets := 
 endif
 ifeq ($(DIM),2)
-lib_ch_targets := BaseTools 
+lib_ch_targets := BaseTools BoxTools 
 extra_test_targets := 
 endif
 ifeq ($(DIM),3)
-lib_ch_targets := BaseTools
+lib_ch_targets := BaseTools BoxTools
 extra_test_targets := 
 endif
 ifeq ($(DIM),4)
-lib_ch_targets := BaseTools
+lib_ch_targets := BaseTools BoxTools
 extra_test_targets :=
 endif
 ifeq ($(DIM),5)
-lib_ch_targets := BaseTools
+lib_ch_targets := BaseTools BoxTools
 extra_test_targets :=
 endif
 ifeq ($(DIM),6)
-lib_ch_targets := BaseTools 
+lib_ch_targets := BaseTools BoxTools 
 extra_test_targets := 
 endif
 

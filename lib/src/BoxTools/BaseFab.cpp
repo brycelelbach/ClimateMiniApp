@@ -56,6 +56,7 @@ template < > int BaseFab<int>::test()
 
   return 0;
 }
+/*
 template < > void BaseFab<Real>::define()
 {
   CH_assert(m_nvar > 0);
@@ -99,7 +100,8 @@ template < > void BaseFab<Real>::define()
   setVal(BaseFabRealSetVal);
 #endif
 }
-
+*/
+/*
 template < > void BaseFab<int>::define()
 {
   CH_assert(m_nvar > 0);
@@ -138,7 +140,8 @@ template < > void BaseFab<int>::define()
   }
 #endif
 }
-
+*/
+/*
 template < > void BaseFab<Real>::undefine()
 {
   if (m_aliased)
@@ -161,7 +164,8 @@ template < > void BaseFab<Real>::undefine()
 
   m_dptr = 0;
 }
-
+*/
+/*
 template < > void BaseFab<int>::undefine()
 {
   if (m_aliased)
@@ -184,7 +188,7 @@ template < > void BaseFab<int>::undefine()
 
   m_dptr = 0;
 }
-
+*/
 template < > void BaseFab<Real>::setVal(Real a_val)
 {
   if (a_val == 0)
@@ -199,5 +203,13 @@ template < > void BaseFab<Real>::setVal(Real a_val)
       *v = a_val;
     }
   }
+}
+template < > void BaseFab<Real>::initVal()
+{
+    Real* end = m_dptr + m_truesize;
+    for (Real* v = m_dptr; v<end; v++)
+    {
+      *v = BaseFabRealSetVal;
+    }
 }
 #include "NamespaceFooter.H"
