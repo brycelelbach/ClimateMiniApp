@@ -50,7 +50,7 @@ main(int argc, char* argv[])
 
 
   if ( verbose )
-    pout() << indent2 << "Beginning " << pgmname << " ..." << endl ;
+    pout() << indent2 << "Beginning " << pgmname << " ..." << std::endl ;
 
   ///
   // Run the tests
@@ -108,7 +108,7 @@ testRCP()
   {
     if (verbose)
     {
-      pout() << indent2 << "RefCountedPtr failed isNonUnique" << endl;
+      pout() << indent2 << "RefCountedPtr failed isNonUnique" << std::endl;
     }
     return_code = -1;
   }
@@ -118,7 +118,7 @@ testRCP()
   {
     if (verbose)
     {
-      pout() << indent2 << "RefCountedPtr failed isNonUnique" << endl;
+      pout() << indent2 << "RefCountedPtr failed isNonUnique" << std::endl;
     }
     return_code = -1;
   }
@@ -130,7 +130,7 @@ testRCP()
       {
         if (verbose)
           {
-            pout() << indent2 << "RefCountedPtr::refCount is wrong" << endl;
+            pout() << indent2 << "RefCountedPtr::refCount is wrong" << std::endl;
           }
         return_code = -1;
       }
@@ -139,7 +139,7 @@ testRCP()
     {
       if (verbose)
         {
-          pout() << indent2 << "RefCountedPtr::refCount is wrong" << endl;
+          pout() << indent2 << "RefCountedPtr::refCount is wrong" << std::endl;
         }
       return_code = -1;
     }
@@ -155,7 +155,7 @@ testRCP()
     {
       if (verbose)
         {
-          pout() << indent2 << "RefCountedPtr template conversion is wrong" << endl;
+          pout() << indent2 << "RefCountedPtr template conversion is wrong" << std::endl;
         }
       return_code = -1;
     }
@@ -165,7 +165,7 @@ testRCP()
     {
       if (verbose)
         {
-          pout() << indent2 << "RefCountedPtr template conversion is wrong" << endl;
+          pout() << indent2 << "RefCountedPtr template conversion is wrong" << std::endl;
         }
       return_code = -1;
     }
@@ -173,11 +173,11 @@ testRCP()
 //
   if (return_code == 0)
   {
-    pout() << indent << "testRefCountedPtr test passed." << endl;
+    pout() << indent << "testRefCountedPtr test passed." << std::endl;
   }
   else
   {
-    pout() << indent << "testRefCountedPtr test FAILED!!!" << endl;
+    pout() << indent << "testRefCountedPtr test FAILED!!!" << std::endl;
   }
 
   breakpointHook();
