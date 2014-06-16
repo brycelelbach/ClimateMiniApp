@@ -52,8 +52,6 @@ extern "C"
 #include <iostream>
 #include "BaseNamespaceHeader.H"
 
-using namespace std;
-
  /** A simple class for keeping track of elapsed time.
 
    CH_XD::OldTimer provides the ability to measure the passage of wall-clock time
@@ -77,10 +75,10 @@ class OldTimer
     /// Construct an unnamed timer that has no relation to any other instance
     OldTimer();                                                        // unmanaged
     /// Construct a named timer and add it to a table.
-    OldTimer(const string& a_name,         const int a_tableID);       // root parent-only
-    OldTimer(const string& a_name, OldTimer&, const int a_tableID);       // parent/child
-    OldTimer(const string& a_name, OldTimer&);                            // child only
-    OldTimer(const string& a_name, OldTimer&, const int a_tableID, bool); // diagnostic
+    OldTimer(const std::string& a_name,         const int a_tableID);       // root parent-only
+    OldTimer(const std::string& a_name, OldTimer&, const int a_tableID);       // parent/child
+    OldTimer(const std::string& a_name, OldTimer&);                            // child only
+    OldTimer(const std::string& a_name, OldTimer&, const int a_tableID, bool); // diagnostic
 
     ~OldTimer();
 
@@ -96,7 +94,7 @@ class OldTimer
       return m_accumulated_WCtime;
     }
     double mflops();
-    void writeTotalPct(const string& a_extra = "");
+    void writeTotalPct(const std::string& a_extra = "");
 
 #ifdef PAPI
     long long int papi_counter0()
@@ -135,7 +133,7 @@ class OldTimer
 #endif
 #endif
 
-    string Name()
+    std::string Name()
     {
       return m_name;
     }
@@ -148,7 +146,7 @@ class OldTimer
       return m_tableID;
     }
 
-    static list<OldTimer*> *TimerList; // must be initialized somewhere
+    static std::list<OldTimer*> *TimerList; // must be initialized somewhere
 
     static void TimerSummary(const int bert, const int ernie)
     {
@@ -178,7 +176,7 @@ class OldTimer
 #endif
 
     int m_ID;
-    string m_name;
+    std::string m_name;
     bool m_diagnostic;
     OldTimer& m_Parent;
 

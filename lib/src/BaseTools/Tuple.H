@@ -14,7 +14,6 @@
 #include <cstdlib>
 #include "CH_assert.H"
 #include "BaseNamespaceHeader.H"
-using namespace std;
 
 //
 /// Ordered Tuples for Types T

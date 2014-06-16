@@ -36,8 +36,6 @@
 
 #include "BaseNamespaceHeader.H"
 
-using namespace std;
-
 #ifdef CH_NTIMER
 
 #define CH_TIMER(name, tpointer)   (void)0
