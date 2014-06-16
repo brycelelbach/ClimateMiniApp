@@ -29,50 +29,31 @@ include $(CHOMBO_HOME)/mk/Make.defs.defaults
 ##[NOTE: if you change the names, change the dependencies below.]
 
 ifeq ($(DIM),1)
-lib_ch_targets := BaseTools BoxTools AMRTools AMRElliptic OldAMRElliptic AMRTimeDependent ParticleTools HOAMRTools MOLAMRTimeDependent HOMappedGeometry HOMappedConservation 
-extra_test_targets := DotProduct ChomboFortran
+lib_ch_targets := BaseTools
+extra_test_targets := 
 endif
 ifeq ($(DIM),2)
-lib_ch_targets := BaseTools BoxTools AMRTools AMRElliptic OldAMRElliptic AMRTimeDependent ParticleTools HOAMRTools MOLAMRTimeDependent HOMappedGeometry HOMappedConservation
-extra_test_targets := DotProduct ChomboFortran
+lib_ch_targets := BaseTools 
+extra_test_targets := 
 endif
 ifeq ($(DIM),3)
-lib_ch_targets := BaseTools BoxTools AMRTools AMRElliptic OldAMRElliptic AMRTimeDependent ParticleTools InfiniteDomain HOAMRTools MOLAMRTimeDependent HOMappedGeometry HOMappedConservation
-extra_test_targets := DotProduct ChomboFortran
+lib_ch_targets := BaseTools
+extra_test_targets := 
 endif
 ifeq ($(DIM),4)
-lib_ch_targets := BaseTools BoxTools AMRTools AMRTimeDependent HOAMRTools
-extra_test_targets := ChomboFortran
+lib_ch_targets := BaseTools
+extra_test_targets :=
 endif
 ifeq ($(DIM),5)
-lib_ch_targets := BaseTools BoxTools AMRTools AMRTimeDependent HOAMRTools
-extra_test_targets := ChomboFortran
+lib_ch_targets := BaseTools
+extra_test_targets :=
 endif
 ifeq ($(DIM),6)
-lib_ch_targets := BaseTools BoxTools AMRTools AMRTimeDependent HOAMRTools
-extra_test_targets := ChomboFortran
-endif
-
-lib_eb_targets := EBTools EBAMRTools Workshop EBAMRElliptic EBAMRTimeDependent
-lib_mf_targets := MFElliptic MFTools
-lib_ccse_targets := CCSE
-
-lib_targets := $(lib_ch_targets)
-ifeq ($(USE_EB),TRUE)
-  lib_targets += $(lib_eb_targets)
-endif
-ifeq ($(USE_MF),TRUE)
-  lib_targets += $(lib_mf_targets)
-endif
-ifeq ($(USE_CCSE),TRUE)
-  lib_targets += $(lib_ccse_targets)
+lib_ch_targets := BaseTools 
+extra_test_targets := 
 endif
 
 lib_targets := $(shell \echo $(lib_targets) `\ls` | \tr ' ' '\n' | \sort | \uniq -d)
-
-# some src subdirs don't have tests; ChomboFortran and DotProduct have tests but no src subdir
-#[NOTE: this has to be "=", not ":=" for it to work correctly]
-test_targets = $(filter-out ArrayView EBArrayView InfiniteDomain HOAMRTools MOLAMRTimeDependent,$(lib_targets)) $(extra_test_targets)
 
 ##
 ## These are the actions (targets for the recursive make) supported by this

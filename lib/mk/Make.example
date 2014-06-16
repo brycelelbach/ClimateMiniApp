@@ -106,20 +106,18 @@ appcppflags := -I$(base_dir) $(addprefix -I,$(src_dirs))
 ##
 ## targets
 
-.PHONY: all example lib run vars usage
+.PHONY: all example lib vars usage
 
 usage:
 	@echo "This makefile supports targets:"
-	@echo "     all example lib example-only run $(ebase) vars usage"
+	@echo "     all lib $(ebase) vars usage"
 
-all example: all-example
+all: all-example
 
 lib: $(shell $(CHOMBO_HOME)/mk/reverse $(LibNames))
 
 # tell program to run quietly unless user overrides on the command line
 VERBOSE =
-
-run: run-only
 
 vars:
 	@echo "CHOMBO_HOME=$(CHOMBO_HOME)"
