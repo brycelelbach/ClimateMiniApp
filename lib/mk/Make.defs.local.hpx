@@ -1,0 +1,13 @@
+## Assumes that you've set PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$HPX_LOCATION/lib/pkgconfig in your environment
+
+MPI=FALSE
+DEBUG=FALSE
+
+cxxoptflags += -g $(shell pkg-config --cflags hpx_application)
+foptflags += -g 
+XTRAPOSTFLAGS += -g $(shell pkg-config --cflags --libs hpx_application)
+
+## To run on Stampede, then you would do:
+#include $(CHOMBO_HOME)/mk/local/Make.defs.stampede.cpu_only
+
+USE_HDF=FALSE
