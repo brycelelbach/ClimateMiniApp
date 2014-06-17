@@ -637,6 +637,8 @@ public:
 
   /*@}*/
 
+  friend void swap(IntVect& lhs, IntVect& rhs) CH_NOEXCEPT;
+
 protected:
   //
   // Box is a friend of ours.
@@ -1249,6 +1251,13 @@ IntVect::coarsen (const IntVect& p)
       vect[i] = ((vect[i]<0) ? -abs(vect[i]+1)/s-1 : vect[i]/s);
     }
   return *this;
+}
+
+inline
+void swap (IntVect& lhs, IntVect& rhs)
+{
+  using std::swap;
+  swap(lhs.vect, rhs.vect);
 }
 
 #endif /* WRAPPER */
