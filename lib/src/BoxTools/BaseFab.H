@@ -525,7 +525,7 @@ public:
   ///regression test
   static int testBoxAndComp();
 
-  void swap() CH_NOEXCEPT;
+  friend void swap(BaseFab<T>& lhs, BaseFab<T>& rhs) CH_NOEXCEPT;
 
 #if defined(CH_CXX11)
   // Make FAB a movable type.

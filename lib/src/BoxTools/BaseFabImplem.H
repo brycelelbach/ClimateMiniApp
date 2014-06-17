@@ -633,14 +633,14 @@ bool BaseFab<T>::isAliased() const
 // All of these swaps involve builtin types or pointers, except for Box (which
 // also has a noexcept swap). Thus, noexcept.
 template <class T>
-void BaseFab<T>::swap(BaseFab<T>& rhs) NOEXCEPT
+void swap(BaseFab<T>& lhs, BaseFab<T>& rhs) NOEXCEPT
 {
     using std::swap; // ADL
-    swap(m_domain, rhs.m_domain);
-    swap(m_nvars, rhs.m_nvars);
-    swap(m_numpts, rhs.m_numpts);
-    swap(m_truesize, rhs.m_truesize);
-    swap(m_aliased, rhs.m_aliased);
+    swap(lhs.m_domain, rhs.m_domain); // Box has noexcept swap
+    swap(lhs.m_nvars, rhs.m_nvars);
+    swap(lhs.m_numpts, rhs.m_numpts);
+    swap(lhs.m_truesize, rhs.m_truesize);
+    swap(lhs.m_aliased, rhs.m_aliased);
 }
 
 #if defined(CH_CXX11)
