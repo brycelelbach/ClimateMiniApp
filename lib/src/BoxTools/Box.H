@@ -253,6 +253,9 @@ public:
   */
   friend std::istream& operator>> (std::istream&   is,
                                    IndexType& itype);
+
+  friend void swap(IndexType& lhs, IndexType& rhs) CH_NOEXCEPT;
+
 private:
   //
   // Returns 1<<k.
@@ -440,6 +443,14 @@ IndexType::ixType () const
 {
   return IntVect(D_DECL6(itype&1, (itype>>1)&1, (itype>>2)&1,
                          (itype>>3)&1, (itype>>4)&1, (itype>>5)&1));
+}
+
+inline
+void
+swap (IndexType& lhs, IndexType& rhs) NOEXCEPT 
+{
+  using std::swap;
+  swap(lhs.itype, rhs.itype);
 }
 
 #endif /* WRAPPER */
@@ -1636,6 +1647,8 @@ public:
   /** Doesn't print the IndexType, and uses square outer brackets. */
   static void setTempestOutputFormat( bool );
 
+  friend void swap(Box& lhs, Box& rhs) CH_NOEXCEPT;
+
 protected:
   friend class HDF5Handle;
   //
@@ -2410,6 +2423,15 @@ Box::operator& (const Box& rhs) const
 {
   Box lhs(*this);
   return lhs &= rhs;
+}
+
+inline
+void swap (Box& lhs, Box& rhs) 
+{
+  using std::swap; // ADL
+  swap(lhs.smallend, rhs.smallend);
+  swap(lhs.bigend, rhs.bigend);
+  swap(lhs.btype, rhs.btype);
 }
 
 #endif /* WRAPPER */
