@@ -630,6 +630,78 @@ bool BaseFab<T>::isAliased() const
   return m_aliased;
 }
 
+// All of these swaps involve builtin types or pointers, except for Box (which
+// also has a noexcept swap). Thus, noexcept.
+template <class T>
+void BaseFab<T>::swap(BaseFab<T>& rhs) NOEXCEPT
+{
+    using std::swap; // ADL
+    swap(m_domain, rhs.m_domain);
+    swap(m_nvars, rhs.m_nvars);
+    swap(m_numpts, rhs.m_numpts);
+    swap(m_truesize, rhs.m_truesize);
+    swap(m_aliased, rhs.m_aliased);
+}
+
+#if defined(CH_CXX11)
+template <class T>
+BaseFab<T>&& BaseFab<T>::operator= (BaseFab<T>&& rhs)
+{
+    // Pointer inequality is a necessary and sufficient check.
+    //
+    // Suppose we have the expression lhs = rhs. There are four cases:
+    //   - lhs is real FAB, rhs is real FAB: boring, trivial
+    //   - lhs is real FAB, rhs is aliased to lhs:
+    //      - lhs memory is released
+    //      - rhs pointer is copied to lhs
+    //      - rhs is invalidated 
+    //   - lhs is aliased rhs, rhs is real FAB
+    //      - lhs is aliased, nothing to free (undefine() will be a no-op)
+    //      - rhs pointer is copied to lhs
+    //      - rhs is invalidated 
+    //   - lhs is aliased FAB, rhs is aliased FAB: boring, trivial
+
+    // Free lhs.
+    if (this != &rhs)
+        undefine(); // no-op for aliased lhs.
+
+    // Copy lhs to rhs.
+    m_domain = rhs.m_domain;
+    m_nvar = rhs.m_nvar;
+    m_numpts = rhs.m_numpts;
+    m_truesize = rhs.m_truesize;
+    m_dptr = rhs.m_dptr;
+    m_aliased = rhs.m_aliased;
+
+    // Invalidate rhs.
+    m_domain = Box();
+    m_nvar = 0;
+    m_numpts = 0;
+    m_truesize = 0;
+    m_dptr = NULL;
+    m_aliased = false;
+}
+
+template <class T>
+BaseFab<T>::BaseFab (BaseFab<T>&& rhs)
+    // Copy from rhs
+  : m_domain(rhs.m_domain)
+  , m_nvar(rhs.m_nvar)
+  , m_numpts(rhs.m_numpts)
+  , m_truesize(rhs.m_truesize)
+  , m_dptr(rhs.m_dptr)
+  , m_aliased(rhs.m_aliased)
+{
+    // Invalidate rhs
+    m_domain = Box();
+    m_nvar = 0;
+    m_numpts = 0;
+    m_truesize = 0;
+    m_dptr = NULL;
+    m_aliased = false;
+}
+#endif
+
 template <class T> void
 BaseFab<T>::degenerate(  BaseFab<T>& a_slice,
                          const SliceSpec& a_sliceSpec ) const

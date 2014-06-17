@@ -11,6 +11,7 @@
 #ifndef _BASEFAB_H_
 #define _BASEFAB_H_
 
+#include <algorithm>
 #include <cstdlib>
 #include "SPACE.H"
 #include <string>
@@ -523,6 +524,15 @@ public:
 
   ///regression test
   static int testBoxAndComp();
+
+  void swap() CH_NOEXCEPT;
+
+#if defined(CH_CXX11)
+  // Make FAB a movable type.
+  BaseFab<T>&& operator= (BaseFab<T>&& rhs);
+  BaseFab (BaseFab<T>&& rhs);
+#endif
+
 protected:
   //
   // If T == Real, then setVal(BASEFAB_REAL_SETVAL) is called.
