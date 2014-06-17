@@ -447,7 +447,7 @@ IndexType::ixType () const
 
 inline
 void
-swap (IndexType& lhs, IndexType& rhs) NOEXCEPT 
+swap (IndexType& lhs, IndexType& rhs) CH_NOEXCEPT 
 {
   using std::swap;
   swap(lhs.itype, rhs.itype);

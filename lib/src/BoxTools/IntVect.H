@@ -11,6 +11,8 @@
 #ifndef _INTVECT_H_
 #define _INTVECT_H_
 
+#include "DetectCXX11.H"
+
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
