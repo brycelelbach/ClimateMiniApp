@@ -27,12 +27,18 @@
 // 
 //  Detection code for C++11, for HPX compatibility/C++11 memory model/thread safety stuff. 
 
-#if (__INTEL_COMPILER <= 1310) || !defined(__GXX_EXPERIMENTAL_CXX0X__)
+#if (__INTEL_COMPILER > 1310) && defined(__GXX_EXPERIMENTAL_CXX0X__)
     #define CH_CXX11 1
 #endif
 
-#if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 6) || !defined(__GXX_EXPERIMENTAL_CXX0X__)
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && defined(__GXX_EXPERIMENTAL_CXX0X__)
     #define CH_CXX11 1
+#endif
+
+#if CH_CXX11
+  #define CH_NOEXCEPT noexcept
+#else
+  #define CH_NOEXCEPT
 #endif
 
 #endif
