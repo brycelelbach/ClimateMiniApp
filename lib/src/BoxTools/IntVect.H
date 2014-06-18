@@ -1256,7 +1256,7 @@ IntVect::coarsen (const IntVect& p)
 }
 
 inline
-void swap (IntVect& lhs, IntVect& rhs)
+void swap (IntVect& lhs, IntVect& rhs) CH_NOEXCEPT
 {
   using std::swap;
   swap(lhs.vect, rhs.vect);

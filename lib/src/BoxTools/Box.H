@@ -2426,7 +2426,7 @@ Box::operator& (const Box& rhs) const
 }
 
 inline
-void swap (Box& lhs, Box& rhs) 
+void swap (Box& lhs, Box& rhs) CH_NOEXCEPT
 {
   using std::swap; // ADL
   swap(lhs.smallend, rhs.smallend);
