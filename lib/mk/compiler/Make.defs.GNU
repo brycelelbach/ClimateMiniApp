@@ -57,13 +57,11 @@ ifeq ($(cxxname),g++)
   _gppmajorver:= $(word 1,$(_gppversion))
   _gppminorver:= $(word 2,$(_gppversion))
 
-  # `-ftemplate-depth' is needed to keep mangled function names from
-  #  getting too long for some linkers to handle.
   # HDF5 uses `long long', so disable warnings about it.
   # `-Wno-sign-compare' turns off warnings about comparing signed and unsigned int -
   #   this is a meaningful warning, but it appears way too often in our code.
 
-  _cxxbaseflags := -Wno-long-long -Wno-sign-compare -Wno-deprecated -ftemplate-depth-25 
+  _cxxbaseflags := -Wno-long-long -Wno-sign-compare -Wno-deprecated 
 
   # g++ v3.4.0 started objecting to some uses of HOFFSET()
   # TJL - Changed moving from csh to sh...
