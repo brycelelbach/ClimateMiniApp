@@ -637,9 +637,10 @@ void swap(BaseFab<T>& lhs, BaseFab<T>& rhs) CH_NOEXCEPT
 {
     using std::swap; // ADL
     swap(lhs.m_domain, rhs.m_domain); // Box has noexcept swap
-    swap(lhs.m_nvars, rhs.m_nvars);
+    swap(lhs.m_nvar, rhs.m_nvar);
     swap(lhs.m_numpts, rhs.m_numpts);
     swap(lhs.m_truesize, rhs.m_truesize);
+    swap(lhs.m_dptr, rhs.m_dptr);
     swap(lhs.m_aliased, rhs.m_aliased);
 }
 
