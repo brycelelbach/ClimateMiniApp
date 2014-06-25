@@ -9,26 +9,17 @@
 
 #include "FArrayBox.H"
 
-Real constexpr T_floor = 1e-10; // Temperature floor.
-  
-Real constexpr nt = 5; 
-Real constexpr nx = 100;
-Real constexpr ny = 10; 
+Real constexpr nt = 100; 
+Real constexpr nx = 40;
+Real constexpr ny = 40; 
 
-Real constexpr k = 0.5; // Diffusion coefficient 
-Real constexpr A = 0.25; // Parameter of the initial state 
+Real constexpr kx = 0.5;
+Real constexpr ky = 0.75;
 
 Real initial_profile(Real nx, Real x, Real ny, Real y)
 {
-    Real a = 500.0/(nx*nx);
-    Real c = 20.0/(ny*ny);
-    Real x0 = (nx-1.0)/2.0;
-    Real y0 = (ny-1.0)/2.0;
-    Real T = A*std::exp(a*(x-x0)-c*(std::fabs(y-y0)));
-    if (T < T_floor) return T_floor; else return T; 
+    return 0.0;
 }
-
-Real const max_temp(initial_profile(nx, nx-1, ny, ny-1));
 
 void verify(bool predicate, std::string const& fail_msg)
 {
@@ -36,31 +27,56 @@ void verify(bool predicate, std::string const& fail_msg)
         throw std::runtime_error(fail_msg);
 }
 
-///////////////////////////////////////////////////////////////////////////////
-Real explicit_op(Real z, Real here, Real left, Real right)
+std::tuple<Real, Real> phys_coords(size_t i, size_t j)
 {
-    return here + z*(left - 2*here + right); 
+    return std::tuple<Real, Real>(Real(i)/(1.0*nx-1.0), Real(j)/(1.0*ny-1.0));
 }
+
+///////////////////////////////////////////////////////////////////////////////
+Real explicit_op(Real c, Real here, Real left, Real right)
+{
+    return here + c*(left - 2*here + right); 
+}
+
+Real source(Real dt, Real i, Real j)
+{
+    Real x, y;
+    std::tie(x, y) = phys_coords(i, j);
+    return std::sin(M_PI*x)*std::sin(2.0*M_PI*y);
+} 
+
+Real analytic(Real t, 
 
 ///////////////////////////////////////////////////////////////////////////////
 // Boundary conditions.
 
-// The domain is a tube which is open on one end (the left). The up/down
-// BCs are reflecting; the right BC  
-
-Real left_boundary(Real z, Real here, Real right)
+Real left_boundary(Real c, Real here, Real right)
 {
-    // Assume the temperature outside of the tube is 0. 
-    return here + z*(-2*here + right); 
+    // The temperature is 0 at the boundary. 
+    return here + c*(-2.0*here + right); 
 }
 
-Real right_boundary(Real z, Real here, Real left)
+Real right_boundary(Real c, Real here, Real left)
 {
-    // Heat source to the right. 
-    return here + 0.5*z*(left - 2*here + max_temp); 
+    // The temperature is 0 at the boundary.
+    return here + c*(left - 2.0*here); 
 }
 
-void stencil(FArrayBox& soln)
+// Returns [d.front(), du.front()]
+std::tuple<Real, Real> down_boundary(Real c, Real here, Real up)
+{
+    // Should be [1.0+c, -c/2] for a boundary condition of 0.
+    return std::tuple<Real, Real>{1.0+c, -c/2};
+}
+
+// Returns [d.back(), dl.back()]
+std::tuple<Real, Real> up_boundary(Real c, Real here, Real down)
+{
+    // Should be [1.0+c, -c/2] for a boundary condition of 0.
+    return std::tuple<Real, Real>{1.0+c, -c/2}; 
+}
+
+void advance(FArrayBox& soln)
 {
     IntVect lower = soln.smallEnd();
     IntVect upper = soln.bigEnd(); 
@@ -70,22 +86,23 @@ void stencil(FArrayBox& soln)
     size_t const nx = upper[0]-lower[0]; 
     size_t const ny = upper[1]-lower[1]; 
 
-    Real constexpr dt = 1.0; // TODO: actually compute CFL
+    Real constexpr dt = 0.05; // TODO: actually compute CFL
     Real constexpr dh = 1.0;
 
-    Real const z = k*dt/(dh*dh);
+    Real const cx = kx*dt/(dh*dh);
+    Real const cy = ky*dt/(dh*dh);
 
     // Storage for the RHS. 
     std::vector<std::vector<Real> > RHS(
         nx, // Number of "columns" to solve
-        std::vector<Real>(ny+2, 0.0) // Two extra equations (boundary conditions) 
+        std::vector<Real>(ny, 0.0) // Two extra equations (boundary conditions) 
     );
 
     // Explicit op.
     for (size_t j = lower[1]; j < upper[1]; ++j)
     {
         // Adjusted indices.
-        size_t jj = j - lower[1] + 1;
+        size_t jj = j - lower[1];
 
         ///////////////////////////////////////////////////////////////////////
         // Left/right boundary conditions
@@ -94,8 +111,8 @@ void stencil(FArrayBox& soln)
         IntVect rightmost  (upper[0]-1, j  , 0);
         IntVect rm_neighbor(upper[0]-2, j  , 0);
  
-        RHS[lower[0]  ][jj] = left_boundary (z, soln(leftmost), soln(lm_neighbor));
-        RHS[upper[0]-1][jj] = right_boundary(z, soln(rightmost), soln(rm_neighbor));
+//        RHS[lower[0]  ][jj] = left_boundary (cx, soln(leftmost),  soln(lm_neighbor));
+//        RHS[upper[0]-1][jj] = right_boundary(cx, soln(rightmost), soln(rm_neighbor));
 
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
@@ -108,7 +125,8 @@ void stencil(FArrayBox& soln)
             IntVect left (i-1, j  , 0);
             IntVect right(i+1, j  , 0);
 
-            RHS[ii][jj] = explicit_op(z, soln(here), soln(left), soln(right)); 
+            RHS[ii][jj] = explicit_op(cx, soln(here), soln(left), soln(right))
+                        + source(dt, i, j); 
         }
     }
 
@@ -118,7 +136,7 @@ void stencil(FArrayBox& soln)
         {
             // Adjusted indices.
             size_t ii = i - lower[0];
-            size_t jj = j - lower[1] + 1;
+            size_t jj = j - lower[1];
 
             IntVect here(i, j, 0);
  
@@ -131,19 +149,19 @@ void stencil(FArrayBox& soln)
     // For each column, we want to solve Ax=RHS, where A is a matrix of the
     // form: 
     //
-    //   1   -z/2   0  
-    // -z/2    1  -z/2
-    //   0   -z/2   1
+    //  1+c  -c/2   0  
+    // -c/2   1+c -c/2
+    //   0   -c/2  1+c
 
     // Implicit op.
     for (size_t i = lower[0]; i < upper[0]; ++i)
     {
         // Sub-diagonal part of the matrix.
-        std::vector<Real> dl(ny+1, -z/2.0);
+        std::vector<Real> dl(ny-1, -cy/2.0);
         // Diagonal part of the matrix.
-        std::vector<Real> d(ny+2, 1.0+z);
+        std::vector<Real> d(ny, 1.0+cy);
         // Super-diagonal part of the matrix.
-        std::vector<Real> du(ny+1, -z/2.0);
+        std::vector<Real> du(ny-1, -cy/2.0);
 
         // Adjusted indices.
         size_t ii = i - lower[0]; 
@@ -151,21 +169,22 @@ void stencil(FArrayBox& soln)
         ///////////////////////////////////////////////////////////////////////
         // Up/down boundary conditions
          
-        // First, we need to adjust the matrix for the boundary conditions.
+        size_t downmost   (0               );
+        size_t dm_neighbor(0+1             );
+        size_t upmost     (RHS[ii].size()-1);
+        size_t um_neighbor(RHS[ii].size()-2);
+ 
+//        std::tie(d.front(), du.front()) = down_boundary(cy, RHS[ii][downmost], RHS[ii][dm_neighbor]);
+//        std::tie(d.back(), dl.back())   = up_boundary  (cy, RHS[ii][upmost],   RHS[ii][um_neighbor]);
 
-        // The "down" boundary is the first equation. I /think/ it should look
-        // like [ 1 -z 0 ] for reflecting BCs.
-        du.front()      = -z;
-        RHS[ii].front() = RHS[ii][lower[1]+1];
+        du.front() = 0.0; d.front() = 0.0; dl.front() = 0.0;
+        du.back() = 0.0; d.back() = 0.0; dl.back() = 0.0;
 
-        // Up boundary should be [ 0 -z 1 ]
-        dl.back()       = -z;
-        RHS[ii].back()  = RHS[ii][upper[1]-2];
-
+        ///////////////////////////////////////////////////////////////////////
         // Solve each tridiagonal system.
         LAPACKE_dgtsv(
             LAPACK_ROW_MAJOR, // matrix format
-            ny+2, // matrix order
+            ny, // matrix order
             1, // # of right hand sides 
             dl.data(), // subdiagonal part
             d.data(), // diagonal part
@@ -181,7 +200,7 @@ void stencil(FArrayBox& soln)
         {
             // Adjusted indices.
             size_t ii = i - lower[0];
-            size_t jj = j - lower[1] + 1;
+            size_t jj = j - lower[1];
 
             IntVect here(i, j, 0);
 
@@ -200,28 +219,7 @@ void init_matrix(FArrayBox& soln)
         {
             IntVect here(i, j, 0);
 
-            // Tube, open on the left, closed on the other sides.
             soln(here) = initial_profile(nx, i, ny, j);
-
-/*
-            // Gaussian blob. 
-            Real constexpr A = 1.5;
-            Real const a = 100.0/(nx*nx);
-            Real const c = 100.0/(ny*ny);
-
-            Real x0 = (nx-1.0)/2.0;
-            Real y0 = (nx-1.0)/2.0;
-
-            soln(here) = A*std::exp(-(a*(i-x0)*(i-x0)+c*(j-y0)*(j-y0)));
-
-            if (soln(here) < floor)
-                soln(here) = floor;
-
-            // Boundaries should be zero.
-            if (i==0||j==0||(i==ny-1)||(j==ny-1))
-                verify(std::fabs(soln(here)-floor) < 1e-16,
-                       "Initial profile yielded non-zero boundaries."); 
-*/
         }
     }
 }
@@ -256,7 +254,7 @@ int main()
 
     for (size_t t = 0; t < nt; ++t)
     {
-        stencil(soln);
+        advance(soln);
         print_matrix(soln, t + 1);
     }
 }
