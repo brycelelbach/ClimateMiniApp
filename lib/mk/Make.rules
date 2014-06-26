@@ -457,7 +457,7 @@ o/$(config)/%.o : %.cpp   d/$(config)/%.d
 else
 # Direct Vendor compilation
 o/$(config)/%.o : %.cpp   d/$(config)/%.d
-	$(QUIET)$(cxxc) $(CXXFLAGS) $(XTRACXXFLAGS) $(pic) $(CPPFLAGS) $(XTRACPPFLAGS) -DCH_LANG_CC $(cxxcompflag) $< $(cxxobjflag)$@
+	$(QUIET)$(cxxc) $(CXXFLAGS) $(XTRACXXFLAGS) $(pic) $(CPPFLAGS) $(XTRACPPFLAGS) -DCH_LANG_CC $(cxxcompflag) `readlink -f $<` $(cxxobjflag)$@
 endif
 
 o/$(config)/%.o : %.f90  d/$(config)/%.d
