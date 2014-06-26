@@ -49,5 +49,21 @@ void setPoutBaseName(const std::string & a_Name);
 */
 const std::string & poutFileName();
 
+struct flush_type { }; 
+struct endl_type { };
+
+HPX_IOSTREAMS_EXPORT extern flush_type flush; // alias for hpx::sync_flush
+HPX_IOSTREAMS_EXPORT extern endl_type endl; // alias for hpx::sync_endl
+
+inline std::ostream& operator<< (std::ostream& os, flush_type const&)
+{
+    return os << std::flush;
+}
+
+inline std::ostream& operator<< (std::ostream& os, endl_type const&)
+{
+    return os << std::endl << std::flush;
+}
+
 #include "BaseNamespaceFooter.H"
 #endif // _PARSTREAM_H_

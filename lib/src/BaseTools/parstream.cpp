@@ -54,6 +54,9 @@ static std::ofstream     s_pout ;
 static bool              s_pout_init = false ;
 static bool              s_pout_open = false ;
 
+flush_type flush = { };
+endl_type endl = { };
+
 ////////////////////////////////////////////////////////////////
 
 // private functions: setFileName(), openFile().
