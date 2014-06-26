@@ -158,10 +158,15 @@ void ARK4<X, IMEXOP>::advance(Real a_time, X& a_state)
         // Do the solve - copy rhs from phi[stage]
         m_phi[stage].increment(m_phi[0]);
         m_rhs.copy(m_phi[stage]);
+   
+        m_rhs.exchange(); 
+
         // Solve for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_rhs.
         m_opImEx.solve(m_phi[stage], m_rhs, t);
       }
+
+      m_phi[stage].exchange();
 
       // Calculate the operators for this stage
       m_opImEx.explicitOp(m_kE, t, m_phi[stage]);
