@@ -78,7 +78,7 @@ private:
 //==============================================
 
 template <class X, class IMEXOP>
-void ARK4<X, IMEXOP>::ARK4<X, IMEXOP>(const X& a_state, Real a_dt, bool a_denseOutput)
+ARK4<X, IMEXOP>::ARK4(const X& a_state, Real a_dt, bool a_denseOutput)
 {
   m_dt = a_dt;
   m_denseOutput = a_denseOutput;

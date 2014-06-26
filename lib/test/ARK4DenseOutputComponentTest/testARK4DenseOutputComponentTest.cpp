@@ -9,8 +9,9 @@
 #endif
 
 
+#include <algorithm>
+
 #include "parstream.H"
-using std::endl;
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "LevelDataOps.H"
@@ -44,14 +45,14 @@ main(int argc ,char* argv[])
 #ifdef CH_MPI
   MPI_Init (&argc, &argv);
 #endif
-  pout () << indent2 << "Beginning " << pgmname << " ..." << endl ;
+  pout () << indent2 << "Beginning " << pgmname << " ..." << std::endl ;
 
   int status = testARK4();
 
   if ( status == 0 )
-    pout() << indent << pgmname << " passed." << endl ;
+    pout() << indent << pgmname << " passed." << std::endl ;
   else
-    pout() << indent << pgmname << " failed with return code " << status << endl ;
+    pout() << indent << pgmname << " failed with return code " << status << std::endl ;
 
 #ifdef CH_MPI
   MPI_Finalize ();
@@ -113,15 +114,14 @@ testARK4 ()
   Real coef = TestImExOp::s_cE + TestImExOp::s_cI;
 
   bool denseOutput = true;
-  ARK4<TestOpData, TestImExOp> ark;
-  ark.define(soln,basedt, denseOutput); 
+  ARK4<TestOpData, TestImExOp> ark(soln,basedt, denseOutput); 
   LevelDataOps<FArrayBox> ops;
   for (int res=0; res < Nres; ++res)
   {
     Real time = 0;
     int Nstep = pow(2,res+2);
     Real dt = basedt / (Real) Nstep;
-    pout() << "Time step: " << dt << endl;
+    pout() << "Time step: " << dt << std::endl;
     ark.resetDt(dt);
     // Set the initial condition
     Real phi0 = 1.0;
@@ -137,12 +137,12 @@ testARK4 ()
     Real val = ldfabVal(data);
     Real error = (exact - val);
     pout() << "Soln at time " << time << " = " << 
-      val << ", error = " << error << endl;
+      val << ", error = " << error << std::endl;
     errors[res] = error;
 
     Real accumDiff = ldfabVal(accum);
     pout() << "Accumulated RHS = " << accumDiff <<
-      " , vs. soln change = " << (accumDiff - (val - phi0)) << endl;
+      " , vs. soln change = " << (accumDiff - (val - phi0)) << std::endl;
 
     // Test dense output for the last time step
     Real theta = 1 - 1/sqrt(2);
@@ -160,20 +160,20 @@ testARK4 ()
     error = exact - val;
     denseErrs[res] = error;
     pout() << "Dense output at time " << tint << " = " << 
-      val << ", error = " << error << endl;
+      val << ", error = " << error << std::endl;
   }
 
-  pout() << "Orders of convergence: " << endl;
+  pout() << "Orders of convergence: " << std::endl;
   Real rate = 4;
   for (int res=1; res < Nres; ++res)
   {
     Real ratio = errors[res] / errors[res-1];
     Real solnrate = (-log(ratio) / log(2));
-    pout() << "  soln: " << solnrate << endl;
+    pout() << "  soln: " << solnrate << std::endl;
     ratio = denseErrs[res] / denseErrs[res-1];
     Real denserate = (-log(ratio) / log(2));
-    pout() << "  dense output: " << denserate << endl;
-    rate = min(solnrate, denserate);
+    pout() << "  dense output: " << denserate << std::endl;
+    rate = std::min(solnrate, denserate);
   }
 
   return (rate > 3.8) ? 0 : 1;

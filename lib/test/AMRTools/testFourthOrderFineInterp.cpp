@@ -431,14 +431,14 @@ int main(int argc, char* argv[])
             reduceReal(diffMax, MPI_MAX);
 #endif
 
-            pout() << setw(4) << domainLength;
-            pout() << "  " << scientific << setprecision(4)
+            pout() << std::setw(4) << domainLength;
+            pout() << "  " << std::scientific << std::setprecision(4)
                    << diffMax;
             if (iGrid > 0)
               {
                 Real ratio = diffMaxCoarser / diffMax;
                 Real rate = log(ratio) / log(2.0);
-                pout () << " " << fixed << setprecision(2) << rate;
+                pout () << " " << std::fixed << std::setprecision(2) << rate;
                 if (rate < targetConvergeRate)
                   {
                     status += 1;
