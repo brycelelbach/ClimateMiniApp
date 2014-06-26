@@ -52,8 +52,8 @@ const std::string & poutFileName();
 struct flush_type { }; 
 struct endl_type { };
 
-HPX_IOSTREAMS_EXPORT extern flush_type flush; 
-HPX_IOSTREAMS_EXPORT extern endl_type endl; 
+extern flush_type flush; 
+extern endl_type endl; 
 
 inline std::ostream& operator<< (std::ostream& os, flush_type const&)
 {
