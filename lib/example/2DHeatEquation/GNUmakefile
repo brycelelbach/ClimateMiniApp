@@ -6,9 +6,9 @@
 # included makefiles need an absolute path
 CHOMBO_HOME := $(shell pwd)/../..
 
-makefiles+=lib_example_2dHeatEquation
+makefiles+=lib_example_2DHeatEquation
 
-ebase = 2dHeatEquation 
+ebase = 2DHeatEquation 
 
 # note that BaseTools library should be included by default, even 
 # if we don't specify it here
