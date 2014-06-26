@@ -9,15 +9,18 @@
 
 #include "FArrayBox.H"
 
-size_t constexpr nt = 100; 
-size_t constexpr nx = 40;
-size_t constexpr ny = 40; 
+Real constexpr nt = 0.003; 
+size_t constexpr ns = 100;
+
+size_t constexpr nx = 20;
+size_t constexpr ny = 20; 
 
 Real constexpr kx = 0.5;
 Real constexpr ky = 0.75;
 
-Real constexpr dt = 0.05; // TODO: actually compute CFL
-Real constexpr dh = 1.0;
+Real constexpr dt = nt/ns; // TODO: actually compute CFL
+Real constexpr dx = 1.0/(1.0*nx-1.0);
+Real constexpr dy = 1.0/(1.0*ny-1.0);
 
 Real initial_profile(Real t, size_t i, size_t j)
 {
@@ -32,7 +35,7 @@ void verify(bool predicate, std::string const& fail_msg)
 
 std::tuple<Real, Real> phys_coords(size_t i, size_t j)
 {
-    return std::tuple<Real, Real>(Real(i)/(1.0*nx-1.0), Real(j)/(1.0*ny-1.0));
+    return std::tuple<Real, Real>(Real(i)*dx, Real(j)*dy);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -51,7 +54,7 @@ Real source(size_t i, size_t j)
 Real analytic(Real t, size_t i, size_t j) 
 {
     Real constexpr pi_sq = M_PI*M_PI;
-    Real const a = (1.0 - std::exp( -(kx+ky)*pi_sq*t)) / ((kx+ky)*pi_sq);
+    Real const a = (1.0 - std::exp(-(kx+ky)*pi_sq*t)) / ((kx+ky)*pi_sq);
     return a*source(i, j);
 } 
 
@@ -94,8 +97,8 @@ void advance(FArrayBox& soln)
     size_t const nx = upper[0]-lower[0]; 
     size_t const ny = upper[1]-lower[1]; 
 
-    Real const cx = kx*dt/(dh*dh);
-    Real const cy = ky*dt/(dh*dh);
+    Real const cx = kx*dt/(dx*dx);
+    Real const cy = ky/(dy*dy);
 
     // Storage for the RHS. 
     std::vector<std::vector<Real> > RHS(
@@ -131,7 +134,7 @@ void advance(FArrayBox& soln)
             IntVect right(i+1, j  , 0);
 
             RHS[ii][jj] = explicit_op(cx, soln(here), soln(left), soln(right))
-                        + source(i, j); 
+                        + dt*source(i, j); 
         }
     }
 
@@ -230,7 +233,7 @@ void init_matrix(FArrayBox& soln, Real t, F f)
     }
 }
 
-void print_matrix(FArrayBox const& soln, size_t timestep, std::string const& file_template = "U.%04i.dat")
+void print_matrix(FArrayBox const& soln, size_t timestep, std::string const& file_template)
 {
     std::string file = boost::str(boost::format(file_template) % timestep);
     std::ofstream ofs(file);
@@ -252,24 +255,31 @@ void print_matrix(FArrayBox const& soln, size_t timestep, std::string const& fil
 
 int main()
 {
+    std::cout << "dt = " << dt << "\n";
+
     Box b(IntVect(0,0,0), IntVect(nx,ny,1));
 
     FArrayBox soln(b, 1);
     init_matrix(soln, 0.0, initial_profile);
-    print_matrix(soln, 0);
+    print_matrix(soln, 0, "numeric.%04i.dat");
 
     FArrayBox exact(b, 1);
 
-    for (size_t t = 0; t < nt; ++t)
+    init_matrix(exact, 0.0, analytic);
+    print_matrix(exact, 0, "analytic.%04i.dat"); 
+
+    exact -= soln; 
+    print_matrix(exact, 0, "error.%04i.dat"); 
+
+    for (size_t t = 1; t < ns + 1; ++t)
     {
         advance(soln);
-        print_matrix(soln, t + 1);
+        print_matrix(soln, t, "numeric.%04i.dat");
 
         init_matrix(exact, t * dt, analytic);
-        print_matrix(exact, t + 1, "analytic.%04i.dat"); 
+        print_matrix(exact, t, "analytic.%04i.dat"); 
 
         exact -= soln; 
-
-        print_matrix(exact, t + 1, "error.%04i.dat"); 
+        print_matrix(exact, t, "error.%04i.dat"); 
     }
 }

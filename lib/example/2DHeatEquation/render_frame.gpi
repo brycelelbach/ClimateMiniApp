@@ -1,6 +1,6 @@
 OUTPUT=(sprintf('step.%04i.jpeg', STEP))
-INPUT=(sprintf('../U.%04i.dat', STEP))
-INIT=(sprintf('../U.0000.dat', STEP))
+INPUT=(sprintf('../%s.%04i.dat', NAME, STEP))
+INIT=(sprintf('../%s.0000.dat', NAME, STEP))
 
 stats INIT nooutput
 X_MIN=STATS_min_x
@@ -21,10 +21,12 @@ max(x,y) = (x>y)?x:y
 max_T=-100000000
 min_T=100000000
 do for [i=0:STEPS-1] {
-    I_DATA=(sprintf('../U.%04i.dat', i))
+    I_DATA=(sprintf('../%s.%04i.dat', NAME, i))
     stats I_DATA using 3 nooutput 
-    max_T=max(ceil(STATS_max+0.001), max_T)
-    min_T=min(floor(STATS_min), min_T)
+#    max_T=max(ceil(STATS_max+0.001), max_T)
+#    min_T=min(floor(STATS_min), min_T)
+    max_T=max(STATS_max+1e-10, max_T)
+    min_T=min(STATS_min-1e-10, min_T)
 }
 
 #print "min_T = ", min_T
@@ -35,11 +37,16 @@ do for [i=0:STEPS-1] {
 
 set terminal jpeg size XSIZE,YSIZE
 
+set format z "%.2e"
+set format cb "%.2e"
+
+set ticslevel 0
+
 set size ratio ny/nx
 
 #set pm3d map
 
-set view 60,60
+set view 40,60
 #show view
 
 set xtics (X_MIN, X_MIN+nx*(2.0/4.0), X_MAX)
@@ -53,6 +60,8 @@ set tics nomirror out
 
 set samples X_MAX-X_MIN
 set isosamples X_MAX-X_MIN,Y_MAX-Y_MIN
+
+set title (sprintf("Step %04i (%s)", STEP, NAME))
 
 set xlabel "Horizontal"
 set ylabel "Vertical"
