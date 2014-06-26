@@ -58,6 +58,9 @@ public:
   LevelData<FArrayBox>& data()
   { return m_data; }
 
+  void exchange()
+  { m_data.exchange(); }
+
 protected:
 
   /// layout for this level

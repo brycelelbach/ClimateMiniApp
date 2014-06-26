@@ -15,6 +15,8 @@
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "LevelDataOps.H"
+#include "LoadBalance.H"
+#include "BRMeshRefine.H"
 #include "LayoutIterator.H"
 #include "FABView.H"
 #include "AMRIO.H"
@@ -82,13 +84,29 @@ Real ldfabVal(LevelData<FArrayBox>& a_data)
 int
 testARK4 ()
 {
+  int numCellMult = 32;
+  int numCells    = numCellMult * numProc();
+  int maxBoxSize  = numCellMult / 8;
+
+  IntVect loVect = IntVect::Zero;
+  IntVect hiVect = (numCells-1)*IntVect::Unit;
+  Box domainBox(loVect, hiVect);
+  bool periodic [CH_SPACEDIM];
+  for (unsigned i = 0; i < CH_SPACEDIM; ++i)
+    periodic[i] = true;
+  ProblemDomain baseDomain(domainBox, periodic);
+
+  Vector<Box> vectBoxes;
+  domainSplit(baseDomain, vectBoxes, maxBoxSize, 1);
+
+  Vector<int> procAssign(vectBoxes.size(), 0);
+  LoadBalance(procAssign, vectBoxes);
+
+  DisjointBoxLayout dbl(vectBoxes, procAssign, baseDomain);
+
   // Set up the data classes
-  int size = 1;
-  Vector<Box> boxes(1,Box(IntVect::Zero, (size-1)*IntVect::Unit));
-  Vector<int> procs(1,1);
-  DisjointBoxLayout dbl(boxes,procs);
-  LevelData<FArrayBox> data(dbl,1,IntVect::Zero);
-  LevelData<FArrayBox> accum(dbl,1,IntVect::Zero);
+  LevelData<FArrayBox> data(dbl,1,IntVect::Unit);
+  LevelData<FArrayBox> accum(dbl,1,IntVect::Unit);
   TestOpData soln;
   // soln.define(dbl,1,IntVect::Zero);
   soln.aliasData(data, &accum);
@@ -97,7 +115,7 @@ testARK4 ()
   Vector<TestOpData*> denseCoefs(nDenseCoefs);
   for (int icoef = 0; icoef < nDenseCoefs; ++icoef)
   {
-    denseCoefs[icoef] = new TestOpData();
+    denseCoefs[icoef] = new TestOpData(); // FIXME: Who frees this?
     denseCoefs[icoef]->define(dbl,1,IntVect::Zero);
   }
 
@@ -114,7 +132,7 @@ testARK4 ()
   Real coef = TestImExOp::s_cE + TestImExOp::s_cI;
 
   bool denseOutput = true;
-  ARK4<TestOpData, TestImExOp> ark(soln,basedt, denseOutput); 
+  ARK4<TestOpData, TestImExOp> ark(soln, basedt, denseOutput); 
   LevelDataOps<FArrayBox> ops;
   for (int res=0; res < Nres; ++res)
   {
@@ -134,12 +152,14 @@ testARK4 ()
       time += dt;
     }
     Real exact = exp(coef*time)*(1 + time);
+    data.exchange();
     Real val = ldfabVal(data);
     Real error = (exact - val);
     pout() << "Soln at time " << time << " = " << 
       val << ", error = " << error << std::endl;
     errors[res] = error;
 
+    accum.exchange();
     Real accumDiff = ldfabVal(accum);
     pout() << "Accumulated RHS = " << accumDiff <<
       " , vs. soln change = " << (accumDiff - (val - phi0)) << std::endl;
@@ -156,6 +176,7 @@ testARK4 ()
       Real factor = pow(theta, icoef);
       soln.increment(*denseCoefs[icoef],factor);
     }
+    data.exchange();
     val = ldfabVal(data);
     error = exact - val;
     denseErrs[res] = error;
