@@ -9,14 +9,17 @@
 
 #include "FArrayBox.H"
 
-Real constexpr nt = 100; 
-Real constexpr nx = 40;
-Real constexpr ny = 40; 
+size_t constexpr nt = 100; 
+size_t constexpr nx = 40;
+size_t constexpr ny = 40; 
 
 Real constexpr kx = 0.5;
 Real constexpr ky = 0.75;
 
-Real initial_profile(Real nx, Real x, Real ny, Real y)
+Real constexpr dt = 0.05; // TODO: actually compute CFL
+Real constexpr dh = 1.0;
+
+Real initial_profile(Real t, size_t i, size_t j)
 {
     return 0.0;
 }
@@ -38,14 +41,19 @@ Real explicit_op(Real c, Real here, Real left, Real right)
     return here + c*(left - 2*here + right); 
 }
 
-Real source(Real dt, Real i, Real j)
+Real source(size_t i, size_t j)
 {
     Real x, y;
     std::tie(x, y) = phys_coords(i, j);
-    return std::sin(M_PI*x)*std::sin(2.0*M_PI*y);
+    return std::sin(M_PI*x)*std::sin(M_PI*y);
 } 
 
-Real analytic(Real t, 
+Real analytic(Real t, size_t i, size_t j) 
+{
+    Real constexpr pi_sq = M_PI*M_PI;
+    Real const a = (1.0 - std::exp( -(kx+ky)*pi_sq*t)) / ((kx+ky)*pi_sq);
+    return a*source(i, j);
+} 
 
 ///////////////////////////////////////////////////////////////////////////////
 // Boundary conditions.
@@ -86,9 +94,6 @@ void advance(FArrayBox& soln)
     size_t const nx = upper[0]-lower[0]; 
     size_t const ny = upper[1]-lower[1]; 
 
-    Real constexpr dt = 0.05; // TODO: actually compute CFL
-    Real constexpr dh = 1.0;
-
     Real const cx = kx*dt/(dh*dh);
     Real const cy = ky*dt/(dh*dh);
 
@@ -126,7 +131,7 @@ void advance(FArrayBox& soln)
             IntVect right(i+1, j  , 0);
 
             RHS[ii][jj] = explicit_op(cx, soln(here), soln(left), soln(right))
-                        + source(dt, i, j); 
+                        + source(i, j); 
         }
     }
 
@@ -208,7 +213,8 @@ void advance(FArrayBox& soln)
         }
 }
 
-void init_matrix(FArrayBox& soln)
+template <typename F>
+void init_matrix(FArrayBox& soln, Real t, F f)
 {
     IntVect lower = soln.smallEnd();
     IntVect upper = soln.bigEnd(); 
@@ -219,7 +225,7 @@ void init_matrix(FArrayBox& soln)
         {
             IntVect here(i, j, 0);
 
-            soln(here) = initial_profile(nx, i, ny, j);
+            soln(here) = f(t, i, j);
         }
     }
 }
@@ -249,12 +255,21 @@ int main()
     Box b(IntVect(0,0,0), IntVect(nx,ny,1));
 
     FArrayBox soln(b, 1);
-    init_matrix(soln);
+    init_matrix(soln, 0.0, initial_profile);
     print_matrix(soln, 0);
+
+    FArrayBox exact(b, 1);
 
     for (size_t t = 0; t < nt; ++t)
     {
         advance(soln);
         print_matrix(soln, t + 1);
+
+        init_matrix(exact, t * dt, analytic);
+        print_matrix(exact, t + 1, "analytic.%04i.dat"); 
+
+        exact -= soln; 
+
+        print_matrix(exact, t + 1, "error.%04i.dat"); 
     }
 }
