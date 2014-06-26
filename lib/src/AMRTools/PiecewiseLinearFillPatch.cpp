@@ -21,8 +21,6 @@
 #include "InterpF_F.H"
 #include "CH_Timer.H"
 #include "MayDay.H"
-using std::cout;
-using std::endl;
 
 #include "PiecewiseLinearFillPatch.H"
 #include "NamespaceHeader.H"
@@ -729,18 +727,18 @@ PiecewiseLinearFillPatch::printIntVectSets() const
   DataIterator lit = m_fine_interp.boxLayout().dataIterator();
   for (lit.begin(); lit.ok(); ++lit)
     {
-      cout << "grid " << lit().intCode() << ": " << endl;
-      cout << "fine ivs" << endl;
-      cout << m_fine_interp[lit()] << endl;
+      pout() << "grid " << lit().intCode() << ": " << endl
+             << "fine ivs" << endl
+             << m_fine_interp[lit()] << endl;
 
       for (int dir = 0; dir < SpaceDim; ++dir)
         {
-          cout << "coarse centered ivs [" << dir << "]: " << endl;
-          cout << m_coarse_centered_interp[dir][lit()] << endl;
-          cout << "coarse lo ivs [" << dir << "]: " << endl;
-          cout << m_coarse_lo_interp[dir][lit()] << endl;
-          cout << "coarse hi ivs [" << dir << "]: " << endl;
-          cout << m_coarse_hi_interp[dir][lit()] << endl;
+          pout() << "coarse centered ivs [" << dir << "]: " << endl
+                 << m_coarse_centered_interp[dir][lit()] << endl
+                 << "coarse lo ivs [" << dir << "]: " << endl
+                 << m_coarse_lo_interp[dir][lit()] << endl
+                 << "coarse hi ivs [" << dir << "]: " << endl
+                 << m_coarse_hi_interp[dir][lit()] << endl;
         }
 
     }

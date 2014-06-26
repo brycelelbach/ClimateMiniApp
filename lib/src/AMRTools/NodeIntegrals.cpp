@@ -19,10 +19,6 @@
 #include "NodeDotProdF_F.H"
 #include "NamespaceHeader.H"
 
-using std::cout;
-using std::cerr;
-using std::endl;
-
 // ---------------------------------------------------------
 // added 11 June 2003, removed from NodeFArrayBox
 Real

@@ -12,7 +12,6 @@
 #include <limits>
 #include <functional>
 #include <cstring>
-using std::endl;
 
 #include "REAL.H"
 #include "parstream.H"

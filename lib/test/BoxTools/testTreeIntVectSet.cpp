@@ -18,7 +18,6 @@
 #include <mpi.h>
 #endif
 #include "UsingNamespace.H"
-using std::endl;
 
 /// Prototypes:
 

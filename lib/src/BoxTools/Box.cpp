@@ -18,9 +18,6 @@
 #include "SliceSpec.H"
 #include "NamespaceHeader.H"
 
-using std::cout;
-using std::cerr;
-using std::endl;
 using std::ws;
 using std::ostream;
 using std::istream;
@@ -370,7 +367,7 @@ Box::numPts () const
   long result;
   if (!numPtsOK(result))
     {
-      cerr << "Bad Box::numPts:  box = " << *this << endl;
+      pout() << "Bad Box::numPts:  box = " << *this << endl;
       MayDay::Error("Arithmetic overflow in Box::numPts()");
     }
   return result;

@@ -9,7 +9,6 @@
 #endif
 
 #include <iostream>
-using std::endl;
 
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"

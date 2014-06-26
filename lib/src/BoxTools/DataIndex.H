@@ -25,7 +25,6 @@ class LayoutIterator;
 
 #endif /* WRAPPER */
 
-using std::endl;
 ///An index for LayoutIterator
 class LayoutIndex
 {

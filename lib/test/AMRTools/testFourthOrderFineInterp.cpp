@@ -26,7 +26,6 @@ using std::string;
 // for parallel debugging
 #include "CH_Attach.H"
 using std::cerr;
-using std::endl;
 #include "CH_Timer.H"
 
 #include "UsingNamespace.H"

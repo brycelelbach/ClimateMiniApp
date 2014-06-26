@@ -37,9 +37,6 @@
 #include "Misc.H"
 #include "Vector.H"
 #include "BaseNamespaceHeader.H"
-using std::cout;
-using std::cerr;
-using std::endl;
 //#include <aString.H>
 
 //#include <Pointers.H>
@@ -4032,10 +4029,10 @@ ParmParse::getarr (const char*    name,
   int status = queryarr(name,ppDouble,c_array,start_ix,num_val,-1);
   if (status == 0)
     {
-      cerr << "ParmParse::getarr(): "
+      std::cerr << "ParmParse::getarr(): "
            << name
-           << " not found in table" << endl;
-      dumpTable(cerr);
+           << " not found in table" << std::endl;
+      dumpTable(std::cerr);
       MayDay::Abort();
     }
   for (int i = 0; i < num_val; ++i)
@@ -4058,10 +4055,10 @@ ParmParse::getarr (const char*    name,
   int status = queryarr(name,ppDouble,c_array,start_ix,num_val,-1);
   if (status == 0)
     {
-      cerr << "ParmParse::getarr(): "
+      std::cerr << "ParmParse::getarr(): "
            << name
-           << " not found in table" << endl;
-      dumpTable(cerr);
+           << " not found in table" << std::endl;
+      dumpTable(std::cerr);
       MayDay::Abort();
     }
   for (int i = 0; i < num_val; ++i)

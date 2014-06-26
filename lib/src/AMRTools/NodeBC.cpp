@@ -12,12 +12,10 @@
 // adapted from GhostBC by DTGraves, Mon, July 19, 1999
 // petermc, 13 Feb 2001
 
+#include "MayDay.H"
 #include "NodeBC.H"
 #include "NodeBCF_F.H"
 #include "NamespaceHeader.H"
-
-using std::cerr;
-using std::endl;
 
 // ---------------------------------------------------------
 FaceNodeBC::FaceNodeBC(int a_dir, Side::LoHiSide a_sd)
@@ -111,8 +109,7 @@ FaceNodeBC::applyEitherBCs(FArrayBox& a_state,
       }
     default:
       {
-        cerr << "FaceNodeBC::applyEitherBCs():  bogus side" << endl;
-        abort();
+        MayDay::Abort("FaceNodeBC::applyEitherBCs(): bogus side");
       }
     }
   // If a_state has no nodes on this face, then return.
@@ -206,8 +203,7 @@ FaceNodeBC::applyBCs(const Box& a_bcBox,
       }
     default:
       {
-        cerr << "FaceNodeBC::applyBCs(): bogus side" << endl;
-        abort();
+        MayDay::Abort("FaceNodeBC::applyBCs(): bogus side");
       }
     }
 
@@ -286,8 +282,7 @@ DomainNodeBC::setFaceNodeBC(const FaceNodeBC& a_BC)
       }
     default:
       {
-        cerr << "DomainNodeBC::setFaceNodeBC(): bogus side" << endl;
-        abort();
+        MayDay::Abort("DomainNodeBC::setFaceNodeBC(): bogus side");
       }
     }
 }
@@ -315,8 +310,7 @@ DomainNodeBC::operator() (int a_direction, Side::LoHiSide a_side) const
       }
     default:
       {
-        cerr << "DomainNodeBC::operator(): bogus side" << endl;
-        abort();
+        MayDay::Abort("DomainNodeBC::operator(): bogus side");
       }
     }
   return  *retPtr;
@@ -436,8 +430,7 @@ DomainNodeBC::isBCDefined(int a_dir, const Side::LoHiSide a_side) const
       }
     default:
       {
-        cerr << "DomainNodeBC::isDefined(): bogus side" << endl;
-        abort();
+        MayDay::Abort("DomainNodeBC::isDefined(): bogus side");
       }
     }
   return isdefined;
@@ -467,8 +460,7 @@ DomainNodeBC::resetFaceNodeBC(const int a_dir, const Side::LoHiSide a_side)
       }
     default:
       {
-        cerr << "DomainNodeBC::resetFaceNodeBC(): bogus side" << endl;
-        abort();
+        MayDay::Abort("DomainNodeBC::resetFaceNodeBC(): bogus side");
       }
     }
 }

@@ -9,7 +9,6 @@
 #endif
 
 #include <iostream>
-using std::endl ;
 #include "parstream.H"
 #include "RealVect.H"
 #ifdef CH_MPI

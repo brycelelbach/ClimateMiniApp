@@ -25,8 +25,6 @@
 #endif
 #include "UsingNamespace.H"
 
-using std::endl;
-
 /// Global variables for test output:
 static const char *pgmname = "domainSplitTest" ;
 static const char *indent = "   " ,*indent2 = "      " ;

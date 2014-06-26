@@ -11,7 +11,6 @@
 #include <cmath>
 using std::sqrt;
 #include <iostream>
-using std::endl;
 
 #include "DisjointBoxLayout.H"
 #include "LayoutIterator.H"

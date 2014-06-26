@@ -19,10 +19,6 @@
 #include "Tuple.H"
 #include "NamespaceHeader.H"
 
-using std::ostream;
-using std::cout;
-using std::endl;
-
 // The implementation of the tree here is a little
 // weird for some.  It is a strictly 2-ary tree.
 // the terminal nodes of the tree represent a 2-ary
@@ -2161,7 +2157,7 @@ void dumpTree(const TreeIntVectSet* set)
   if (set->m_tree.nodes == 0) return;
   if (set->m_tree.nodes == &TreeIntVectSet::full)
     {
-      cout << set->m_spanBox.smallEnd()
+      pout() << set->m_spanBox.smallEnd()
            <<"..."<<set->m_spanBox.bigEnd()<<"\n";
       return;
     }
@@ -2190,15 +2186,15 @@ void dumpTree(const TreeIntVectSet* set)
         {
           if (current.nodes == 0)
             {
-              cout<<depth;
-              tab(cout, depth);
-              cout <<"0\n";
+              pout()<<depth;
+              tab(pout(), depth);
+              pout() <<"0\n";
             }
           else if (current.nodes == &TreeIntVectSet::full)
             {
-              cout<<depth;
-              tab(cout, depth);
-              cout << boxes[depth].smallEnd()
+              pout()<<depth;
+              tab(pout(), depth);
+              pout() << boxes[depth].smallEnd()
                    <<"..."<<boxes[depth].bigEnd()<<"\n";
             }
 
@@ -2212,9 +2208,9 @@ void dumpTree(const TreeIntVectSet* set)
         }
       else
         {
-          cout<<depth;
-          tab(cout, depth);
-          cout <<"+\n";
+          pout()<<depth;
+          tab(pout(), depth);
+          pout() <<"+\n";
           parents[depth] = &(current);
           depth++;
           index[depth] = 0;

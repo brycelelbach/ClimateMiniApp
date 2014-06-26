@@ -17,7 +17,6 @@
 #include "SPMD.H"
 #include "CH_Timer.H"
 #include "NamespaceHeader.H"
-using std::endl;
 
 // base Mesh refinement class
 // ---------

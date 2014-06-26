@@ -14,8 +14,7 @@
 #include "LayoutIterator.H"
 #include "DataIterator.H"
 #include "NamespaceHeader.H"
-using std::cerr;
-using std::endl;
+#include "parstream.H"
 
 bool
 NodeCFIVS::isDefined() const
@@ -115,7 +114,7 @@ NodeCFIVS::define(
       }
     default:
       {
-        cerr << "NodeCFIVS::define(): bogus side" << endl;
+        pout() << "NodeCFIVS::define(): bogus side" << endl;
         abort();
       }
     }

@@ -10,7 +10,6 @@
 
 #include <iostream>
 
-using std::endl;
 
 #include "REAL.H"
 #include "Box.H"

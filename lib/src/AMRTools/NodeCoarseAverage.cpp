@@ -21,8 +21,6 @@
 #include "parstream.H"
 #include "NodeAverageF_F.H"
 #include "NamespaceHeader.H"
-using std::cout;
-using std::endl;
 
 // ---------------------------------------------------------
 NodeCoarseAverage::NodeCoarseAverage()
@@ -127,7 +125,7 @@ NodeCoarseAverage::define(const DisjointBoxLayout& a_gridsFine,
                               CHF_CONST_INT(m_refRatio));
 
   if (m_verbose)
-    cout << "IBN NodeCoarseAverage on "
+    pout() << "IBN NodeCoarseAverage on "
          << m_domainCoarse.domainBox().size()
          << ", from "
          << m_coarsenedGrids.size() << " coarsened grids to "
@@ -138,7 +136,7 @@ NodeCoarseAverage::define(const DisjointBoxLayout& a_gridsFine,
   interiorBoundaryNodes(m_IVSV, a_gridsCoarse, m_coarsenedGrids, m_domainCoarse);
 
   if (m_verbose)
-    cout << "IBN NodeCoarseAverage on "
+    pout() << "IBN NodeCoarseAverage on "
          << m_domainCoarse.domainBox().size()
          << ", from "
          << m_coarsenedGrids.size() << " coarsened grids to selves on "
@@ -195,7 +193,7 @@ NodeCoarseAverage::define(const DisjointBoxLayout& a_gridsCoarse,
                               CHF_CONST_INT(m_refRatio));
 
   if (m_verbose)
-    cout << "IBN NodeCoarseAverage on "
+    pout() << "IBN NodeCoarseAverage on "
          << m_domainCoarse.domainBox().size()
          << ", from "
          << m_coarsenedGrids.size() << " coarsened grids to selves on "

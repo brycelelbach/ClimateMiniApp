@@ -24,7 +24,6 @@
 #endif
 #include "UsingNamespace.H"
 
-using std::endl;
 
 /// Global variables for test output:
 static const char *pgmname = "gatherTest" ;

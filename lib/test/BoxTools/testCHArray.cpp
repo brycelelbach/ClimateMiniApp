@@ -24,7 +24,6 @@
 
 #include <iostream>
 #include <cstring>
-using std::endl;
 #include "parstream.H"
 #include "BoxIterator.H"
 #include "CHArray.H"

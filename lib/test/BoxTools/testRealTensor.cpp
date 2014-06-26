@@ -10,7 +10,6 @@
 
 #include <cstring>
 #include <iostream>
-using std::endl;
 
 #ifdef CH_MPI
 #include <mpi.h>

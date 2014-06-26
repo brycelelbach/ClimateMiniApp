@@ -16,9 +16,6 @@
 #include "NodeFArrayBox.H"
 #include "SPMD.H"
 #include "NamespaceHeader.H"
-using std::cout;
-using std::cerr;
-using std::endl;
 
 // first do simple access functions
 

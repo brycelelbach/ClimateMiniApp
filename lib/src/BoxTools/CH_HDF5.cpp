@@ -15,10 +15,6 @@
 #include <cstdio>
 #include "parstream.H"
 #include "NamespaceHeader.H"
-using std::ostream;
-using std::cout;
-using std::endl;
-using std::cerr;
 
 //----------------------------------------------------------
 // template <class T>
@@ -438,7 +434,7 @@ bool HDF5Handle::initialized = false;
 hid_t HDF5Handle::box_id = 0;
 hid_t HDF5Handle::intvect_id = 0;
 hid_t HDF5Handle::realvect_id = 0;
-map<std::string, std::string> HDF5Handle::groups = map<std::string, std::string>();
+std::map<std::string, std::string> HDF5Handle::groups = std::map<std::string, std::string>();
 
 #ifdef H516
 extern "C"
@@ -907,7 +903,7 @@ int HDF5HeaderData::writeToLocation(hid_t loc_id) const
   herr_t  ret;
   char messg[1024];
 #define INSERT(Ttype, mapName, H5Ttype)                                   \
-  for (map<std::string, Ttype>::const_iterator p = mapName.begin();        \
+  for (std::map<std::string, Ttype>::const_iterator p = mapName.begin();        \
       p!= mapName.end(); ++p)                                             \
     {                                                                     \
       hid_t aid  = H5Screate(H5S_SCALAR);                                 \
@@ -934,7 +930,7 @@ int HDF5HeaderData::writeToLocation(hid_t loc_id) const
     }                                                                     \
 
 #define INSERT2(Ttype, mapName, H5Ttype)                                   \
-  for (map<std::string, Ttype>::const_iterator p = mapName.begin();        \
+  for (std::map<std::string, Ttype>::const_iterator p = mapName.begin();        \
       p!= mapName.end(); ++p)                                             \
     {                                                                     \
       hid_t aid  = H5Screate(H5S_SCALAR);                                 \
@@ -974,7 +970,7 @@ int HDF5HeaderData::writeToLocation(hid_t loc_id) const
 #endif
     // string is different, of course
 
-    for (map<std::string, std::string>::const_iterator p = m_string.begin();
+    for (std::map<std::string, std::string>::const_iterator p = m_string.begin();
         p!= m_string.end(); ++p)
     {
       hid_t s_type = H5Tcopy(H5T_C_S1);
@@ -1243,7 +1239,7 @@ ostream& operator<<(ostream& os, const HDF5HeaderData& data)
 {
 
 #define PRINT(Ttype, mapName) \
-  for (map<std::string, Ttype>::const_iterator p = data.mapName.begin();        \
+  for (std::map<std::string, Ttype>::const_iterator p = data.mapName.begin();        \
       p!= data.mapName.end(); ++p)                   \
   os<<p->first<<" :"<<p->second<<"\n";
 

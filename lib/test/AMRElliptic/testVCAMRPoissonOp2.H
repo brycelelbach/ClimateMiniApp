@@ -16,7 +16,6 @@
 // L(phi) = alpha A phi - beta div (B grad phi).
 
 #include <iostream>
-using std::endl;
 
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"

@@ -26,8 +26,6 @@ static const char *pgmname = "broadcastTest" ;
 static const char *indent = "   " ,*indent2 = "      " ;
 static bool verbose = true ;
 
-using std::endl;
-
 /// Prototypes:
 
 void

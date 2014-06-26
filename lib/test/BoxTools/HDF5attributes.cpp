@@ -17,8 +17,6 @@
 
 #include "UsingNamespace.H"
 
-using std::endl;
-
 /// Prototypes:
 
 void

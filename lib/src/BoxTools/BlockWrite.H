@@ -16,8 +16,6 @@
 #include "CH_HDF5.H"
 
 #include <iostream>
-using std::cout;
-using std::endl;
 
 #ifdef CH_MPI
 #include <mpi.h>

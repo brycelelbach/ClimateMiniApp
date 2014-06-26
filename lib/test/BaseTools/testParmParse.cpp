@@ -89,7 +89,6 @@
 
 /// Prototypes:
 
-using std::endl;
 using std::boolalpha;
 
 // since this is now in BaseTools, need to define our own SpaceDim

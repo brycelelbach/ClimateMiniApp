@@ -18,7 +18,6 @@
 #include "CFIVS.H"
 #include "TensorCFInterp.H"
 #include "NamespaceHeader.H"
-using std::endl;
 /***********************/
 // default constructor
 /***********************/

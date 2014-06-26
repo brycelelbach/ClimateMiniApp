@@ -16,9 +16,6 @@
 #ifdef CH_USE_HDF5  // if you don't have CH_USE_HDF5, then this file is useless
 
 #include <iostream>
-using std::cout;
-using std::endl;
-
 #ifdef CH_MPI
 #include <mpi.h>
 #endif
@@ -53,8 +50,6 @@ void read(T& item, Vector<Vector<char> >& a_allocatedBuffers, const Box& box,
   for (int i=0; i<b.size(); ++i) b[i]= &(a_allocatedBuffers[i][0]);
   read(item, b, box, comps);
 }
-
-using std::map;
 
 class HDF5Handle;
 
@@ -438,7 +433,7 @@ public:
   static hid_t box_id;
   static hid_t intvect_id;
   static hid_t realvect_id;
-  static map<std::string, std::string> groups;
+  static std::map<std::string, std::string> groups;
 
 private:
 
@@ -529,22 +524,22 @@ public:
   void clear();
 
   ///
-  map<std::string, Real>        m_real;
+  std::map<std::string, Real>        m_real;
 
   ///
-  map<std::string, int>         m_int;
+  std::map<std::string, int>         m_int;
 
   ///
-  map<std::string, std::string> m_string;
+  std::map<std::string, std::string> m_string;
 
   ///
-  map<std::string, IntVect>     m_intvect;
+  std::map<std::string, IntVect>     m_intvect;
 
   ///
-  map<std::string, Box>         m_box;
+  std::map<std::string, Box>         m_box;
 
   ///
-  map<std::string, RealVect>    m_realvect;
+  std::map<std::string, RealVect>    m_realvect;
 
   //users should not need these functions in general
 

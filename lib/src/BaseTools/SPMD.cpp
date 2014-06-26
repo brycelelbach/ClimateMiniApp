@@ -18,9 +18,6 @@
 #include "parstream.H"
 #include "BaseNamespaceHeader.H"
 
-using std::cout;
-using std::endl;
-
 // try a 30 Mbyte max message size and see if that helps.
 
 long long CH_MAX_MPI_MESSAGE_SIZE = 30*1024*1024;

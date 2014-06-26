@@ -51,7 +51,6 @@
 #include "UsingNamespace.H"
 
 //////////////////////////////////////////////////////////////
-using std::endl;
 
 void parseTestOptions(int argc, char* argv[]);
 

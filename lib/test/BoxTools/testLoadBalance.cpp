@@ -36,8 +36,6 @@ testLB3(void);
 int
 testLB4(void);
 
-using std::endl;
-
 void
 parseTestOptions(int argc ,char* argv[]) ;
 

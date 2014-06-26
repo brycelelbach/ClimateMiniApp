@@ -25,10 +25,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
-using std::list;
-using std::cout;
-using std::endl;
-using std::string;
 #ifndef CH_DISABLE_SIGNALS
 #include <csignal>
 #endif
@@ -646,7 +642,7 @@ void RemoveTrack(void* a_addr,
   }
 
   AllocList::iterator i;
-  list<chunk*>::iterator c;
+  std::list<chunk*>::iterator c;
 
   for (i = allocList->begin(); i != allocList->end(); i++)
   {

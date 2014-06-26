@@ -24,7 +24,6 @@
 #include "FABView.H"
 #include "UsingNamespace.H"
 
-using std::endl;
 
 static bool verbose = true;
 

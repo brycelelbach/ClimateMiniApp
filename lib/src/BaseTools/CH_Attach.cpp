@@ -24,7 +24,6 @@
 int pfds[2];
 
 bool alreadyAttached = false;
-using std::endl;
 void DebugCont()
 {
 // #ifndef CH_DISABLE_SIGNALS

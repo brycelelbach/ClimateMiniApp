@@ -106,7 +106,7 @@ namespace Test                                         \
   }                                                    \
   static void test_function(int argc, char *argv[])  \
   {                                                    \
-    cout << " Testing class " << # CLASSNAME << endl; \
+    std::cout << " Testing class " << # CLASSNAME << std::endl; \
     Test::Test ## CLASSNAME(argc, argv);            \
   }                                                    \
 MAKE_USAGE
@@ -120,20 +120,17 @@ MAKE_USAGE
 //#include "DebugOut.H"   //for view*() debugger routines
 #include "UsingBaseNamespace.H"
 
-using std::cout;
-using std::cerr;
-using std::endl;
 
 /// macro for the test harness
 #define Test(s)                                                       \
   ++tcount;                                                           \
   if (!quiet)                                                         \
   {                                                                   \
-    cout << "  testing " << s << " ... ";                             \
+    std::cout << "  testing " << s << " ... ";                             \
   }                                                                   \
   if (tcount1>0)                                                    \
   {                                                                   \
-    cout << endl << "WARNING: previous Test() not finished." << endl; \
+    std::cout << std::endl << "WARNING: previous Test() not finished." << std::endl; \
     tcount1=0;                                                        \
   }
 
@@ -206,15 +203,15 @@ int main(int argc, char *argv[])
 #define DBG                                                           \
       if (debug)                                                      \
       {                                                               \
-        cout << "debug: main: option parser found canonical option [" \
-             << argv[ic] << "]" <<endl;                               \
+        std::cout << "debug: main: option parser found canonical option [" \
+             << argv[ic] << "]" <<std::endl;                               \
       }
 
 #define DBGA                                                          \
       if (debug)                                                      \
       {                                                               \
-        cout << "debug: main: option parser found canonical option [" \
-             << argv[ic] << "]=|" << argv[ic+1] << "|" <<endl;        \
+        std::cout << "debug: main: option parser found canonical option [" \
+             << argv[ic] << "]=|" << argv[ic+1] << "|" <<std::endl;        \
       }
 
       int iic = 1;
@@ -253,8 +250,8 @@ int main(int argc, char *argv[])
         {
           // not a canonical option
           if (debug || verbose)
-            cout << "debug: main: option parser is skipping command-line option ["
-                 << argv[ic] << "]" << endl;
+            std::cout << "debug: main: option parser is skipping command-line option ["
+                 << argv[ic] << "]" << std::endl;
           // move the option down, if necessary,
           // and move the target index up one
           if (iic < ic) argv[iic] = argv[ic];
@@ -274,14 +271,14 @@ int main(int argc, char *argv[])
 
     // final summary message
     //[NOTE: this prints even with -q; make it go away by redirecting stdout to /dev/null.]
-    cout << " Completed " << tcount << " tests, ";
+    std::cout << " Completed " << tcount << " tests, ";
     if (tfailed > 0)
     {
-      cout << tfailed << " failed." << endl;
+      std::cout << tfailed << " failed." << std::endl;
     }
     else
     {
-      cout << "all passed." << endl;
+      std::cout << "all passed." << std::endl;
     }
 
 #ifdef CH_MPI
@@ -303,7 +300,7 @@ void AbortAll(bool b)
   Fail(b);
   if (b)
   {
-    cout << " Aborting tests.  Failed " << tfailed << " of " << tcount << " tests." << endl;
+    std::cout << " Aborting tests.  Failed " << tfailed << " of " << tcount << " tests." << std::endl;
     exit(100*tfailed / tcount);
   }
 }
@@ -313,12 +310,12 @@ void Fail(bool b)
   if (b)
   {
     ++tfailed;
-    if (!quiet) cout << "failed." << endl;
+    if (!quiet) std::cout << "failed." << std::endl;
   }
   else
   {
     ++tpassed;
-    if (!quiet) cout << "passed." << endl;
+    if (!quiet) std::cout << "passed." << std::endl;
   }
   return;
 }
@@ -340,11 +337,11 @@ void Fail(bool b, bool last)
   {
     if (tfailed1 > 0)
     {
-      if (!quiet) cout << "failed " << tfailed1 << " of " << tcount1 << "." << endl;
+      if (!quiet) std::cout << "failed " << tfailed1 << " of " << tcount1 << "." << std::endl;
     }
     else
     {
-      if (!quiet) cout << tcount1 << " passed." << endl;
+      if (!quiet) std::cout << tcount1 << " passed." << std::endl;
     }
     tcount1 = 0;
     tfailed1 = 0;

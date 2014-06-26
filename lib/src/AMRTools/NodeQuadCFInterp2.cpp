@@ -13,8 +13,6 @@
 // petermc, 31 Oct 2001
 #include "NodeQuadCFInterp2.H"
 #include "NamespaceHeader.H"
-using std::cerr;
-using std::endl;
 
 // ---------------------------------------------------------
 void
@@ -237,7 +235,7 @@ NodeQuadCFInterp2::coarseFineInterp(LevelData<NodeFArrayBox>& a_phiFine,
                     break;
                   }
                 default:
-                  cerr << "NodeQuadCFInterp2::coarseFineInterp(): bogus side" << endl;
+                  pout() << "NodeQuadCFInterp2::coarseFineInterp(): bogus side" << endl;
                   abort();
                 }
 
@@ -289,7 +287,7 @@ NodeQuadCFInterp2::coarseFineInterp(LevelData<NodeFArrayBox>& a_phiFine,
                                     break;
                                   }
                                 default:
-                                  cerr << "NodeQuadCFInterp2::coarseFineInterp(): bogus side" << endl;
+                                  pout() << "NodeQuadCFInterp2::coarseFineInterp(): bogus side" << endl;
                                   abort();
                                 }
                               // psiFabBoxBoundary is the part of

@@ -18,8 +18,6 @@
 #include "BaseFabIntPlusF_F.H"
 #include "MaskValueF_F.H"
 #include "NamespaceHeader.H"
-using std::cerr;
-using std::endl;
 
 // ---------------------------------------------------------
 void

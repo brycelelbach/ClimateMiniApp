@@ -12,7 +12,6 @@
 #define _TESTAMRPOISSONOP_H_
 
 #include <iostream>
-using std::endl;
 
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"

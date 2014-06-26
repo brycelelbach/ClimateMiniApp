@@ -28,7 +28,6 @@
 //  Unknown options are treated as errors.
 
 #include <iostream>
-using std::endl;
 #include "parstream.H"
 #include "CH_Complex.H"
 #include <cstring> //for strncmp()
