@@ -178,7 +178,7 @@ struct imex_operators
                     for (auto j = lower[1]; j <= upper[1]; ++j)
                     {
                         IntVect lower_z(i, j, lower[2]  );
-                        std::cout << lower_z << " " << phi(lower_z) << "\n";
+                        //std::cout << lower_z << " " << phi(lower_z) << "\n";
                         kE(lower_z) = profile.horizontal_bcs(LOWER_Z, lower_z, phi, t); 
                     }
 
@@ -186,7 +186,7 @@ struct imex_operators
                     for (auto j = lower[1]; j <= upper[1]; ++j)
                     {
                         IntVect upper_z(i, j, upper[2]);
-                        std::cout << upper_z << " " << phi(upper_z) << "\n";
+                        //std::cout << upper_z << " " << phi(upper_z) << "\n";
                         kE(upper_z) = profile.horizontal_bcs(UPPER_Z, upper_z, phi, t); 
                     }
             }
@@ -199,11 +199,11 @@ struct imex_operators
                     {
                         IntVect here(i, j, k);
 
-                        std::cout << "interior:" << here << "\n";
+                        //std::cout << "interior:" << here << "\n";
 
-                        kE(here) = 1.0; 
-                        //kE(here) = profile.horizontal_stencil(here, phi)
-                        //         + profile.source_term(here); 
+//                        kE(here) = 1.0; 
+                        kE(here) = profile.horizontal_stencil(here, phi)
+                                 + profile.source_term(here); 
                     }
         }
     }
@@ -216,7 +216,7 @@ struct imex_operators
 
     void solve(problem_state& phi, problem_state const& rhs, Real t, Real dtscale)
     {
-        phi.increment(rhs);
+        phi.copy(rhs);
     }
 
   private:
@@ -291,7 +291,7 @@ struct aniso_profile
 
     Real source_term(Real x, Real y, Real z)
     {
-        return /*std::sin(A*M_PI*x)*/std::sin(B*M_PI*y)*std::sin(C*M_PI*z);
+        return /*std::sin(A*M_PI*x)**/std::sin(B*M_PI*y)*std::sin(C*M_PI*z);
     } 
 
     Real horizontal_stencil(IntVect here, FArrayBox const& phi)

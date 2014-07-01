@@ -46,6 +46,12 @@ void output(heat3d::problem_state const& soln, std::string const& format, std::u
     writeLevelname(&soln.data(), file.c_str());
 }
 
+void output(FArrayBox const& soln, std::string const& format, std::uint64_t step)
+{
+    std::string file = boost::str(boost::format(format) % step);
+    writeFABname(&soln, file.c_str(), Vector<std::string>(1, "phi"));
+}
+
 int main()
 {
     feenableexcept(FE_DIVBYZERO);
@@ -53,10 +59,10 @@ int main()
     feenableexcept(FE_OVERFLOW);
 
     heat3d::configuration config(
-        /*nt: physical time to step to             =*/0.0003,
-        /*nh: y and z (horizontal) extent per core =*/8,
+        /*nt: physical time to step to             =*/0.003,
+        /*nh: y and z (horizontal) extent per core =*/40,
         /*nv: x (vertical) extent per core         =*/2,
-        /*max_box_size                             =*/8
+        /*max_box_size                             =*/40
     );
 
     heat3d::aniso_profile profile(config,
@@ -64,7 +70,7 @@ int main()
         /*A=*/1.0,   /*B=*/1.0,   /*C=*/1.0,
 
         // diffusion coefficients
-        /*kx=*/0.0, /*ky=*/0.75, /*kz=*/0.75
+        /*kx=*/0.5, /*ky=*/0.75, /*kz=*/0.75
     ); 
 
     IntVect lower_bound(IntVect::Zero);
@@ -103,7 +109,8 @@ int main()
     Real time = 0.0;
     while (time < config.nt)
     {
-        output(soln, "phi.%06u.hdf5", step); 
+//        output(soln, "phi.%06u.hdf5", step); 
+        data.apply([&step](Box const&, int, FArrayBox& fab) { output(fab, "phi.%06u.hdf5", step); });
 
         ++step;
 
@@ -119,6 +126,7 @@ int main()
     } 
 
     soln.exchange();
-    output(soln, "phi.%06u.hdf5", step); 
+//    output(soln, "phi.%06u.hdf5", step); 
+    data.apply([&step](Box const&, int, FArrayBox& fab) { output(fab, "phi.%06u.hdf5", step); });
 }
 
