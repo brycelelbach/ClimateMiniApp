@@ -60,9 +60,9 @@ int main()
 
     heat3d::configuration config(
         /*nt: physical time to step to             =*/0.003,
-        /*nh: y and z (horizontal) extent per core =*/40,
-        /*nv: x (vertical) extent per core         =*/2,
-        /*max_box_size                             =*/40
+        /*nh: y and z (horizontal) extent per core =*/30,
+        /*nv: x (vertical) extent per core         =*/30,
+        /*max_box_size                             =*/30
     );
 
     heat3d::aniso_profile profile(config,
@@ -70,7 +70,7 @@ int main()
         /*A=*/1.0,   /*B=*/1.0,   /*C=*/1.0,
 
         // diffusion coefficients
-        /*kx=*/0.5, /*ky=*/0.75, /*kz=*/0.75
+        /*kx=*/0.75, /*ky=*/0.75, /*kz=*/0.75
     ); 
 
     IntVect lower_bound(IntVect::Zero);

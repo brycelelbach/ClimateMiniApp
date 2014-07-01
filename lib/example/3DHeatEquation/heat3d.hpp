@@ -22,7 +22,12 @@
 
 #include <cstdint>
 #include <cmath>
+
 #include <tuple>
+#include <vector>
+
+#include <lapacke.h>
+
 #include <assert.h>
 
 // Solving problems of the form:
@@ -127,9 +132,34 @@ struct problem_state
         U.exchange();
     }
 
+/*
+    void reflux()
+    {
+        DataIterator dit = U.data().dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        { 
+            auto const& subU = U.data()[dit];
+            auto& subF = F.data()[dit];
+
+            IntVect lower = U.smallEnd();
+            IntVect upper = U.bigEnd(); 
+
+            for (auto k = lower[2]+1; k <= upper[2]; ++k)
+                for (auto j = lower[1]+1; j <= upper[1]; ++j)
+                    for (auto i = lower[0]+1; i <= upper[0]; ++i)
+                    {
+                        f(subsoln(IntVect(i, j, k)), IntVect(i, j, k));
+                    }
+        }
+    }
+*/
+
   private:
     /// Data for this level
     LevelData<FArrayBox> U;
+
+    /// Fluxes
+//    LevelData<FluxBox> F;
 };
 
 template <typename Profile>
@@ -154,51 +184,69 @@ struct imex_operators
  
             IntVect lower = phi.smallEnd();
             IntVect upper = phi.bigEnd();
-            Interval comps = phi.interval();
     
             ///////////////////////////////////////////////////////////////////
             // Horizontal BCs
-            for (auto i = lower[0]; i <= upper[0]; ++i)
-            {
-                if (profile.is_horizontal_boundary(lower[1]))
+            if (profile.is_boundary(lower[0]))
+                for (auto j = lower[1]; j <= upper[1]; ++j)
                     for (auto k = lower[2]; k <= upper[2]; ++k)
                     {
-                        IntVect lower_y(i, lower[1]  , k);
+                        IntVect lower_x(lower[0], j, k);
+                        kE(lower_x) = profile.horizontal_bcs(LOWER_X, lower_x, phi, t); 
+                    }
+
+            if (profile.is_boundary(upper[0]))
+                for (auto j = lower[1]; j <= upper[1]; ++j)
+                    for (auto k = lower[2]; k <= upper[2]; ++k)
+                    {
+                        IntVect upper_x(upper[0], j, k);
+                        kE(upper_x) = profile.horizontal_bcs(UPPER_X, upper_x, phi, t); 
+                    }
+
+            if (profile.is_boundary(lower[1]))
+                for (auto i = lower[0]; i <= upper[0]; ++i)
+                    for (auto k = lower[2]; k <= upper[2]; ++k)
+                    {
+                        IntVect lower_y(i, lower[1], k);
                         kE(lower_y) = profile.horizontal_bcs(LOWER_Y, lower_y, phi, t); 
                     }
 
-                if (profile.is_horizontal_boundary(upper[1]))
+            if (profile.is_boundary(upper[1]))
+                for (auto i = lower[0]; i <= upper[0]; ++i)
                     for (auto k = lower[2]; k <= upper[2]; ++k)
                     {
                         IntVect upper_y(i, upper[1], k);
                         kE(upper_y) = profile.horizontal_bcs(UPPER_Y, upper_y, phi, t); 
                     }
     
-                if (profile.is_horizontal_boundary(lower[2]))
+            if (profile.is_boundary(lower[2]))
+                for (auto i = lower[0]; i <= upper[0]; ++i)
                     for (auto j = lower[1]; j <= upper[1]; ++j)
                     {
-                        IntVect lower_z(i, j, lower[2]  );
-                        //std::cout << lower_z << " " << phi(lower_z) << "\n";
+                        IntVect lower_z(i, j, lower[2]);
                         kE(lower_z) = profile.horizontal_bcs(LOWER_Z, lower_z, phi, t); 
                     }
 
-                if (profile.is_horizontal_boundary(upper[2]))
+            if (profile.is_boundary(upper[2]))
+                for (auto i = lower[0]; i <= upper[0]; ++i)
                     for (auto j = lower[1]; j <= upper[1]; ++j)
                     {
                         IntVect upper_z(i, j, upper[2]);
-                        //std::cout << upper_z << " " << phi(upper_z) << "\n";
                         kE(upper_z) = profile.horizontal_bcs(UPPER_Z, upper_z, phi, t); 
                     }
-            }
     
             ///////////////////////////////////////////////////////////////////
             // Interior points.
-            for (auto i = lower[0]; i <= upper[0]; ++i)
+            for (auto i = lower[0]+1; i <= upper[0]-1; ++i)
                 for (auto j = lower[1]+1; j <= upper[1]-1; ++j)
                     for (auto k = lower[2]+1; k <= upper[2]-1; ++k)
                     {
                         IntVect here(i, j, k);
 
+/*
+                        if (profile.source_term(here) < 0.0)
+                            std::cout << here << " has a negative source term\n";
+*/
                         //std::cout << "interior:" << here << "\n";
 
 //                        kE(here) = 1.0; 
@@ -210,13 +258,33 @@ struct imex_operators
 
     void implicitOp(problem_state& kI, problem_state const& phi, Real t)
     {
-        // no-op
         kI.zero();
     }
 
-    void solve(problem_state& phi, problem_state const& rhs, Real t, Real dtscale)
+    void solve(problem_state& phi_, problem_state const& rhs_, Real t, Real dtscale)
     {
-        phi.copy(rhs);
+        // FIXME FIXME FIXME: I hate this, LAPACK can operate in place, can
+        // we avoid this copy?
+        phi_.copy(rhs_);
+
+        DataIterator dit = rhs_.data().dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        { 
+            auto& phi = phi_.data()[dit];
+            auto const& rhs = rhs_.data()[dit];
+ 
+            IntVect lower = rhs.smallEnd();
+            IntVect upper = rhs.bigEnd();
+
+            for (auto j = lower[1]+1; j <= upper[1]-1; ++j)
+                for (auto k = lower[2]+1; k <= upper[2]-1; ++k)
+                {
+                    auto A = profile.vertical_operator(j, k, rhs, dtscale);
+
+                    // TODO: give this a return value.
+                    profile.vertical_solve(j, k, A, phi);
+                }
+        }
     }
 
   private:
@@ -276,7 +344,7 @@ struct aniso_profile
         //
         // Conveniently, I've required dy == dz and ky/kz are constant for this
         // particular problem, so:
-        Real constexpr CFL = 0.8;
+        Real constexpr CFL = 0.4;
         Real const dh = std::get<1>(dp()); 
         assert(ky > 0.0);
         assert(kz > 0.0);
@@ -291,7 +359,7 @@ struct aniso_profile
 
     Real source_term(Real x, Real y, Real z)
     {
-        return /*std::sin(A*M_PI*x)**/std::sin(B*M_PI*y)*std::sin(C*M_PI*z);
+        return std::sin(A*M_PI*x)*std::sin(B*M_PI*y)*std::sin(C*M_PI*z);
     } 
 
     Real horizontal_stencil(IntVect here, FArrayBox const& phi)
@@ -303,12 +371,31 @@ struct aniso_profile
 
         Real const dh = std::get<1>(dp()); 
 
-        return horizontal_kernel(dh*dh,
-            phi(here), phi(north), phi(south), phi(east), phi(west));
+/*
+        if (here[0] == 0, here[1] == 0, here[2] == 0)
+            return horizontal_kernel(dh*dh,
+                phi(here), phi(north), phi(south), phi(east), phi(west), true);
+        else
+*/
+            return horizontal_kernel(dh*dh,
+                phi(here), phi(north), phi(south), phi(east), phi(west));
     }
 
+//    Real horizontal_kernel(Real dh2, Real here, Real north, Real south, Real east, Real west, bool debug = false)
     Real horizontal_kernel(Real dh2, Real here, Real north, Real south, Real east, Real west)
     {
+/*
+        if (debug)
+        std::cout << "***\n"
+                  << "dh2: " << dh2
+                  << " here: " << here 
+                  << " north: " << north
+                  << " south: " << south
+                  << " east: " << east 
+                  << " west: " << west 
+                  << "\nval:" << ((1.0/dh2) * (ky*(east+west) + kz*(north+south) - 4.0*here)) << "\n"
+                ;
+*/
         return (1.0/dh2) * (ky*(east+west) + kz*(north+south) - 4.0*here);
     }
 
@@ -321,9 +408,74 @@ struct aniso_profile
         return 0.0;
     } 
 
-    bool is_horizontal_boundary(int yz)
+    typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
+        crs_matrix;
+    
+    // TODO: Could be cached.
+    crs_matrix vertical_operator(int j, int k, FArrayBox const& phi, Real dtscale)
     {
-        return (yz == -1) || (yz == config.nh);
+        std::uint64_t const size = phi.size()[0];
+        Real const dv = std::get<0>(dp()); 
+        Real const kvdv = kx/(dv*dv); 
+        Real const H = -dt()*dtscale;
+
+        // Sub-diagonal part of the matrix.
+        std::vector<Real> dl(size-1, H*(-kvdv/2.0));
+        // Diagonal part of the matrix.
+        std::vector<Real> d(size, H*(1.0+kvdv));
+        // Super-diagonal part of the matrix.
+        std::vector<Real> du(size-1, H*(-kvdv/2.0));
+
+        ///////////////////////////////////////////////////////////////////////
+        // Vertical BCs
+        // TODO: Move these out or move the horizontal BCs into the profile.
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd();
+
+        if (is_boundary(lower[0]))
+        {
+            du.back() = 0.0;
+            d.back() = 0.0;
+            dl.back() = 0.0;
+        }
+
+        if (is_boundary(upper[0]))
+        {
+            du.front() = 0.0;
+            d.front() = 0.0;
+            dl.front() = 0.0;
+        }
+
+        return crs_matrix(dl, d, du); 
+    }
+
+    // TODO: Give this a return value.
+    void vertical_solve(int j, int k, crs_matrix& A, FArrayBox& phi)
+    {
+        IntVect lower = phi.smallEnd();
+
+        // This is why we've picked 'x' as our vertical dimension; x columns
+        // are contiguous in memory.
+
+        assert((&phi(IntVect(lower[0]+1, j, k)) - &phi(IntVect(lower[0], j, k))) == 1);
+
+        Real* rhs = &phi(IntVect(lower[0], j, k)); 
+
+        LAPACKE_dgtsv(
+            LAPACK_ROW_MAJOR, // matrix format
+            std::get<1>(A).size(), // matrix order
+            1, // # of right hand sides 
+            std::get<0>(A).data(), // subdiagonal part
+            std::get<1>(A).data(), // diagonal part
+            std::get<2>(A).data(), // superdiagonal part
+            rhs, // column to solve 
+            1 // leading dimension of RHS
+            );
+    }
+
+    bool is_boundary(int x)
+    {
+        return (x == -1) || (x == config.nv);
     } 
 
     Real initial_state(IntVect here)

@@ -26,6 +26,8 @@ This is what I'm currently using for a test problem:
 &k_x(x,y,z) = \kappa_x, \; k_y(x,y,z) = \kappa_y, \; k_z(x,y,z) = \kappa_z& 
 \end{align*}
 
+where $\kappa_x, \kappa_y, \kappa_z, A, B$ and $C$ are constants
+
 This problem has an exact solution:
 
 \begin{align*}
@@ -44,12 +46,8 @@ haven't added in yet. I have variable diffusion coefficients in there, but I hav
 it yet with non-constant coefficients because I'm not sure how to formulate a test
 problem with non-constant coefficients and an exact solution.
 
-I'm using ARK4, but I am still doing lower order spatial operators, but I'm
-going to add in the higher order spatial operators tonight/tomorrow. Everything
-is still in unigrid (one LevelData).
-
-I have a convergence test in there, but I'm not 100\% sure that it is implemented
-correctly.
+I'm using ARK4, but I am still doing lower order spatial operators. I need to
+put a programtic convergence test.
 
 \end{document}
 
