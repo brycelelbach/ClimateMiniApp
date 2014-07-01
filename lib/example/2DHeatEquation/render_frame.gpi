@@ -44,9 +44,9 @@ set ticslevel 0
 
 set size ratio ny/nx
 
-#set pm3d map
+set pm3d map
 
-set view 40,60
+#set view 40,60
 #show view
 
 set xtics (X_MIN, X_MIN+nx*(2.0/4.0), X_MAX)

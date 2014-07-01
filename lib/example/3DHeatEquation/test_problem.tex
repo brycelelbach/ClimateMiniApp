@@ -1,0 +1,55 @@
+\documentclass[final,letterpaper,11pt]{report}
+
+\usepackage{bm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{times,mathptmx}
+\usepackage[margin=0.5in]{geometry}
+
+\usepackage[parfill]{parskip}
+
+\setlength{\parindent}{0pt}
+
+\begin{document}
+
+This is what I'm currently using for a test problem:
+
+\begin{align*}
+&U_t = k_xU_{xx} + k_yU_{yy} + k_zU_{zz} + h \quad x,y,z \in [0,1] &\\
+&\\
+&U(0,x,y) = 0 &\\
+&U_t(t,0,y,z) = U_t(t,1,y,z) = 0 &\\
+&U_t(t,x,0,z) = U_t(t,x,1,z) = 0 &\\
+&U_t(t,x,y,0) = U_t(t,x,y,1) = 0 &\\
+&&\\
+&h(x,y,z) = \sin(A \pi x) \sin(B \pi y) \sin(C \pi z)&\\
+&k_x(x,y,z) = \kappa_x, \; k_y(x,y,z) = \kappa_y, \; k_z(x,y,z) = \kappa_z& 
+\end{align*}
+
+This problem has an exact solution:
+
+\begin{align*}
+&U(t,x,y,z) = a(t) h(x,y,z) &\\
+&a(t) = (1 - e^{(-Kt)}) / K &\\
+&K = (A^2\kappa_x + B^2\kappa_y + C^2\kappa_z)\pi^2&
+\end{align*}
+
+This seemed nice for now, because we can make the diffusion coefficient in one
+direction very small (relative to the other two directions). This gives us a
+"vertical" direction with dynamics that evolve at a very different time scale
+than the other two "horizontal" directions.
+
+I don't know how well this will work for the cubed-sphere geometry, which I
+haven't added in yet. I have variable diffusion coefficients in there, but I haven't tested
+it yet with non-constant coefficients because I'm not sure how to formulate a test
+problem with non-constant coefficients and an exact solution.
+
+I'm using ARK4, but I am still doing lower order spatial operators, but I'm
+going to add in the higher order spatial operators tonight/tomorrow. Everything
+is still in unigrid (one LevelData).
+
+I have a convergence test in there, but I'm not 100\% sure that it is implemented
+correctly.
+
+\end{document}
+

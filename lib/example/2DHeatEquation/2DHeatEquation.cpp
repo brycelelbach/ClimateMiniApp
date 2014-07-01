@@ -63,14 +63,12 @@ Real analytic(Real t, size_t i, size_t j)
 
 Real left_boundary(Real c, Real here, Real right)
 {
-    // The temperature is 0 at the boundary. 
-    return here + c*(-2.0*here + right); 
+    return here; 
 }
 
 Real right_boundary(Real c, Real here, Real left)
 {
-    // The temperature is 0 at the boundary.
-    return here + c*(left - 2.0*here); 
+    return here;
 }
 
 // Returns [d.front(), du.front()]
@@ -119,8 +117,8 @@ void advance(FArrayBox& soln)
         IntVect rightmost  (upper[0]-1, j  , 0);
         IntVect rm_neighbor(upper[0]-2, j  , 0);
  
-//        RHS[lower[0]  ][jj] = left_boundary (cx, soln(leftmost),  soln(lm_neighbor));
-//        RHS[upper[0]-1][jj] = right_boundary(cx, soln(rightmost), soln(rm_neighbor));
+        RHS[lower[0]  ][jj] = left_boundary (cx, soln(leftmost),  soln(lm_neighbor));
+        RHS[upper[0]-1][jj] = right_boundary(cx, soln(rightmost), soln(rm_neighbor));
 
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
@@ -246,7 +244,7 @@ void print_matrix(FArrayBox const& soln, size_t timestep, std::string const& fil
         for (size_t i = lower[0]; i < upper[0]; ++i)
         {
             IntVect here(i, j, 0);
-            ofs << i << " " << j << " " << soln(here) << "\n";
+            ofs << " " << i << " " << j << " " << soln(here) << "\n";
         }
 
         ofs << "\n";
@@ -255,8 +253,6 @@ void print_matrix(FArrayBox const& soln, size_t timestep, std::string const& fil
 
 int main()
 {
-    std::cout << "dt = " << dt << "\n";
-
     Box b(IntVect(0,0,0), IntVect(nx,ny,1));
 
     FArrayBox soln(b, 1);
