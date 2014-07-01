@@ -229,6 +229,17 @@ public:
   data.apply(val::set1);
   \endcode
 */
+#if defined(CH_CXX11)
+  // This is
+  // (a) faster because it's easier for the compiler to inline
+  // (b) faster because of C++11 perfect forwarding
+  // (c) faster because it doesn't involve TWO virtual function calls
+  // (d) more user friendly because it works with any type fulfilling the Callable concept
+  // (e) 100% backward compatible with the old implementation of apply()
+  // /s/ wash 
+  template <typename F>
+  void apply(F&& f);
+#else
   virtual void apply( void (*a_Function)(const Box&, int, T&) );
 
   /** For use with apply( const ApplyFunctor& ) */
@@ -272,6 +283,7 @@ public:
 
 */
   virtual void apply( const ApplyFunctor& );
+#endif
 
   void degenerate( LevelData<T>& a_to, const SliceSpec& a_ss ) const;
 

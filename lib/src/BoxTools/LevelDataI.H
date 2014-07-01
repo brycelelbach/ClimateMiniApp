@@ -410,6 +410,24 @@ void LevelData<T>::define(const BoxLayoutData<T>& da, const Interval& comps,
 }
 //-----------------------------------------------------------------------
 
+#if defined(CH_CXX11)
+// This is
+// (a) faster because it's easier for the compiler to inline
+// (b) faster because of C++11 perfect forwarding
+// (c) faster because it doesn't involve TWO virtual function calls
+// (d) more user friendly because it works with any type fulfilling the Callable concept
+// (e) 100% backward compatible with the old implementation of apply() 
+// /s/ wash 
+template <class T>
+template <typename F>
+void LevelData<T>::apply(F&& f)
+{
+  for (DataIterator it(this->dataIterator()); it.ok(); ++it)
+    {
+      f(m_disjointBoxLayout.get(it()), this->m_comps, *(this->m_vector[it().datInd()]));
+    }
+}
+#else
 //-----------------------------------------------------------------------
 template<class T>
 void LevelData<T>::apply( void (*a_Function)(const Box& box, int comps, T& t) )
@@ -432,6 +450,7 @@ void LevelData<T>::apply( const ApplyFunctor & f )
     }
 }
 //-----------------------------------------------------------------------
+#endif
 
 //-----------------------------------------------------------------------
 template<class T> void
