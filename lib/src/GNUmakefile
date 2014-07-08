@@ -23,7 +23,7 @@ export CHOMBO_HOME := $(shell pwd)/..
 ## These library names are used by the makefiles in the application directories.
 ##[NOTE: if you change the names, change the dependencies below.]
 
-lib_ch_targets := BaseTools BoxTools AMRTools AMRElliptic OldAMRElliptic AMRTimeDependent ParticleTools InfiniteDomain HOAMRTools MOLAMRTimeDependent HOMappedGeometry HOMappedConservation
+lib_ch_targets := BaseTools BoxTools AMRTools AsyncTools AMRElliptic OldAMRElliptic AMRTimeDependent ParticleTools InfiniteDomain HOAMRTools MOLAMRTimeDependent HOMappedGeometry HOMappedConservation
 lib_eb_targets := EBTools EBAMRTools Workshop EBAMRElliptic EBAMRTimeDependent
 lib_mf_targets := MFElliptic MFTools
 lib_ccse_targets := CCSE
