@@ -40,16 +40,25 @@ void visit(heat3d::problem_state& soln, F f)
     }
 }
 
-void output(heat3d::problem_state const& soln, std::string const& format, std::uint64_t step)
+void output(FArrayBox const& soln, std::string const& format, std::string const& name, std::uint64_t step)
 {
-    std::string file = boost::str(boost::format(format) % step);
-    writeLevelname(&soln.data(), file.c_str());
+    std::string file;
+    try { file = boost::str(boost::format(format) % step); }
+    catch (boost::io::too_many_args&) { file = format; }
+
+    writeFABname(&soln, file.c_str(), Vector<std::string>(1, name));
 }
 
-void output(FArrayBox const& soln, std::string const& format, std::uint64_t step)
+void output(LevelData<FArrayBox> const& data, std::string const& format, std::string const& name, std::uint64_t step)
 {
-    std::string file = boost::str(boost::format(format) % step);
-    writeFABname(&soln, file.c_str(), Vector<std::string>(1, "phi"));
+    data.apply([format, name, step](Box const&, int, FArrayBox& fab) { output(fab, format, name, step); });
+}
+
+void output(heat3d::problem_state const& soln, std::string const& format, std::string const& name, std::uint64_t step)
+{
+//    std::string file = boost::str(boost::format(format) % step);
+//    writeLevelname(&soln.data(), file.c_str());
+    output(soln.data(), format, name, step);
 }
 
 int main()
@@ -59,18 +68,18 @@ int main()
     feenableexcept(FE_OVERFLOW);
 
     heat3d::configuration config(
-        /*nt: physical time to step to             =*/0.003,
-        /*nh: y and z (horizontal) extent per core =*/30,
+        /*nt: physical time to step to             =*/0.005,
+        /*nh: y and z (horizontal) extent per core =*/60,
         /*nv: x (vertical) extent per core         =*/30,
-        /*max_box_size                             =*/30
+        /*max_box_size                             =*/60
     );
 
     heat3d::aniso_profile profile(config,
         // sine factors in the source term
-        /*A=*/1.0,   /*B=*/1.0,   /*C=*/1.0,
+        /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
 
         // diffusion coefficients
-        /*kx=*/0.75, /*ky=*/0.75, /*kz=*/0.75
+        /*kx=*/0.25, /*ky=*/1.0, /*kz=*/1.0
     ); 
 
     IntVect lower_bound(IntVect::Zero);
@@ -92,7 +101,7 @@ int main()
 
     DisjointBoxLayout dbl(boxes, procs, base_domain);
 
-    LevelData<FArrayBox> data(dbl, 1, IntVect::Unit);
+    LevelData<FArrayBox> data(dbl, 1, IntVect::Zero);
     heat3d::problem_state soln;
     soln.alias(data);
 
@@ -105,20 +114,44 @@ int main()
     ARK4<heat3d::problem_state, imexop>
         ark(imexop(profile), soln, profile.dt(), false);
 
+    heat3d::problem_state src; src.define(soln);  
+    visit(src,
+        [&profile](Real& val, IntVect here)
+        { val = profile.source_term(here); }
+    );
+    output(src, "source.hdf5", "source", 0); 
+
     std::uint64_t step = 0;
     Real time = 0.0;
     while (time < config.nt)
     {
-//        output(soln, "phi.%06u.hdf5", step); 
-        data.apply([&step](Box const&, int, FArrayBox& fab) { output(fab, "phi.%06u.hdf5", step); });
+        output(data, "phi.%06u.hdf5", "phi_numeric", step); 
+
+        heat3d::problem_state exact; exact.define(soln);
+        visit(exact,
+            [&profile, time](Real& val, IntVect here)
+            { val = profile.exact_solution(here, time); }
+        );
+        output(exact, "exact.%06u.hdf5", "phi_exact", step); 
+
+        exact.increment(soln, -1.0); 
+        output(exact, "error.%06u.hdf5", "error", step); 
+
+//        heat3d::problem_state solncopy; solncopy.copy(soln);
+//        exact.abs(); solncopy.abs();
+//        Real error_sum = exact.sum();
+//        Real phi_sum = solncopy.sum();
+//        Real rel_error = (phi_sum == 0.0 ? 0.0 : error_sum/phi_sum);
 
         ++step;
 
         double const dt = profile.dt();
         ark.resetDt(dt);
 
-        char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g\n";
-        std::cout << (boost::format(fmt) % step % time % dt) << std::flush;
+        char const* fmt = "STEP %06u : "
+                          "TIME %.7g%|31t| += %.7g%|43t| : "
+                          "SUM %.7g%|60t| : ERROR %.7g\n";
+        std::cout << (boost::format(fmt) % step % time % dt % soln.sum() % exact.sum()) << std::flush;
 
         ark.advance(time, soln);
 
@@ -126,7 +159,16 @@ int main()
     } 
 
     soln.exchange();
-//    output(soln, "phi.%06u.hdf5", step); 
-    data.apply([&step](Box const&, int, FArrayBox& fab) { output(fab, "phi.%06u.hdf5", step); });
+    output(soln, "phi.%06u.hdf5", "phi_numeric", step); 
+
+    heat3d::problem_state exact; exact.define(soln); 
+    visit(exact,
+        [&profile, time](Real& val, IntVect here)
+        { val = profile.exact_solution(here, time); }
+    );
+    output(exact, "exact.%06u.hdf5", "phi_exact", step); 
+
+    exact.increment(soln, -1.0); 
+    output(exact, "error.%06u.hdf5", "error", step); 
 }
 
