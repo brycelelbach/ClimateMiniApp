@@ -80,7 +80,7 @@ BoxLayout& BoxLayout::operator=(const BoxLayout& a_rhs)
   m_closed = a_rhs.m_closed;
   m_sorted = a_rhs.m_sorted;
   m_dataIterator = a_rhs.m_dataIterator;
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   m_dataIndex = a_rhs.m_dataIndex;
 #endif
   return *this;
@@ -120,7 +120,7 @@ void BoxLayout::close()
 
 void BoxLayout::buildDataIndex()
 {
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   std::list<DataIndex> dlist;
   unsigned int index = 0;
   unsigned int datIn = 0;
@@ -187,14 +187,14 @@ LayoutIterator BoxLayout::layoutIterator() const
   return LayoutIterator(*this, m_layout);
 }
 
-BoxLayout::BoxLayout(const Vector<Box>& a_boxes, const Vector<int>& assignments)
+BoxLayout::BoxLayout(const Vector<Box>& a_boxes, const Vector<int>& assignments, bool a_ignoreNumProc)
   :m_boxes( new Vector<Entry>()),
    m_layout(new int),
    m_closed(new bool(false)),
    m_sorted(new bool(false)),
    m_indicies(new Vector<LayoutIndex>())
 {
-  define(a_boxes, assignments);
+  define(a_boxes, assignments, a_ignoreNumProc);
 }
 
 BoxLayout::BoxLayout(const LayoutData<Box>& a_newLayout)
@@ -235,7 +235,7 @@ void BoxLayout::checkDefine(const Vector<Box>& a_boxes, const Vector<int>& a_pro
 }
 
 void
-BoxLayout::define(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs)
+BoxLayout::define(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs, bool a_ignoreNumProc)
 {
   checkDefine(a_boxes, a_procIDs);
   const int num_boxes = a_boxes.size();
@@ -244,7 +244,7 @@ BoxLayout::define(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs)
   for (unsigned int i = 0; i < num_boxes; ++i)
     {
       m_boxes->operator[](i) = a_boxes[i];
-      if ( numProc() > 1 )
+      if ( (numProc() > 1) || a_ignoreNumProc )
         {
           m_boxes->operator[](i).m_procID = a_procIDs[i];
         }
@@ -265,7 +265,7 @@ BoxLayout::define(const LayoutData<Box>& a_newLayout)
   m_boxes =  RefCountedPtr<Vector<Entry> >(
                new Vector<Entry>(*(baseLayout.m_boxes)));
   m_layout = baseLayout.m_layout;
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   m_dataIndex = baseLayout.m_dataIndex;
 #endif
   // Now replace each box with the new box.
@@ -274,7 +274,7 @@ BoxLayout::define(const LayoutData<Box>& a_newLayout)
   // It is LOCAL only.
   const Vector<Box*>& ptrNewBoxes = a_newLayout.m_vector;
 
-#ifdef CH_MPI
+#if defined(CH_MPI) 
   int len = ptrNewBoxes.size();
   Vector<Box> localNewBoxes(len);
   for (int ivec = 0; ivec < len; ivec++)
@@ -337,7 +337,7 @@ BoxLayout::deepCopy(const BoxLayout& a_source)
   m_boxes =  RefCountedPtr<Vector<Entry> >(
                 new Vector<Entry>(*(a_source.m_boxes)));
   m_layout = a_source.m_layout;
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   m_dataIndex = a_source.m_dataIndex;
 #endif
   *m_closed = false;
@@ -388,7 +388,7 @@ coarsen(BoxLayout& a_output, const BoxLayout& a_input, int a_refinement)
   //a_output.deepCopy(a_input);
   a_output.m_boxes      = RefCountedPtr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
   a_output.m_layout     = a_input.m_layout;
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   a_output.m_dataIndex  = a_input.m_dataIndex;
 #endif
 
@@ -413,7 +413,7 @@ coarsen(BoxLayout& a_output, const BoxLayout& a_input, const IntVect& a_refineme
   //a_output.deepCopy(a_input);
   a_output.m_boxes      = RefCountedPtr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
   a_output.m_layout     = a_input.m_layout;
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   a_output.m_dataIndex  = a_input.m_dataIndex;
 #endif
 

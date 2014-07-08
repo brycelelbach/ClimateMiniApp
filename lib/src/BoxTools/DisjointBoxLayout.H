@@ -52,7 +52,8 @@ public:
       as the Box Vector.  On exit, the DisjointBoxLayout will be closed.
   */
   DisjointBoxLayout(const Vector<Box>& a_boxes,
-                    const Vector<int>& a_procIDs);
+                    const Vector<int>& a_procIDs,
+                    bool a_ignoreNumProc = false);
 
   ///
   /** Construct from a Vector of Boxes and optionally a Vector of
@@ -62,7 +63,8 @@ public:
   */
   DisjointBoxLayout(const Vector<Box>& a_boxes,
                     const Vector<int>& a_procIDs,
-                    const ProblemDomain& a_physDomain);
+                    const ProblemDomain& a_physDomain,
+                    bool a_ignoreNumProc = false);
 
   ///
   /**
@@ -82,7 +84,8 @@ public:
   */
   virtual void
   define(const Vector<Box>& a_boxes,
-         const Vector<int>& a_procIDs);
+         const Vector<int>& a_procIDs,
+         bool a_ignoreNumProcs = false);
 
   ///
   /**
@@ -134,7 +137,8 @@ public:
   virtual void
   define(const Vector<Box>& a_boxes,
          const Vector<int>& a_procIDs,
-         const ProblemDomain& a_physDomain);
+         const ProblemDomain& a_physDomain,
+         bool a_ignoreNumProc = false);
 
   ///
   /** Define this DisjointBoxLayout from a Vector of Boxes.

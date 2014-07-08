@@ -162,7 +162,8 @@ public:
       processor assignments.  On exit, the BoxLayout will be closed.
   */
   BoxLayout(const Vector<Box>& a_boxes,
-            const Vector<int>& a_procIDs);
+            const Vector<int>& a_procIDs,
+            bool a_ignoreNumProc = false);
 
   ///
   /** Construct from a LayoutData<Box>.
@@ -197,7 +198,8 @@ public:
   */
   virtual void
   define(const Vector<Box>& a_boxes,
-         const Vector<int>& a_procIDs);
+         const Vector<int>& a_procIDs,
+         bool a_ignoreNumProc = false);
 
   ///
   /** Define this BoxLayout from a LayoutData<Box>.
@@ -636,7 +638,7 @@ protected:
   RefCountedPtr<DataIterator>          m_dataIterator;
   RefCountedPtr<Vector<LayoutIndex> >  m_indicies;
 
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   RefCountedPtr<Vector<DataIndex> >    m_dataIndex;
 #endif
 

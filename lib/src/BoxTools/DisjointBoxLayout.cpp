@@ -25,8 +25,9 @@ DisjointBoxLayout::DisjointBoxLayout()
 }
 
 DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
-                                     const Vector<int>& a_procIDs)
-  :BoxLayout(a_boxes,a_procIDs)
+                                     const Vector<int>& a_procIDs,
+                                     bool a_ignoreNumProc)
+  :BoxLayout(a_boxes,a_procIDs,a_ignoreNumProc)
 {
   CH_assert(isDisjoint());
   computeNeighbors();
@@ -35,8 +36,9 @@ DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
 
 DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
                                      const Vector<int>& a_procIDs,
-                                     const ProblemDomain& a_physDomain)
-  :BoxLayout(a_boxes,a_procIDs), m_physDomain(a_physDomain)
+                                     const ProblemDomain& a_physDomain,
+                                     bool a_ignoreNumProc)
+  :BoxLayout(a_boxes,a_procIDs,a_ignoreNumProc), m_physDomain(a_physDomain)
 {
   CH_assert(isDisjoint());
   computeNeighbors(); // even though BoxLayout::close is virtual, virtual dispatch does not
@@ -45,9 +47,10 @@ DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
 
 void
 DisjointBoxLayout::define(const Vector<Box>& a_boxes,
-                          const Vector<int>& a_procIDs)
+                          const Vector<int>& a_procIDs,
+                          bool a_ignoreNumProc)
 {
-  BoxLayout::define(a_boxes,a_procIDs);
+  BoxLayout::define(a_boxes,a_procIDs,a_ignoreNumProc);
   CH_assert(isDisjoint());
 
 }
@@ -55,10 +58,11 @@ DisjointBoxLayout::define(const Vector<Box>& a_boxes,
 void
 DisjointBoxLayout::define(const Vector<Box>& a_boxes,
                           const Vector<int>& a_procIDs,
-                          const ProblemDomain& a_physDomain)
+                          const ProblemDomain& a_physDomain,
+                          bool a_ignoreNumProc)
 {
   m_physDomain = a_physDomain;
-  BoxLayout::define(a_boxes,a_procIDs);
+  BoxLayout::define(a_boxes,a_procIDs,a_ignoreNumProc);
   CH_assert(isDisjoint());
 
 }
@@ -502,7 +506,7 @@ coarsen(DisjointBoxLayout& a_output, const DisjointBoxLayout& a_input,
   // a_output.deepCopy(a_input);
   a_output.m_boxes      = RefCountedPtr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
   a_output.m_layout     = a_input.m_layout;
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
   a_output.m_dataIndex  = a_input.m_dataIndex;
 #endif
   // now coarsen the physDomain
