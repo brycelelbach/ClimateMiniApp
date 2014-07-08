@@ -183,12 +183,12 @@ void advance(FArrayBox& soln)
 //        std::tie(d.front(), du.front()) = down_boundary(cy, RHS[ii][downmost], RHS[ii][dm_neighbor]);
 //        std::tie(d.back(), dl.back())   = up_boundary  (cy, RHS[ii][upmost],   RHS[ii][um_neighbor]);
 
-        du.front() = 0.0; d.front() = 0.0; dl.front() = 0.0;
-        du.back() = 0.0; d.back() = 0.0; dl.back() = 0.0;
+//        du.front() = 0.0; d.front() = 0.0; dl.front() = 0.0;
+//        du.back() = 0.0; d.back() = 0.0; dl.back() = 0.0;
 
         ///////////////////////////////////////////////////////////////////////
         // Solve each tridiagonal system.
-        LAPACKE_dgtsv(
+        int info = LAPACKE_dgtsv(
             LAPACK_ROW_MAJOR, // matrix format
             ny, // matrix order
             1, // # of right hand sides 
@@ -198,6 +198,8 @@ void advance(FArrayBox& soln)
             RHS[ii].data(), // column to solve 
             1 // leading dimension of RHS
             );
+
+        assert(info == 0);
     }
 
     // Finalize this step. 
