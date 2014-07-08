@@ -1,13 +1,24 @@
 ## Assumes that you've set PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$HPX_LOCATION/lib/pkgconfig in your environment
 
 MPI=FALSE
-DEBUG=FALSE
 
-cxxoptflags += -g $(shell pkg-config --cflags hpx_application)
-foptflags += -g 
-XTRAPOSTFLAGS += -g $(shell pkg-config --cflags --libs hpx_application)
+USE_HDF=FALSE # FIXME
+USE_64=TRUE
+USE_MT=FALSE
+
+USE_HPX=TRUE
+XTRACXXFLAGS += -DCH_HPX 
+
+ifeq ($(DEBUG),TRUE)
+    HPX_LIB_POSTFIX=d
+    XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application_debug)
+    XTRAPOSTFLAGS += $(shell pkg-config --cflags --libs hpx_application_debug)
+endif
+ifeq ($(DEBUG),FALSE)
+    HPX_LIB_POSTFIX=
+    XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application)
+    XTRAPOSTFLAGS += $(shell pkg-config --cflags --libs hpx_application)
+endif
 
 ## To run on Stampede, then you would do:
 #include $(CHOMBO_HOME)/mk/local/Make.defs.stampede.cpu_only
-
-USE_HDF=FALSE

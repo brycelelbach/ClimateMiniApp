@@ -77,13 +77,14 @@ ifeq ($(cxxname),g++)
   # segfault in ~ostream(), so dont use it
   defcxxcomflags := $(_cxxbaseflags)
 
-ifeq ($(OPENMPCC),TRUE)
-  defcxxoptflags := -O2 -funroll-loops -fopenmp
-  defcxxdbgflags := -g -pedantic -Wall -fopenmp
-else
-  defcxxoptflags := -O2 -funroll-loops -Wno-unknown-pragmas
-  defcxxdbgflags := -g -pedantic -Wall -Wno-unknown-pragmas
-endif
+  ifeq ($(OPENMPCC),TRUE)
+    defcxxoptflags := -O2 -funroll-loops -fopenmp
+    defcxxdbgflags := -g -Wall -fopenmp
+  else
+    defcxxoptflags := -O2 -funroll-loops -Wno-unknown-pragmas
+    defcxxdbgflags := -g -pedantic -Wall -Wno-unknown-pragmas
+  endif
+
   #newer versions of gcc (4.3.2 works) can use this
 
   # gcc v4 doesn't understand this yet
@@ -346,3 +347,10 @@ endif
 ifeq ($(system),OSF1)
   defldcomflags = -Wl,-S
 endif
+
+# Don't mess with HPX flags.
+ifeq ($(USE_HPX),TRUE)
+  defcxxoptflags :=
+  defcxxdbgflags := 
+endif
+

@@ -281,3 +281,10 @@ ifeq ($(fname),ifc)
   #endif
 
 endif
+
+# Don't mess with HPX flags.
+ifeq ($(USE_HPX),TRUE)
+  defcxxoptflags :=
+  defcxxdbgflags := 
+endif
+
