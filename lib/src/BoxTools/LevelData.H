@@ -229,18 +229,6 @@ public:
   data.apply(val::set1);
   \endcode
 */
-#if defined(CH_CXX11)
-  // This is
-  // (a) faster because it's easier for the compiler to inline
-  // (b) faster because of C++11 perfect forwarding
-  // (c) faster because it doesn't involve TWO virtual function calls
-  // (d) more user friendly because it works with any type fulfilling the Callable concept
-  // (e) 100% backward compatible with the old implementation of apply()
-  // /s/ wash 
-  template <typename F>
-  void apply(F&& f);
-#else
-  virtual void apply( void (*a_Function)(const Box&, int, T&) );
 
   /** For use with apply( const ApplyFunctor& ) */
   struct ApplyFunctor
@@ -252,6 +240,32 @@ public:
     virtual void operator()( const Box&, int, T& ) const = 0;
   };
 
+  struct ConstApplyFunctor
+  {
+    virtual ~ConstApplyFunctor()
+    {
+    }
+
+    virtual void operator()( const Box&, int, const T& ) const = 0;
+  };
+
+#if defined(CH_CXX11)
+  // This is
+  // (a) faster because it's easier for the compiler to inline
+  // (b) faster because of C++11 perfect forwarding
+  // (c) faster because it doesn't involve TWO virtual function calls
+  // (d) more user friendly because it works with any type fulfilling the Callable concept
+  // (e) 100% backward compatible with the old implementation of apply()
+  // /s/ wash 
+  template <typename F>
+  void apply(F&& f);
+
+  template <typename F>
+  void apply(F&& f) const;
+#else
+  virtual void apply( void (*a_Function)(const Box&, int, T&) );
+
+  virtual void apply( void (*a_Function)(const Box&, int, const T&) ) const;
 /** Like the other apply(), but here the argument is an instance of a class
     derived from LevelData::ApplyFunctor, and which implements ApplyFunctor's
     pure virtual  void operator()(const Box& box, int n_comps, T& t) const.
@@ -283,6 +297,7 @@ public:
 
 */
   virtual void apply( const ApplyFunctor& );
+  virtual void apply( const ConstApplyFunctor& ) const;
 #endif
 
   void degenerate( LevelData<T>& a_to, const SliceSpec& a_ss ) const;
