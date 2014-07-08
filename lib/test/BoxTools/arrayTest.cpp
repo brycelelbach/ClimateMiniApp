@@ -132,7 +132,7 @@ main(int argc, char** argv)
     static void setVal2(const Box& box, int comps, BaseFab<int>& fab)
       {
         // this is to make this test also work in 1d
-        int dir = min(1, SpaceDim-1);
+        int dir = std::min(1, SpaceDim-1);
         int center = (box.smallEnd()[dir] + box.bigEnd()[dir])/2;
         fab.setVal(center);
       }
@@ -149,7 +149,7 @@ main(int argc, char** argv)
     {
       Box rightSide = level1.box(it());
       // this is to make this test also work in 1d
-      int dir = min(1, SpaceDim-1);
+      int dir = std::min(1, SpaceDim-1);
       rightSide = adjCellHi(rightSide, dir);
       Box leftSide = level1.box(it());
       leftSide = adjCellLo(leftSide, dir);
