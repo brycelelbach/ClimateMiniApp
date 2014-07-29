@@ -244,6 +244,24 @@ public:
     return v[n];
   }
 
+  typename std::vector<T>::iterator begin()
+  {
+    return v.begin();
+  }
+  typename std::vector<T>::iterator end()
+  {
+    return v.end();
+  }
+
+  typename std::vector<T>::const_iterator begin() const
+  {
+    return v.begin();
+  }
+  typename std::vector<T>::const_iterator end() const
+  {
+    return v.end();
+  }
+ 
   inline
   T &front()
   {
