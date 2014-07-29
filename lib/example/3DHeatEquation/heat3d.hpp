@@ -78,6 +78,29 @@ enum boundary_type
     UPPER_Z
 };
 
+bool upper_boundary(boundary_type type)
+{
+    switch (bdry)
+    {
+        case LOWER_X:
+        case LOWER_Y:
+        case LOWER_Z:
+            return false;
+        case UPPER_X:
+        case UPPER_Y:
+        case UPPER_Z:
+            return true;
+    };
+
+    assert(false);
+    return false;
+}
+
+bool lower_boundary(boundary_type type)
+{
+    return !upper_boundary(type);
+}
+
 struct problem_state
 {
     problem_state()
@@ -180,12 +203,15 @@ struct problem_state
         return F;
     }
 
+    IntVect ghosts()
+    {
+        return U.ghostVect();
+    }
+
     // TODO: Move call to imexop
     void exchange()
     {
         U.exchange();
-        reflux_horizontal_needed = true;    
-        reflux_vertical_needed = true;    
     }
 
     bool reflux_horizontal_needed; 
@@ -229,14 +255,52 @@ struct imex_operators
     
             ///////////////////////////////////////////////////////////////////
             // Horizontal BCs
-            if (profile.is_boundary(LOWER_X, lower[0]))
-                for (auto j = lower[1]; j <= upper[1]; ++j)
-                    for (auto k = lower[2]; k <= upper[2]; ++k)
+            auto BCs =
+                [&] (boundary_type type, size_t dir, IntVect V)
+                { 
+                    if (profile.is_outside_domain(type, lower[dir]))
                     {
-                        IntVect lower_x(lower[0], j, k);
-                        kE(lower_x) = profile.horizontal_bcs(LOWER_X, lower_x, phi, t); 
-                    }
+                        size_t A, B;
+        
+                        if      (0 == dir) A = 1; B = 2;
+                        else if (1 == dir) A = 0; B = 2;
+                        else if (2 == dir) A = 0; B = 2;
+                        else    assert(false);
+ 
+                        for (auto a = lower[A]; a <= upper[1]; ++a)
+                            for (auto b = lower[B]; b <= upper[2]; ++b)
+                            {
+                                IntVect outside(V);
+                                outside.setVal(A, a);
+                                outside.setVal(B, b);
+        
+                                kE(outside) = profile.outside_domain(type, outside, phi, t); 
+        
+                                int sign = (upper_boundary(type) ? -1 : 1);
+ 
+                                IntVect bdry(V);
+                                bdry.shift(dir, sign*phi_.ghost()[dir])
+                                bdry.setVal(A, a);
+                                bdry.setVal(B, b);
 
+                                kE(bdry) = profile.boundary_conditions(type, bdry, phi, t); 
+                            }
+
+                        int sign = (upper_boundary(type) ? -1 : 1);
+                        V.shift(dir, sign*phi_.ghost()[dir]);
+
+                        return V;
+                    }
+                }
+
+            lower = BCs(LOWER_X, 0, lower);
+            BCs(UPPER_X, 0, upper);
+            lower = BCs(LOWER_X, 1, lower);
+            upper = BCs(UPPER_X, 1, upper);
+            lower = BCs(LOWER_X, 2, lower);
+            upper = BCs(UPPER_X, 2, upper);
+
+/*
             if (profile.is_boundary(UPPER_X, upper[0]))
                 for (auto j = lower[1]; j <= upper[1]; ++j)
                     for (auto k = lower[2]; k <= upper[2]; ++k)
@@ -276,6 +340,7 @@ struct imex_operators
                         IntVect upper_z(i, j, upper[2]);
                         kE(upper_z) = profile.horizontal_bcs(UPPER_Z, upper_z, phi, t); 
                     }
+*/
     
             ///////////////////////////////////////////////////////////////////
             // Interior points.
@@ -314,6 +379,20 @@ struct imex_operators
  
             IntVect lower = rhs.smallEnd();
             IntVect upper = rhs.bigEnd();
+
+            auto KeepInDomain =
+                [&] (boundary_type type, size_t dir)
+                { 
+                    if (profile.is_outside_domain(type, lower[dir]))
+                    {
+                        size_t A, B;
+        
+                        IntVect& V = (upper_boundary(type) ? upper : lower);
+ 
+                        int sign = (upper_boundary(type) ? -1 : 1);
+                        V.shift(dir, sign*phi_.ghost()[dir]);
+                    }
+                }
 
             for (auto j = lower[1]+1; j <= upper[1]-1; ++j)
                 for (auto k = lower[2]+1; k <= upper[2]-1; ++k)
@@ -523,6 +602,34 @@ struct aniso_profile
         assert(info == 0);
     }
 
+    bool is_outside_domain(boundary_type bdry, int l)
+    {
+        switch (bdry)
+        {
+            // Vertical
+            case LOWER_X:
+            case UPPER_X:
+                return (l == -1) || (l == config.nv);
+
+            // Horizontal
+            case LOWER_Y:
+            case UPPER_Y:
+            case LOWER_Z:
+            case UPPER_Z:
+                return (l == -1) || (l == config.nh);
+        };
+
+        assert(false);
+        return false;
+    } 
+
+    bool is_outside_domain(IntVect here)
+    {
+        return is_outside_domain(LOWER_X, here[0])
+            || is_outside_domain(LOWER_Y, here[1])
+            || is_outside_domain(LOWER_Z, here[2]);
+    }
+
     bool is_boundary(boundary_type bdry, int l)
     {
         switch (bdry)
@@ -559,16 +666,14 @@ struct aniso_profile
     Real exact_solution(IntVect here, Real t) 
     {
         Real x, y, z; std::tie(x, y, z) = phys_coords(here);
-        if (is_boundary(here)) return 0.0;
+        if (is_outside_domain(here)) return 0.0;
+        else if (is_boundary(here)) return 0.0;
         return exact_solution(x, y, z, t);
     }
 
     Real exact_solution(Real x, Real y, Real z, Real t) 
     {
         Real const K = (A*A*kx + B*B*ky + C*C*kz)*M_PI*M_PI;
-//        Real const K = A*M_PI*std::sqrt(kx)
-//                     + B*M_PI*std::sqrt(ky)
-//                     + C*M_PI*std::sqrt(kz);
         Real const a = (1.0 - std::exp(-t*K)) / (K); 
         return a * source_term(x, y, z);
     } 
