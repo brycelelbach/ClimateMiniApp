@@ -30,7 +30,11 @@ class LayoutIndex
 {
 public:
   ///
-  LayoutIndex();
+  LayoutIndex()
+    : m_index (0),
+      m_datInd(0),
+      m_layoutIntPtr(NULL)
+  {}
 
   virtual ~LayoutIndex()
   {}
@@ -39,6 +43,8 @@ public:
 
   ///
   bool operator == (const LayoutIndex& a_rhs) const;
+
+  bool operator < (const LayoutIndex& a_rhs) const;
 
   bool eq(const LayoutIndex& a_rhs) const
   {
@@ -62,7 +68,7 @@ public:
 
   int datInd() const
   {
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX) 
     return m_datInd;
 #else
     //no MPI means dataindex is just a layout index
@@ -83,6 +89,13 @@ public:
   virtual void output() const
   {
     pout() << "(" << m_index << "," << m_datInd << ")" << endl;
+  }
+
+  /// Not for the faint-of-heart, only use if you know what you're doing. Sets
+  /// the layout ID of the DataIndex.
+  void setLayoutID(const int* a_layoutID)
+  {
+    m_layoutIntPtr = a_layoutID;
   }
 
 private:
@@ -141,16 +154,14 @@ private:
 };
 
 #ifndef WRAPPER
-inline LayoutIndex::LayoutIndex()
-  :
-  m_index(0),
-  m_layoutIntPtr(NULL)
-{
-}
-
 inline bool LayoutIndex::operator == (const LayoutIndex& a_rhs) const
 {
   return (m_index == a_rhs.m_index);
+}
+
+inline bool LayoutIndex::operator < (const LayoutIndex& a_rhs) const
+{
+  return (m_index < a_rhs.m_index);
 }
 
 inline int LayoutIndex::intCode() const
