@@ -26,8 +26,9 @@ DisjointBoxLayout::DisjointBoxLayout()
 
 DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
                                      const Vector<int>& a_procIDs,
-                                     bool a_ignoreNumProc)
-  :BoxLayout(a_boxes,a_procIDs,a_ignoreNumProc)
+                                     bool a_ignoreNumProc,
+                                     int a_thisProc)
+  :BoxLayout(a_boxes,a_procIDs,a_ignoreNumProc,a_thisProc)
 {
   CH_assert(isDisjoint());
   computeNeighbors();
@@ -37,8 +38,9 @@ DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
 DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
                                      const Vector<int>& a_procIDs,
                                      const ProblemDomain& a_physDomain,
-                                     bool a_ignoreNumProc)
-  :BoxLayout(a_boxes,a_procIDs,a_ignoreNumProc), m_physDomain(a_physDomain)
+                                     bool a_ignoreNumProc,
+                                     int a_thisProc)
+  :BoxLayout(a_boxes,a_procIDs,a_ignoreNumProc,a_thisProc), m_physDomain(a_physDomain)
 {
   CH_assert(isDisjoint());
   computeNeighbors(); // even though BoxLayout::close is virtual, virtual dispatch does not
@@ -48,9 +50,10 @@ DisjointBoxLayout::DisjointBoxLayout(const Vector<Box>& a_boxes,
 void
 DisjointBoxLayout::define(const Vector<Box>& a_boxes,
                           const Vector<int>& a_procIDs,
-                          bool a_ignoreNumProc)
+                          bool a_ignoreNumProc,
+                          int a_thisProc)
 {
-  BoxLayout::define(a_boxes,a_procIDs,a_ignoreNumProc);
+  BoxLayout::define(a_boxes,a_procIDs,a_ignoreNumProc,a_thisProc);
   CH_assert(isDisjoint());
 
 }
@@ -59,10 +62,11 @@ void
 DisjointBoxLayout::define(const Vector<Box>& a_boxes,
                           const Vector<int>& a_procIDs,
                           const ProblemDomain& a_physDomain,
-                          bool a_ignoreNumProc)
+                          bool a_ignoreNumProc,
+                          int a_thisProc)
 {
   m_physDomain = a_physDomain;
-  BoxLayout::define(a_boxes,a_procIDs,a_ignoreNumProc);
+  BoxLayout::define(a_boxes,a_procIDs,a_ignoreNumProc,a_thisProc);
   CH_assert(isDisjoint());
 
 }
@@ -96,14 +100,14 @@ DisjointBoxLayout::define(const BoxLayout& a_layout,
 }
 
 void
-DisjointBoxLayout::close()
+DisjointBoxLayout::close(int a_thisProc)
 {
   if (!*m_closed)  //do nothing if already closed
     {
       sort();
       CH_assert(isDisjoint());
       *m_closed = true;
-      buildDataIndex();
+      buildDataIndex(a_thisProc);
       m_dataIterator = RefCountedPtr<DataIterator>(
                         new DataIterator(*this, m_layout));
       computeNeighbors();
@@ -124,7 +128,7 @@ DisjointBoxLayout::closeNO()
 }
 
 void
-DisjointBoxLayout::closeNoSort()
+DisjointBoxLayout::closeNoSort(int a_thisProcID)
 {
   if (!*m_closed)  //do nothing if already closed
     {
@@ -304,7 +308,7 @@ DisjointBoxLayout::degenerate( DisjointBoxLayout& a_to,
 
     // What happens now if boxes.size()==0?
     a_to.defineAndLoadBalance( boxes, 0 );
-    a_to.close(); // Do we really need this?
+    a_to.close(getLocalProcID()); // Do we really need this?
 }
 
 void

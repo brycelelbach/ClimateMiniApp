@@ -33,6 +33,7 @@ class DisjointBoxLayout: public BoxLayout
 public:
 
   friend class Copier;
+  friend class AsyncCopier;
 
   /**
      \name Constructors, destructors, defines
@@ -53,7 +54,8 @@ public:
   */
   DisjointBoxLayout(const Vector<Box>& a_boxes,
                     const Vector<int>& a_procIDs,
-                    bool a_ignoreNumProc = false);
+                    bool a_ignoreNumProc = false,
+                    int a_thisProc = -1);
 
   ///
   /** Construct from a Vector of Boxes and optionally a Vector of
@@ -64,7 +66,8 @@ public:
   DisjointBoxLayout(const Vector<Box>& a_boxes,
                     const Vector<int>& a_procIDs,
                     const ProblemDomain& a_physDomain,
-                    bool a_ignoreNumProc = false);
+                    bool a_ignoreNumProc = false,
+                    int a_thisProc = -1);
 
   ///
   /**
@@ -85,7 +88,8 @@ public:
   virtual void
   define(const Vector<Box>& a_boxes,
          const Vector<int>& a_procIDs,
-         bool a_ignoreNumProcs = false);
+         bool a_ignoreNumProcs = false,
+         int a_thisProc = -1);
 
   ///
   /**
@@ -138,7 +142,8 @@ public:
   define(const Vector<Box>& a_boxes,
          const Vector<int>& a_procIDs,
          const ProblemDomain& a_physDomain,
-         bool a_ignoreNumProc = false);
+         bool a_ignoreNumProc = false,
+         int a_thisProc = -1);
 
   ///
   /** Define this DisjointBoxLayout from a Vector of Boxes.
@@ -201,7 +206,7 @@ public:
   /** Mark this DisjointBoxLayout as complete and unchangeable.
    */
   virtual void
-  close();
+  close(int a_thisProc = -1);
 
   ///
   /** Set ProblemDomain.  Useful when using addBox() and trying to use closeNoSort()
@@ -321,7 +326,7 @@ public:
 
   const ProblemDomain& physDomain() const;
 
-  virtual void closeNoSort(); // close without sorting; used by AdjCellHi, etc.
+  virtual void closeNoSort(int a_thisProc = -1); // close without sorting; used by AdjCellHi, etc.
 
 protected:
   ///

@@ -163,13 +163,14 @@ public:
   */
   BoxLayout(const Vector<Box>& a_boxes,
             const Vector<int>& a_procIDs,
-            bool a_ignoreNumProc = false);
+            bool a_ignoreNumProc = false,
+            int a_thisProc = -1);
 
   ///
   /** Construct from a LayoutData<Box>.
       On exit, the BoxLayout will be closed.
   */
-  BoxLayout(const LayoutData<Box>& a_newLayout);
+  BoxLayout(const LayoutData<Box>& a_newLayout, int a_thisProc = -1);
 
   ///
   void transform(BaseTransform& a_transform);
@@ -199,7 +200,8 @@ public:
   virtual void
   define(const Vector<Box>& a_boxes,
          const Vector<int>& a_procIDs,
-         bool a_ignoreNumProc = false);
+         bool a_ignoreNumProc = false,
+         int a_thisProc = -1);
 
   ///
   /** Define this BoxLayout from a LayoutData<Box>.
@@ -209,7 +211,7 @@ public:
       each Box in the LayoutData<Box>.
       On exit, the BoxLayout will be closed, and NOT re-sorted.
   */
-  virtual void define(const LayoutData<Box>& a_newLayout);
+  virtual void define(const LayoutData<Box>& a_newLayout, int a_thisProc);
 
   /*@}*/
 
@@ -368,11 +370,11 @@ public:
   /** Mark this BoxLayout as complete and unchangeable.
    */
   virtual void
-  close();
+  close(int a_thisProc = -1);
 
   // not for general consumption.
   virtual void
-  closeNoSort();
+  closeNoSort(int a_thisProc = -1);
 
   ///
   /** Actual deep copy operation.  New object created with copied
@@ -625,9 +627,17 @@ public:
 
   inline unsigned int indexI(const LayoutIndex&) const;
 
+  int getLocalProcID() const;
+
+  /// Use with caution. This function constructs a compatible DataIndex for
+  /// this BoxLayout based on a DataIndex from another BoxLayout. There is no
+  /// gurantee that the new DataIndex will be valid; if it is invalid, things
+  /// will blow up.  
+  DataIndex localizeDataIndex(DataIndex idx) const;
+
 protected:
 
-  void buildDataIndex();
+  void buildDataIndex(int a_thisProc = -1);
   friend class LayoutIterator;
   friend class DataIterator;
 
@@ -640,6 +650,7 @@ protected:
 
 #if defined(CH_MPI) || defined(CH_HPX)
   RefCountedPtr<Vector<DataIndex> >    m_dataIndex;
+  RefCountedPtr<int>                   m_localProcID;
 #endif
 
   void checkDefine(const Vector<Box>& a_boxes, const Vector<int>& procIDs);
@@ -720,6 +731,19 @@ BoxLayout::setProcID(const LayoutIndex& a_layoutIndex, unsigned int a_procID)
 {
   CH_assert(check(a_layoutIndex));
   m_boxes->operator[](a_layoutIndex.m_index).m_procID = a_procID;
+}
+
+inline int
+BoxLayout::getLocalProcID() const
+{
+  return *m_localProcID;
+}
+  
+inline DataIndex
+BoxLayout::localizeDataIndex(DataIndex idx) const
+{
+  idx.setLayoutID(m_layout);
+  return idx;
 }
 
 // global functions

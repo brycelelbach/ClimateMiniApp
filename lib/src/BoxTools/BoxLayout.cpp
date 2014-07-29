@@ -82,6 +82,7 @@ BoxLayout& BoxLayout::operator=(const BoxLayout& a_rhs)
   m_dataIterator = a_rhs.m_dataIterator;
 #if defined(CH_MPI) || defined(CH_HPX)
   m_dataIndex = a_rhs.m_dataIndex;
+  m_localProcID = a_rhs.m_localProcID;
 #endif
   return *this;
 }
@@ -95,36 +96,41 @@ void BoxLayout::sort()
     }
 }
 
-void BoxLayout::closeNoSort()
+void BoxLayout::closeNoSort(int a_thisProc)
 {
   if (!*m_closed)
     {
       //sort();  there, no sort.   The sort is a lie.
       *m_sorted = false;
       *m_closed = true;
-      buildDataIndex();
+      buildDataIndex(a_thisProc);
       m_dataIterator = RefCountedPtr<DataIterator>(new DataIterator(*this, m_layout));
     }
 }
 
-void BoxLayout::close()
+void BoxLayout::close(int a_thisProc)
 {
   if (!*m_closed)
     {
       sort();
       *m_closed = true;
-      buildDataIndex();
+      buildDataIndex(a_thisProc);
       m_dataIterator = RefCountedPtr<DataIterator>(new DataIterator(*this, m_layout));
     }
 }
 
-void BoxLayout::buildDataIndex()
+void BoxLayout::buildDataIndex(int a_thisProc)
 {
 #if defined(CH_MPI) || defined(CH_HPX)
   std::list<DataIndex> dlist;
   unsigned int index = 0;
   unsigned int datIn = 0;
-  unsigned int p = CHprocID();
+  int p = -1;
+  if (-1 == a_thisProc)
+    p = CHprocID();
+  else
+    p = a_thisProc;
+  m_localProcID = RefCountedPtr<int>(new int(p));
   int count=0;
   const Entry* box;
 
@@ -187,24 +193,24 @@ LayoutIterator BoxLayout::layoutIterator() const
   return LayoutIterator(*this, m_layout);
 }
 
-BoxLayout::BoxLayout(const Vector<Box>& a_boxes, const Vector<int>& assignments, bool a_ignoreNumProc)
+BoxLayout::BoxLayout(const Vector<Box>& a_boxes, const Vector<int>& assignments, bool a_ignoreNumProc, int a_thisProc)
   :m_boxes( new Vector<Entry>()),
    m_layout(new int),
    m_closed(new bool(false)),
    m_sorted(new bool(false)),
    m_indicies(new Vector<LayoutIndex>())
 {
-  define(a_boxes, assignments, a_ignoreNumProc);
+  define(a_boxes, assignments, a_ignoreNumProc, a_thisProc);
 }
 
-BoxLayout::BoxLayout(const LayoutData<Box>& a_newLayout)
+BoxLayout::BoxLayout(const LayoutData<Box>& a_newLayout, int a_thisProc)
   :m_boxes( new Vector<Entry>()),
    m_layout(new int),
    m_closed(new bool(false)),
    m_sorted(new bool(false)),
    m_indicies(new Vector<LayoutIndex>())
 {
-  define(a_newLayout);
+  define(a_newLayout, a_thisProc);
 }
 
 void BoxLayout::checkDefine(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs)
@@ -216,10 +222,12 @@ void BoxLayout::checkDefine(const Vector<Box>& a_boxes, const Vector<int>& a_pro
     }
   const int num_boxes = a_boxes.size();
   const int num_procs = a_procIDs.size();
+#ifdef CH_MPI
   if ( (numProc() > 1) && (num_boxes != num_procs ))
     {
       MayDay::Error("BoxLayout::define(): vector of processor assignments is different length from vector of boxes");
     }
+#endif
   // Check for negative proc ID's and ID's larger than total number of procs.
   for (unsigned int i = 0; i < num_procs; ++i)
     {
@@ -235,7 +243,7 @@ void BoxLayout::checkDefine(const Vector<Box>& a_boxes, const Vector<int>& a_pro
 }
 
 void
-BoxLayout::define(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs, bool a_ignoreNumProc)
+BoxLayout::define(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs, bool a_ignoreNumProc, int a_thisProc)
 {
   checkDefine(a_boxes, a_procIDs);
   const int num_boxes = a_boxes.size();
@@ -253,11 +261,11 @@ BoxLayout::define(const Vector<Box>& a_boxes, const Vector<int>& a_procIDs, bool
           m_boxes->operator[](i).m_procID = 0;
         }
     }
-  close();
+  close(a_thisProc);
 }
 
 void
-BoxLayout::define(const LayoutData<Box>& a_newLayout)
+BoxLayout::define(const LayoutData<Box>& a_newLayout, int a_thisProc)
 {
   const BoxLayout& baseLayout = a_newLayout.boxLayout();
 
@@ -325,7 +333,7 @@ BoxLayout::define(const LayoutData<Box>& a_newLayout)
     }
 #endif
 
-  closeNoSort(); // does: *m_sorted = false; *m_closed = true; buildDataIndex();
+  closeNoSort(a_thisProc); // does: *m_sorted = false; *m_closed = true; buildDataIndex();
 }
 
 // Other member functions
@@ -396,7 +404,7 @@ coarsen(BoxLayout& a_output, const BoxLayout& a_input, int a_refinement)
     {
       (*a_output.m_boxes)[ivec].box.coarsen(a_refinement);
     }
-  a_output.close();
+  a_output.close(a_input.getLocalProcID());
 }
 
 void
@@ -421,7 +429,7 @@ coarsen(BoxLayout& a_output, const BoxLayout& a_input, const IntVect& a_refineme
     {
       (*a_output.m_boxes)[ivec].box.coarsen(a_refinement);
     }
-  a_output.close();
+  a_output.close(a_input.getLocalProcID());
 }
 
 void
@@ -596,7 +604,7 @@ void refine(BoxLayout& a_output, const BoxLayout& a_input, int a_refinement)
     {
       (*a_output.m_boxes)[ivec].box.refine(a_refinement);
     }
-  a_output.close();
+  a_output.close(a_input.getLocalProcID());
 }
 
 void refine(BoxLayout& a_output, const BoxLayout& a_input, const IntVect& a_refinement)
@@ -615,7 +623,7 @@ void refine(BoxLayout& a_output, const BoxLayout& a_input, const IntVect& a_refi
     {
       (*a_output.m_boxes)[ivec].box.refine(a_refinement);
     }
-  a_output.close();
+  a_output.close(a_input.getLocalProcID());
 }
 
 ostream& operator<<(ostream& os, const BoxLayout& a_layout)
