@@ -8,6 +8,8 @@
  */
 #endif
 
+#include <map>
+
 #include "LayoutIterator.H"
 #include "DataIterator.H"
 #include "NamespaceHeader.H"
@@ -31,17 +33,13 @@ LayoutIterator::LayoutIterator(const BoxLayout& a_boxlayout,
 {
   Vector<LayoutIndex>& indicies = *m_indicies;
   indicies.resize(a_boxlayout.size());
-  int datInd = 0;
+  std::map<int, int> datInd;
   for (int ibox = 0; ibox < a_boxlayout.size(); ibox++)
     {
       LayoutIndex& current = indicies[ibox];
       current.m_layoutIntPtr = a_layoutID;
       current.m_index        = ibox;
-      if (m_layout.procID(current) == procID())
-        {
-          current.m_datInd = datInd;
-          datInd++;
-        }
+      current.m_datInd       = datInd[m_layout.procID(current)]++;
     }
 }
 #include "NamespaceFooter.H"
