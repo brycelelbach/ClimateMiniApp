@@ -11,7 +11,7 @@
 #include "DataIterator.H"
 #include "NamespaceHeader.H"
 
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
 DataIterator::DataIterator(const BoxLayout& plan,
                            const int* layoutID)
   :m_layout(plan), m_indices(plan.m_dataIndex), m_current(0)

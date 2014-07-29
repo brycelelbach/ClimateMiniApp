@@ -18,7 +18,7 @@
 #include "LayoutIterator.H"
 #include "NamespaceHeader.H"
 
-#ifdef CH_MPI
+#if defined(CH_MPI) || defined(CH_HPX)
 
 ///An Iterator based on a BoxLayout object.
 /**
