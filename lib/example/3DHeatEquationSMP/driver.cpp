@@ -51,7 +51,36 @@ void output(FArrayBox const& soln, std::string const& format, std::string const&
 
 void output(LevelData<FArrayBox> const& data, std::string const& format, std::string const& name, std::uint64_t step)
 {
-    data.apply([format, name, step](Box const&, int, FArrayBox& fab) { output(fab, format, name, step); });
+//    data.apply([format, name, step](Box const&, int, FArrayBox& fab) { output(fab, format, name, step); });
+    std::string file;
+    try { file = boost::str(boost::format(format) % step); }
+    catch (boost::io::too_many_args&) { file = format; }
+
+    Vector<DisjointBoxLayout> dbl;
+    dbl.push_back(data.disjointBoxLayout());
+
+    Vector<LevelData<FArrayBox>*> level;
+    level.push_back(const_cast<LevelData<FArrayBox>*>(&data));
+
+    Vector<std::string> names;
+    names.push_back(name);
+
+    Vector<int> ref_ratios;
+    ref_ratios.push_back(2);
+    ref_ratios.push_back(2);
+
+    WriteAMRHierarchyHDF5(
+        file 
+      , dbl 
+      , level
+      , names
+      , dbl[0].physDomain().domainBox() 
+      , 1.0 // dx
+      , 1.0 // dt
+      , 0.0 // time
+      , ref_ratios
+      , 1 // levels
+        );
 }
 
 void output(heat3d::problem_state const& soln, std::string const& format, std::string const& name, std::uint64_t step)
@@ -71,7 +100,7 @@ int main()
         /*nt: physical time to step to             =*/0.005,
         /*nh: y and z (horizontal) extent per core =*/60,
         /*nv: x (vertical) extent per core         =*/30,
-        /*max_box_size                             =*/60
+        /*max_box_size                             =*/30
     );
 
     heat3d::aniso_profile profile(config,
@@ -101,7 +130,7 @@ int main()
 
     DisjointBoxLayout dbl(boxes, procs, base_domain);
 
-    LevelData<FArrayBox> data(dbl, 1, IntVect::Zero);
+    LevelData<FArrayBox> data(dbl, 1, IntVect::Unit);
     heat3d::problem_state soln;
     soln.alias(data);
 
@@ -125,7 +154,8 @@ int main()
     Real time = 0.0;
     while (time < config.nt)
     {
-        output(data, "phi.%06u.hdf5", "phi_numeric", step); 
+        soln.exchange();
+        output(soln, "phi.%06u.hdf5", "phi_numeric", step); 
 
         heat3d::problem_state exact; exact.define(soln);
         visit(exact,

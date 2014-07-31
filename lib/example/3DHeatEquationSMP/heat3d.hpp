@@ -258,6 +258,8 @@ struct imex_operators
             auto BCs =
                 [&] (boundary_type type, size_t dir, IntVect V)
                 { 
+                    int sign = (upper_boundary(type) ? -1 : 1);
+ 
                     if (profile.is_outside_domain(type, V[dir]))
                     {
                         size_t A, B;
@@ -267,21 +269,26 @@ struct imex_operators
                         else if (2 == dir) { A = 0; B = 1; }
                         else    assert(false);
  
-                        for (int a = lower[A]; a <= upper[A]; ++a)
-                            for (int b = lower[B]; b <= upper[B]; ++b)
+                        for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
+                            for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
                             {
                                 IntVect outside(V);
                                 outside.setVal(A, a);
                                 outside.setVal(B, b);
-        
-                                kE(outside) = profile.outside_domain(type, outside, phi, t); 
+       
+                                for (int c = 0; c <= phi_.ghosts()[dir]; ++c)
+                                {
+                                    outside.shift(dir, sign*c);
+                                    kE(outside) = profile.outside_domain(type, outside, phi, t); 
+                                } 
                             }
 
-                        int sign = (upper_boundary(type) ? -1 : 1);
-                        V.shift(dir, sign*phi_.ghosts()[dir]);
+                        //int sign = (upper_boundary(type) ? -1 : 1);
+                        //V.shift(dir, sign*phi_.ghosts()[dir]);
                     }
 
-                    if (profile.is_boundary(type, V[dir]))
+//                    if (profile.is_boundary(type, (V+sign*phi_.ghosts())[dir]))
+                    if (profile.is_boundary(type, (V)[dir]))
                     {
                         size_t A, B;
         
@@ -290,11 +297,9 @@ struct imex_operators
                         else if (2 == dir) { A = 0; B = 1; }
                         else    assert(false);
  
-                        for (int a = lower[A]; a <= upper[A]; ++a)
-                            for (int b = lower[B]; b <= upper[B]; ++b)
+                        for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
+                            for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
                             {
-                                int sign = (upper_boundary(type) ? -1 : 1);
- 
                                 IntVect bdry(V);
                                 bdry.shift(dir, sign*phi_.ghosts()[dir]);
                                 bdry.setVal(A, a);
@@ -302,13 +307,13 @@ struct imex_operators
 
                                 kE(bdry) = profile.boundary_conditions(type, bdry, phi, t); 
                             }
+
+                        int sign = (upper_boundary(type) ? -1 : 1);
+                        V.shift(dir, sign*IntVect::Unit[dir]);
                     }
 
                     return V;
                 };
-
-            std::cout << lower << " "
-                      << upper << std::endl;
 
             lower = BCs(LOWER_X, 0, lower);
             upper = BCs(UPPER_X, 0, upper);
@@ -317,8 +322,9 @@ struct imex_operators
             lower = BCs(LOWER_Z, 2, lower);
             upper = BCs(UPPER_Z, 2, upper);
 
-            std::cout << lower << " "
-                      << upper << std::endl;
+            lower.shift(phi_.ghosts());
+            upper.shift(-1*phi_.ghosts());
+
 /*
             if (profile.is_boundary(UPPER_X, upper[0]))
                 for (auto j = lower[1]; j <= upper[1]; ++j)
@@ -363,9 +369,9 @@ struct imex_operators
     
             ///////////////////////////////////////////////////////////////////
             // Interior points.
-            for (auto i = lower[0]+1; i <= upper[0]-1; ++i)
-                for (auto j = lower[1]+1; j <= upper[1]-1; ++j)
-                    for (auto k = lower[2]+1; k <= upper[2]-1; ++k)
+            for (auto i = lower[0]; i <= upper[0]; ++i)
+                for (auto j = lower[1]; j <= upper[1]; ++j)
+                    for (auto k = lower[2]; k <= upper[2]; ++k)
                     {
                         IntVect here(i, j, k);
 
@@ -399,22 +405,37 @@ struct imex_operators
             IntVect lower = rhs.smallEnd();
             IntVect upper = rhs.bigEnd();
 
-            auto KeepInDomain =
-                [&] (boundary_type type, size_t dir)
+            auto BCs =
+                [&] (boundary_type type, size_t dir, IntVect V)
                 { 
-                    if (profile.is_outside_domain(type, lower[dir]))
+                    if (profile.is_boundary(type, V[dir]))
                     {
                         size_t A, B;
         
-                        IntVect& V = (upper_boundary(type) ? upper : lower);
+                        if      (0 == dir) { A = 1; B = 2; }
+                        else if (1 == dir) { A = 0; B = 2; }
+                        else if (2 == dir) { A = 0; B = 1; }
+                        else    assert(false);
  
                         int sign = (upper_boundary(type) ? -1 : 1);
-                        V.shift(dir, sign*phi_.ghosts()[dir]);
+                        V.shift(dir, sign*IntVect::Unit[dir]);
                     }
+
+                    return V;
                 };
 
-            for (auto j = lower[1]+1; j <= upper[1]-1; ++j)
-                for (auto k = lower[2]+1; k <= upper[2]-1; ++k)
+            lower = BCs(LOWER_X, 0, lower);
+            upper = BCs(UPPER_X, 0, upper);
+            lower = BCs(LOWER_Y, 1, lower);
+            upper = BCs(UPPER_Y, 1, upper);
+            lower = BCs(LOWER_Z, 2, lower);
+            upper = BCs(UPPER_Z, 2, upper);
+
+            lower.shift(phi_.ghosts());
+            upper.shift(-1*phi_.ghosts());
+
+            for (auto j = lower[1]; j <= upper[1]; ++j)
+                for (auto k = lower[2]; k <= upper[2]; ++k)
                 {
                     auto A = profile.vertical_operator(j, k, phi, dtscale);
 
@@ -672,7 +693,7 @@ struct aniso_profile
         };
 
         assert(false);
-        return false;
+        return false; 
     } 
 
     bool is_boundary(IntVect here)
@@ -704,8 +725,8 @@ struct aniso_profile
 
     void reflux_horizontal(problem_state& soln)
     {
-//        static std::uint64_t i = 0;
-//        output(soln, std::string("reflux.%06u.hdf5"), std::string("phi"), ++i);
+        static std::uint64_t i = 0;
+        output(soln, std::string("reflux.%06u.hdf5"), std::string("phi"), ++i);
 
         DataIterator dit = soln.data().dataIterator();
         for (dit.begin(); dit.ok(); ++dit)
@@ -719,9 +740,17 @@ struct aniso_profile
             IntVect lower = U.smallEnd();
             IntVect upper = U.bigEnd(); 
 
-            for (auto k = lower[2]+1; k <= upper[2]-1; ++k)
-                for (auto j = lower[1]+1; j <= upper[1]; ++j)
-                    for (auto i = lower[0]+1; i <= upper[0]-1; ++i)
+            lower.shift(soln.ghosts());
+            upper.shift(-1*soln.ghosts());
+
+            FY.setVal(0.0);
+            FZ.setVal(0.0);
+
+//            std::cout << lower << " "
+//                      << upper << std::endl;
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+                for (auto j = U.smallEnd()[1]+1; j <= U.bigEnd()[1]; ++j)
+                    for (auto i = lower[0]; i <= upper[0]; ++i)
                     {
                         // NOTE: This currently assumes constant-coefficients 
                         // and assumes we're just taking an average of the
@@ -740,18 +769,18 @@ struct aniso_profile
 //                        if (U(U_here) > 1e200 || U(U_left_y) > 1e200 || U(U_left_z) > 1e200)
 //                            std::cout << U_here << " " << U(U_here) << " " << U(U_left_y) << " " << U(U_left_z) << "\n";
 
-                        FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
+//                        if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
+//                            std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
 
-                        //if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
-                            //std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
+                        FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
 
 //                        if (FY(F_here) > 1e200 || FZ(F_here) > 1e200)
 //                            std::cout << F_here << " " << FY(F_here) << " " << FZ(F_here) << "\n";
                     }
 
-            for (auto k = lower[2]+1; k <= upper[2]; ++k)
-                for (auto j = lower[1]+1; j <= upper[1]-1; ++j)
-                    for (auto i = lower[0]+1; i <= upper[0]-1; ++i)
+            for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
+                for (auto j = lower[1]; j <= upper[1]; ++j)
+                    for (auto i = lower[0]; i <= upper[0]; ++i)
                     {
                         // NOTE: This currently assumes constant-coefficients 
                         // and assumes we're just taking an average of the
@@ -767,8 +796,8 @@ struct aniso_profile
                         IntVect U_here(i,   j,   k  );
                         IntVect F_here(i, j, k);
 
-                        //if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
-                        //    std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
+//                        if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
+//                            std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
 
                         FZ(F_here) = -(kz/dh) * (U(U_here) - U(U_left_z));
 
