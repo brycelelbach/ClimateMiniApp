@@ -287,8 +287,8 @@ struct imex_operators
                         //V.shift(dir, sign*phi_.ghosts()[dir]);
                     }
 
-//                    if (profile.is_boundary(type, (V+sign*phi_.ghosts())[dir]))
-                    if (profile.is_boundary(type, (V)[dir]))
+                    if (profile.is_boundary(type, (V+sign*phi_.ghosts())[dir]))
+//                    if (profile.is_boundary(type, (V)[dir]))
                     {
                         size_t A, B;
         
@@ -296,7 +296,8 @@ struct imex_operators
                         else if (1 == dir) { A = 0; B = 2; }
                         else if (2 == dir) { A = 0; B = 1; }
                         else    assert(false);
- 
+
+//                        std::cout << V << "\n";
                         for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
                             for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
                             {
@@ -304,6 +305,9 @@ struct imex_operators
                                 bdry.shift(dir, sign*phi_.ghosts()[dir]);
                                 bdry.setVal(A, a);
                                 bdry.setVal(B, b);
+
+                                if (bdry[0] == 14 && (bdry[1] == 0) && (bdry[2] == 1))
+                                    std::cout << phi(bdry) << "\n";
 
                                 kE(bdry) = profile.boundary_conditions(type, bdry, phi, t); 
                             }
@@ -408,7 +412,9 @@ struct imex_operators
             auto BCs =
                 [&] (boundary_type type, size_t dir, IntVect V)
                 { 
-                    if (profile.is_boundary(type, V[dir]))
+                    int sign = (upper_boundary(type) ? -1 : 1);
+ 
+                    if (profile.is_boundary(type, (V+sign*phi_.ghosts())[dir]))
                     {
                         size_t A, B;
         
@@ -725,8 +731,8 @@ struct aniso_profile
 
     void reflux_horizontal(problem_state& soln)
     {
-        static std::uint64_t i = 0;
-        output(soln, std::string("reflux.%06u.hdf5"), std::string("phi"), ++i);
+//        static std::uint64_t i = 0;
+//        output(soln, std::string("reflux.%06u.hdf5"), std::string("phi"), ++i);
 
         DataIterator dit = soln.data().dataIterator();
         for (dit.begin(); dit.ok(); ++dit)
@@ -766,16 +772,10 @@ struct aniso_profile
                         IntVect U_here(i,   j,   k  );
                         IntVect F_here(i, j, k);
 
-//                        if (U(U_here) > 1e200 || U(U_left_y) > 1e200 || U(U_left_z) > 1e200)
-//                            std::cout << U_here << " " << U(U_here) << " " << U(U_left_y) << " " << U(U_left_z) << "\n";
-
 //                        if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
 //                            std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
 
                         FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
-
-//                        if (FY(F_here) > 1e200 || FZ(F_here) > 1e200)
-//                            std::cout << F_here << " " << FY(F_here) << " " << FZ(F_here) << "\n";
                     }
 
             for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
@@ -800,9 +800,6 @@ struct aniso_profile
 //                            std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
 
                         FZ(F_here) = -(kz/dh) * (U(U_here) - U(U_left_z));
-
-//                        if (FY(F_here) > 1e200 || FZ(F_here) > 1e200)
-//                            std::cout << F_here << " " << FY(F_here) << " " << FZ(F_here) << "\n";
                     }
 
 //            static std::uint64_t P = 0;

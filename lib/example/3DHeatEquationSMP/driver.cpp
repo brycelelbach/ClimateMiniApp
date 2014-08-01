@@ -100,7 +100,7 @@ int main()
         /*nt: physical time to step to             =*/0.005,
         /*nh: y and z (horizontal) extent per core =*/60,
         /*nv: x (vertical) extent per core         =*/30,
-        /*max_box_size                             =*/30
+        /*max_box_size                             =*/15
     );
 
     heat3d::aniso_profile profile(config,
