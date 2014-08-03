@@ -17,7 +17,6 @@
 #define CHOMBO_B541E23D_4C47_4C2F_8FDC_2FAEE6E2CE81
 
 #include "LayoutData.H"
-#include "BoxLayoutData.H" // Just for DataFactory, etc
 
 #include "AsyncCopier.H"
 #include "DataflowBox.H"
@@ -46,7 +45,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
       , IntVect ghost
         )
     {
-        define(dbl, ghost, dbl.getLocalProcID());
+        define(dbl, ghost);
     }
 
     void define(
@@ -69,14 +68,16 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
   private:
     void installRegions()
     {
+/*
+        // Interior region.
         DataIterator dit = this->dataIterator();
         for (dit.begin(); dit.ok(); ++dit)
         {
             Box b = m_disjointBoxLayout[dit()];
 
-            // Interior region.
             (*this)[dit()].addRegion(b);
         }
+*/
 
         // Same-level ghost zone regions.
         for (AsyncRegion const& ar : m_exchangeCopier.regions())
@@ -84,22 +85,25 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     } 
 
   public:
-    DisjointBoxLayout const& disjointBoxLayout()
+    DisjointBoxLayout const& disjointBoxLayout() const
     {
         return m_disjointBoxLayout;
     }
 
-    IntVect ghostVect()
+    AsyncCopier const& exchangeCopier() const
+    {
+        return m_exchangeCopier;
+    }
+
+    IntVect ghostVect() const
     {
         return m_ghost;
     }
 };
 
-template <typename T>
-void defineData(
-    AsyncLevelData<T>& ld
+void DefineData(
+    AsyncLevelData<FArrayBox>& ld
   , int comps = 1
-  , DataFactory<T> const& factory = DefaultDataFactory<T>()
     )
 {
     DataIterator dit(ld.dataIterator());
@@ -107,16 +111,14 @@ void defineData(
     {
         Box b = ld.disjointBoxLayout()[dit()];
         b.grow(ld.ghostVect());
-        ld[dit()].define(b, comps);
+        ld[dit()].data.define(b, comps);
     } 
 }
 
-template <typename T>
-void defineData(
-    LayoutData<T>& ld
+void DefineData(
+    LayoutData<FArrayBox>& ld
   , int comps = 1
   , IntVect ghosts = IntVect::Zero
-  , DataFactory<T> const& factory = DefaultDataFactory<T>()
     )
 {
     DataIterator dit(ld.dataIterator());
