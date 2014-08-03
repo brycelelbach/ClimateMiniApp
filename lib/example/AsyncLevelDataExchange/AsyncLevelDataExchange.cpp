@@ -131,7 +131,6 @@ int chombo_main(variables_map& vm)
     DisjointBoxLayout dbl;
     dbl.define(box_list, proc_list, base_domain, true);
 
-{
     AsyncLevelData<FArrayBox> ald(dbl, IntVect::Unit);
     DefineData(ald, 1);
 
@@ -146,7 +145,7 @@ int chombo_main(variables_map& vm)
     }
 
     for (hpx::future<void>& f : exchanges) f.get();
-}
+ 
     return 0;
 }
 
