@@ -24,6 +24,12 @@ struct AsyncSendInstructions
   Box fromRegion;
   Box toRegion;
 
+  // Key lookup.
+  AsyncSendInstructions(const DataIndex& a_from)
+    : fromIndex(a_from), toIndex()
+    , fromRegion(), toRegion()
+  {}
+
   AsyncSendInstructions(const DataIndex& a_from
                       , const DataIndex& a_to
                       , const Box&       a_fromRegion
@@ -47,6 +53,12 @@ struct AsyncRegion
 {
   DataIndex toIndex;
   Box toRegion;
+
+  // Key lookup.
+  AsyncRegion(const DataIndex& a_to)
+    : toIndex(a_to)
+    , toRegion()
+  {}
 
   AsyncRegion(const DataIndex& a_to
             , const Box&       a_toRegion)
@@ -120,7 +132,17 @@ public:
     return m_senderMotionPlan; 
   }
 
+  motionPlanSet const& senderMotionPlan() const
+  {
+    return m_senderMotionPlan; 
+  }
+
   regionsSet& regions()
+  {
+    return m_regions;
+  }
+
+  regionsSet const& regions() const
   {
     return m_regions;
   }
