@@ -12,7 +12,7 @@ ebase = driver
 
 # note that BaseTools library should be included by default, even 
 # if we don't specify it here
-LibNames = BoxTools AMRTools
+LibNames = BoxTools AMRTools AsyncTools
 
 cxxoptflags +=  
 XTRALIBFLAGS += -llapacke -lblas

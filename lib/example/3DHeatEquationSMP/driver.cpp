@@ -13,23 +13,28 @@
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <hpx/config.hpp>
+
 #include <boost/format.hpp>
 
-#include "heat3d.hpp"
 #include "AMRIO.H"
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
+
 #include "ARK4.H"
+#include "HPXDriver.H"
 
 #include <fenv.h>
 
+#include "heat3d.hpp"
+
 template <typename F>
-void visit(heat3d::problem_state& soln, F f)
+void visit(AsyncLevelData<heat3d::problem_state>& soln, F f)
 {
-    DataIterator dit = soln.data().dataIterator();
+    DataIterator dit = soln.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
     { 
-        auto& subsoln = soln.data()[dit];
+        auto& subsoln = soln[dit].data.data();
         IntVect lower = subsoln.smallEnd();
         IntVect upper = subsoln.bigEnd(); 
 
@@ -40,18 +45,9 @@ void visit(heat3d::problem_state& soln, F f)
     }
 }
 
-void output(FArrayBox const& soln, std::string const& format, std::string const& name, std::uint64_t step)
+/*
+void output(AsyncLevelData<FArrayBox> const& data, std::string const& format, std::string const& name, std::uint64_t step)
 {
-    std::string file;
-    try { file = boost::str(boost::format(format) % step); }
-    catch (boost::io::too_many_args&) { file = format; }
-
-    writeFABname(&soln, file.c_str(), Vector<std::string>(1, name));
-}
-
-void output(LevelData<FArrayBox> const& data, std::string const& format, std::string const& name, std::uint64_t step)
-{
-//    data.apply([format, name, step](Box const&, int, FArrayBox& fab) { output(fab, format, name, step); });
     std::string file;
     try { file = boost::str(boost::format(format) % step); }
     catch (boost::io::too_many_args&) { file = format; }
@@ -82,15 +78,11 @@ void output(LevelData<FArrayBox> const& data, std::string const& format, std::st
       , 1 // levels
         );
 }
+*/
 
-void output(heat3d::problem_state const& soln, std::string const& format, std::string const& name, std::uint64_t step)
-{
-//    std::string file = boost::str(boost::format(format) % step);
-//    writeLevelname(&soln.data(), file.c_str());
-    output(soln.data(), format, name, step);
-}
+using boost::program_options::variables_map;
 
-int main()
+int chombo_main(variables_map& vm)
 {
     feenableexcept(FE_DIVBYZERO);
     feenableexcept(FE_INVALID);
@@ -100,7 +92,8 @@ int main()
         /*nt: physical time to step to             =*/0.005,
         /*nh: y and z (horizontal) extent per core =*/60,
         /*nv: x (vertical) extent per core         =*/30,
-        /*max_box_size                             =*/15
+        /*max_box_size                             =*/15,
+        /*ghost_vector                             =*/IntVect::Unit
     );
 
     heat3d::aniso_profile profile(config,
@@ -130,33 +123,38 @@ int main()
 
     DisjointBoxLayout dbl(boxes, procs, base_domain);
 
-    LevelData<FArrayBox> data(dbl, 1, IntVect::Unit);
-    heat3d::problem_state soln;
-    soln.alias(data);
+    AsyncLevelData<heat3d::problem_state> data(dbl, IntVect::Unit);
+    DefineData(data, 1);
 
-    visit(soln,
+    visit(data,
         [&profile](Real& val, IntVect here)
         { val = profile.initial_state(here); }
     );
 
     typedef heat3d::imex_operators<heat3d::aniso_profile> imexop;
-    ARK4<heat3d::problem_state, imexop>
-        ark(imexop(profile), soln, profile.dt(), false);
+    typedef ARK4<heat3d::problem_state, imexop> ark_type;
+ 
+    ark_type ark(imexop(profile), dbl, 1, data.ghostVect(), profile.dt(), false);
 
+/*
     heat3d::problem_state src; src.define(soln);  
     visit(src,
         [&profile](Real& val, IntVect here)
         { val = profile.source_term(here); }
     );
     output(src, "source.hdf5", "source", 0); 
+*/
 
-    std::uint64_t step = 0;
+    std::size_t step = 0;
+    std::size_t epoch = 0;
+
     Real time = 0.0;
     while (time < config.nt)
     {
-        soln.exchange();
-        output(soln, "phi.%06u.hdf5", "phi_numeric", step); 
+//        soln.exchange();
+//        output(soln, "phi.%06u.hdf5", "phi_numeric", step); 
 
+/*
         heat3d::problem_state exact; exact.define(soln);
         visit(exact,
             [&profile, time](Real& val, IntVect here)
@@ -166,6 +164,7 @@ int main()
 
         exact.increment(soln, -1.0); 
         output(exact, "error.%06u.hdf5", "error", step); 
+*/
 
 //        heat3d::problem_state solncopy; solncopy.copy(soln);
 //        exact.abs(); solncopy.abs();
@@ -178,16 +177,36 @@ int main()
         double const dt = profile.dt();
         ark.resetDt(dt);
 
+/*
         char const* fmt = "STEP %06u : "
                           "TIME %.7g%|31t| += %.7g%|43t| : "
                           "SUM %.7g%|60t| : ERROR %.7g\n";
         std::cout << (boost::format(fmt) % step % time % dt % soln.sum() % exact.sum()) << std::flush;
+*/
+        char const* fmt = "STEP %06u : "
+                          "TIME %.7g%|31t| += %.7g%|43t|\n";
+        std::cout << (boost::format(fmt) % step % time % dt) << std::flush;
 
-        ark.advance(time, soln);
+        std::vector<hpx::future<void> > futures;
 
+        DataIterator dit = data.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            futures.push_back(
+                hpx::async(
+                    [&](DataIndex di) { ark.advance(di, epoch, time, data); }
+                  , dit()
+                )
+            );
+        }
+
+        for (hpx::future<void>& f : futures) f.get();
+
+        epoch += 2 * ark_type::s_nStages - 1;
         time += dt;
     } 
 
+/*
     soln.exchange();
     output(soln, "phi.%06u.hdf5", "phi_numeric", step); 
 
@@ -200,5 +219,12 @@ int main()
 
     exact.increment(soln, -1.0); 
     output(exact, "error.%06u.hdf5", "error", step); 
+*/
+    return 0;
+}
+
+int main(int argc, char** argv)
+{
+    return init(chombo_main, argc, argv); // Doesn't return
 }
 

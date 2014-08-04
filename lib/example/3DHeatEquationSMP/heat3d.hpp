@@ -27,9 +27,9 @@
 #include <tuple>
 #include <vector>
 
-#include <lapacke.h>
-
 #include <assert.h>
+
+#include <lapacke.h>
 
 // Solving problems of the form:
 //
@@ -50,6 +50,8 @@ struct configuration
 
     std::uint64_t const max_box_size;
 
+    IntVect const ghost_vector;
+
     ///////////////////////////////////////////////////////////////////////////
 
     configuration(
@@ -57,11 +59,13 @@ struct configuration
       , std::uint64_t nh_
       , std::uint64_t nv_
       , std::uint64_t max_box_size_
+      , IntVect ghost_vector_
         )
       : nt(nt_)
       , nh(nh_)
       , nv(nv_)
       , max_box_size(max_box_size_)
+      , ghost_vector(ghost_vector_)
     {}
 }; 
 
@@ -104,125 +108,84 @@ bool lower_boundary(boundary_type type)
 struct problem_state
 {
     problem_state()
-      : reflux_horizontal_needed(false)
-      , reflux_vertical_needed(false)
+      : U() 
+      , F() 
     {}
 
-    // TODO: Replace with constructor.
-    void define(problem_state const& solution)
+    void define(Box const& b, int comps)
     {
-        U.define(solution.U.disjointBoxLayout()
-               , solution.U.nComp()
-               , solution.U.ghostVect());
-        F.define(solution.U.disjointBoxLayout()
-               , solution.U.nComp()
-               , IntVect::Zero); 
+        data().define(b, comps); 
+        flux().define(b, comps); 
     }
 
-    // TODO: Replace with constructor.
-    void alias(LevelData<FArrayBox>& A)
+    void alias(problem_state& A)
     {
-        Interval alias_int(0, A.nComp()-1);
-        aliasLevelData<FArrayBox>(U, &A, alias_int);
-        F.define(U.disjointBoxLayout()
-               , U.nComp()
-               , U.ghostVect());
+        data().define(A.data().interval(), A.data());
+        flux().define(data().box(), A.nComp()); 
+    }
+
+    void copy(problem_state& src,
+              Box const&     srcbox,
+              int            srccomp,
+              Box const&     destbox,
+              int            destcomp,
+              int            numcomp)
+    {
+        data().copy(src.data(), srcbox, srccomp, destbox, destcomp, numcomp);
     }
 
     void copy(problem_state const& A)
     {
-        define(A);
-        DataIterator dit = A.U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            U[dit].copy(A.U[dit]);
-            F[dit].copy(A.F[dit]);
-        }
+        data().copy(A.data());
+        flux().copy(A.flux());
+    }
+
+    int nComp() const
+    {
+        return data().nComp();
     }
 
     void zero()
     {
-        DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            U[dit].setVal(0.0);
-            F[dit].setVal(0.0);
-        }
+        data().setVal(0.0);
+        flux().setVal(0.0);
     }
 
     void abs()
     {
-        DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            U[dit].abs();
-            reflux_horizontal_needed = true;    
-            reflux_vertical_needed = true;    
-        }
+        data().abs();
     }
 
-    Real sum() const
+    Real sum(int comp = 0) const
     {
-        Real tmp = 0.0;
-
-        DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-            tmp += U[dit].sum(0);
-
-        return tmp;
+        return data().sum(comp);
     }
 
     void increment(problem_state const& A, Real factor = 1.0)
     {
-        DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            U[dit].plus(A.U[dit], factor);
-            reflux_horizontal_needed = true;    
-            reflux_vertical_needed = true;    
-        }
+        data().plus(A.data(), factor);
     }
 
-    LevelData<FArrayBox> const& data() const
+    FArrayBox const& data() const
     {
         return U;
     }
 
-    LevelData<FArrayBox>& data()
+    FArrayBox& data()
     {
-        return U;
+        return U; 
     }
 
-    LevelData<FluxBox> const& flux() const
-    {
-        return F;
-    }
-
-    LevelData<FluxBox>& flux()
+    FluxBox& flux() const
     {
         return F;
     }
-
-    IntVect ghosts() const
-    {
-        return U.ghostVect();
-    }
-
-    // TODO: Move call to imexop
-    void exchange()
-    {
-        U.exchange();
-    }
-
-    bool reflux_horizontal_needed; 
-    bool reflux_vertical_needed;
 
   private:
-    /// Data for this level
-    LevelData<FArrayBox> U;
+    FArrayBox U;
 
     /// Fluxes
-    LevelData<FluxBox> F;
+    mutable FluxBox F;
 };
 
 template <typename Profile>
@@ -239,154 +202,97 @@ struct imex_operators
     // TODO: Lift stencil.
     void explicitOp(problem_state& kE_, problem_state const& phi_, Real t)
     {
-        // FIXME: Temporary hackage.
-        profile.reflux_horizontal(const_cast<problem_state&>(phi_));
+        profile.reflux_horizontal(phi_);
 
-        DataIterator dit = kE_.data().dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        { 
-            auto& kE = kE_.data()[dit];
-            auto const& phi = phi_.data()[dit];
-            auto const& phi_FY = phi_.flux()[dit].getFlux(1);
-            auto const& phi_FZ = phi_.flux()[dit].getFlux(2);
+        auto&       kE     = kE_.data();
+        auto const& phi    = phi_.data();
+        auto const& phi_FY = phi_.flux().getFlux(1);
+        auto const& phi_FZ = phi_.flux().getFlux(2);
  
-            IntVect lower = phi.smallEnd();
-            IntVect upper = phi.bigEnd();
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd();
     
-            ///////////////////////////////////////////////////////////////////
-            // Horizontal BCs
-            auto BCs =
-                [&] (boundary_type type, size_t dir, IntVect V)
-                { 
-                    int sign = (upper_boundary(type) ? -1 : 1);
+        ///////////////////////////////////////////////////////////////////////
+        // Horizontal BCs
+        auto BCs =
+            [&] (boundary_type type, size_t dir, IntVect V)
+            { 
+                int sign = (upper_boundary(type) ? -1 : 1);
  
-                    if (profile.is_outside_domain(type, V[dir]))
-                    {
-                        size_t A, B;
+                if (profile.is_outside_domain(type, V[dir]))
+                {
+                    size_t A, B;
         
-                        if      (0 == dir) { A = 1; B = 2; }
-                        else if (1 == dir) { A = 0; B = 2; }
-                        else if (2 == dir) { A = 0; B = 1; }
-                        else    assert(false);
+                    if      (0 == dir) { A = 1; B = 2; }
+                    else if (1 == dir) { A = 0; B = 2; }
+                    else if (2 == dir) { A = 0; B = 1; }
+                    else    assert(false);
  
-                        for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
-                            for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
-                            {
-                                IntVect outside(V);
-                                outside.setVal(A, a);
-                                outside.setVal(B, b);
+                    for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
+                        for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
+                        {
+                            IntVect out(V);
+                            out.setVal(A, a);
+                            out.setVal(B, b);
        
-                                for (int c = 0; c <= phi_.ghosts()[dir]; ++c)
-                                {
-                                    outside.shift(dir, sign*c);
-                                    kE(outside) = profile.outside_domain(type, outside, phi, t); 
-                                } 
-                            }
-
-                        //int sign = (upper_boundary(type) ? -1 : 1);
-                        //V.shift(dir, sign*phi_.ghosts()[dir]);
-                    }
-
-                    if (profile.is_boundary(type, (V+sign*phi_.ghosts())[dir]))
-//                    if (profile.is_boundary(type, (V)[dir]))
-                    {
-                        size_t A, B;
-        
-                        if      (0 == dir) { A = 1; B = 2; }
-                        else if (1 == dir) { A = 0; B = 2; }
-                        else if (2 == dir) { A = 0; B = 1; }
-                        else    assert(false);
-
-//                        std::cout << V << "\n";
-                        for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
-                            for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
+                            for (int c = 0; c <= profile.ghostVect()[dir]; ++c)
                             {
-                                IntVect bdry(V);
-                                bdry.shift(dir, sign*phi_.ghosts()[dir]);
-                                bdry.setVal(A, a);
-                                bdry.setVal(B, b);
+                                out.shift(dir, sign*c);
+                                kE(out) = 
+                                    profile.outside_domain(type, out, phi, t); 
+                            } 
+                        }
+                }
 
-                                if (bdry[0] == 14 && (bdry[1] == 0) && (bdry[2] == 1))
-                                    std::cout << phi(bdry) << "\n";
+                if (profile.is_boundary(type, (V+sign*profile.ghostVect())[dir]))
+                {
+                    size_t A, B;
+        
+                    if      (0 == dir) { A = 1; B = 2; }
+                    else if (1 == dir) { A = 0; B = 2; }
+                    else if (2 == dir) { A = 0; B = 1; }
+                    else    assert(false);
 
-                                kE(bdry) = profile.boundary_conditions(type, bdry, phi, t); 
-                            }
+                    for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
+                        for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
+                        {
+                            IntVect bdry(V);
+                            bdry.shift(dir, sign*profile.ghostVect()[dir]);
+                            bdry.setVal(A, a);
+                            bdry.setVal(B, b);
 
-                        int sign = (upper_boundary(type) ? -1 : 1);
-                        V.shift(dir, sign*IntVect::Unit[dir]);
-                    }
+                            kE(bdry) =
+                                profile.boundary_conditions(type, bdry, phi, t); 
+                        }
 
-                    return V;
-                };
+                    int sign = (upper_boundary(type) ? -1 : 1);
+                    V.shift(dir, sign*IntVect::Unit[dir]);
+                }
 
-            lower = BCs(LOWER_X, 0, lower);
-            upper = BCs(UPPER_X, 0, upper);
-            lower = BCs(LOWER_Y, 1, lower);
-            upper = BCs(UPPER_Y, 1, upper);
-            lower = BCs(LOWER_Z, 2, lower);
-            upper = BCs(UPPER_Z, 2, upper);
+                return V;
+            };
 
-            lower.shift(phi_.ghosts());
-            upper.shift(-1*phi_.ghosts());
+        lower = BCs(LOWER_X, 0, lower);
+        upper = BCs(UPPER_X, 0, upper);
+        lower = BCs(LOWER_Y, 1, lower);
+        upper = BCs(UPPER_Y, 1, upper);
+        lower = BCs(LOWER_Z, 2, lower);
+        upper = BCs(UPPER_Z, 2, upper);
 
-/*
-            if (profile.is_boundary(UPPER_X, upper[0]))
-                for (auto j = lower[1]; j <= upper[1]; ++j)
-                    for (auto k = lower[2]; k <= upper[2]; ++k)
-                    {
-                        IntVect upper_x(upper[0], j, k);
-                        kE(upper_x) = profile.horizontal_bcs(UPPER_X, upper_x, phi, t); 
-                    }
-
-            if (profile.is_boundary(LOWER_Y, lower[1]))
-                for (auto i = lower[0]; i <= upper[0]; ++i)
-                    for (auto k = lower[2]; k <= upper[2]; ++k)
-                    {
-                        IntVect lower_y(i, lower[1], k);
-                        kE(lower_y) = profile.horizontal_bcs(LOWER_Y, lower_y, phi, t); 
-                    }
-
-            if (profile.is_boundary(UPPER_Y, upper[1]))
-                for (auto i = lower[0]; i <= upper[0]; ++i)
-                    for (auto k = lower[2]; k <= upper[2]; ++k)
-                    {
-                        IntVect upper_y(i, upper[1], k);
-                        kE(upper_y) = profile.horizontal_bcs(UPPER_Y, upper_y, phi, t); 
-                    }
+        lower.shift(profile.ghostVect());
+        upper.shift(-1*profile.ghostVect());
     
-            if (profile.is_boundary(LOWER_Z, lower[2]))
-                for (auto i = lower[0]; i <= upper[0]; ++i)
-                    for (auto j = lower[1]; j <= upper[1]; ++j)
-                    {
-                        IntVect lower_z(i, j, lower[2]);
-                        kE(lower_z) = profile.horizontal_bcs(LOWER_Z, lower_z, phi, t); 
-                    }
+        ///////////////////////////////////////////////////////////////////////
+        // Interior points.
+        for (auto i = lower[0]; i <= upper[0]; ++i)
+            for (auto j = lower[1]; j <= upper[1]; ++j)
+                for (auto k = lower[2]; k <= upper[2]; ++k)
+                {
+                    IntVect here(i, j, k);
 
-            if (profile.is_boundary(UPPER_Z, upper[2]))
-                for (auto i = lower[0]; i <= upper[0]; ++i)
-                    for (auto j = lower[1]; j <= upper[1]; ++j)
-                    {
-                        IntVect upper_z(i, j, upper[2]);
-                        kE(upper_z) = profile.horizontal_bcs(UPPER_Z, upper_z, phi, t); 
-                    }
-*/
-    
-            ///////////////////////////////////////////////////////////////////
-            // Interior points.
-            for (auto i = lower[0]; i <= upper[0]; ++i)
-                for (auto j = lower[1]; j <= upper[1]; ++j)
-                    for (auto k = lower[2]; k <= upper[2]; ++k)
-                    {
-                        IntVect here(i, j, k);
-
-//                        if (profile.source_term(here) < 0.0)
-//                            std::cout << here << " has a negative source term\n";
-                        //std::cout << "interior:" << here << "\n";
-
-                        kE(here) = profile.horizontal_stencil(here, phi_FY, phi_FZ)
-                                 + profile.source_term(here); 
-                    }
-        }
+                    kE(here) = profile.horizontal_stencil(here, phi_FY, phi_FZ)
+                             + profile.source_term(here); 
+                }
     }
 
     void implicitOp(problem_state& kI, problem_state const& phi, Real t)
@@ -394,75 +300,57 @@ struct imex_operators
         kI.zero();
     }
 
-    void solve(problem_state& phi_, problem_state const& rhs_, Real t, Real dtscale)
+    void solve(problem_state& phi_, Real t, Real dtscale)
     {
-        // FIXME FIXME FIXME: I hate this, LAPACK can operate in place, can
-        // we avoid this copy?
-//        phi_.copy(rhs_);
-
-        DataIterator dit = rhs_.data().dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        { 
-            auto& phi = phi_.data()[dit];
-            auto const& rhs = rhs_.data()[dit];
+        auto& phi = phi_.data();
  
-            IntVect lower = rhs.smallEnd();
-            IntVect upper = rhs.bigEnd();
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd();
 
-            auto BCs =
-                [&] (boundary_type type, size_t dir, IntVect V)
-                { 
-                    int sign = (upper_boundary(type) ? -1 : 1);
+        auto BCs =
+            [&] (boundary_type type, size_t dir, IntVect V)
+            { 
+                int sign = (upper_boundary(type) ? -1 : 1);
  
-                    if (profile.is_boundary(type, (V+sign*phi_.ghosts())[dir]))
-                    {
-                        size_t A, B;
-        
-                        if      (0 == dir) { A = 1; B = 2; }
-                        else if (1 == dir) { A = 0; B = 2; }
-                        else if (2 == dir) { A = 0; B = 1; }
-                        else    assert(false);
- 
-                        int sign = (upper_boundary(type) ? -1 : 1);
-                        V.shift(dir, sign*IntVect::Unit[dir]);
-                    }
-
-                    return V;
-                };
-
-            lower = BCs(LOWER_X, 0, lower);
-            upper = BCs(UPPER_X, 0, upper);
-            lower = BCs(LOWER_Y, 1, lower);
-            upper = BCs(UPPER_Y, 1, upper);
-            lower = BCs(LOWER_Z, 2, lower);
-            upper = BCs(UPPER_Z, 2, upper);
-
-            lower.shift(phi_.ghosts());
-            upper.shift(-1*phi_.ghosts());
-
-            for (auto j = lower[1]; j <= upper[1]; ++j)
-                for (auto k = lower[2]; k <= upper[2]; ++k)
+                if (profile.is_boundary(type, (V+sign*profile.ghostVect())[dir]))
                 {
-                    auto A = profile.vertical_operator(j, k, phi, dtscale);
-
-                    // TODO: give this a return value.
-                    profile.vertical_solve(j, k, A, phi);
+                    size_t A, B;
+        
+                    if      (0 == dir) { A = 1; B = 2; }
+                    else if (1 == dir) { A = 0; B = 2; }
+                    else if (2 == dir) { A = 0; B = 1; }
+                    else    assert(false);
+ 
+                    int sign = (upper_boundary(type) ? -1 : 1);
+                    V.shift(dir, sign*IntVect::Unit[dir]);
                 }
-        }
+
+                return V;
+            };
+
+        lower = BCs(LOWER_X, 0, lower);
+        upper = BCs(UPPER_X, 0, upper);
+        lower = BCs(LOWER_Y, 1, lower);
+        upper = BCs(UPPER_Y, 1, upper);
+        lower = BCs(LOWER_Z, 2, lower);
+        upper = BCs(UPPER_Z, 2, upper);
+
+        lower.shift(profile.ghostVect());
+        upper.shift(-1*profile.ghostVect());
+
+        for (auto j = lower[1]; j <= upper[1]; ++j)
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+            {
+                auto A = profile.vertical_operator(j, k, phi, dtscale);
+
+                // TODO: give this a return value.
+                profile.vertical_solve(j, k, A, phi);
+            }
     }
 
   private:
     Profile profile;
 };
-
-// FIXME: here for debugging
-}
-
-void output(FArrayBox const& soln, std::string const& format, std::string const& name, std::uint64_t step);
-void output(LevelData<FArrayBox> const& data, std::string const& format, std::string const& name, std::uint64_t step);
-void output(heat3d::problem_state const& soln, std::string const& format, std::string const& name, std::uint64_t step);
-
-namespace heat3d {
 
 // A simple, anisotropic profile:
 //
@@ -546,36 +434,14 @@ struct aniso_profile
         return (-1.0/dh) * (phi_FY(east) - phi_FY(west) + phi_FZ(north) - phi_FZ(south)); 
     }
 
-//    Real horizontal_kernel(Real dh2, Real here, Real north, Real south, Real east, Real west, bool debug = false)
-    Real horizontal_kernel(Real dh2, Real here, Real north, Real south, Real east, Real west)
-    {
-/*
-        if (debug)
-        std::cout << "***\n"
-                  << "dh2: " << dh2
-                  << " here: " << here 
-                  << " north: " << north
-                  << " south: " << south
-                  << " east: " << east 
-                  << " west: " << west << "\nval:" << ((1.0/dh2) * (ky*(east+west) + kz*(north+south) - 4.0*here)) << "\n"
-                ;
-*/
-//        return (1.0/dh2) * (ky*(east+west) + kz*(north+south) - 4.0*here);
-        return (1.0/dh2) * (ky*(east+west) + kz*(north+south) - 2.0*(ky+kz)*here);
-    }
-
-    // TODO: This should have a corresponding "kernel" function so that dependencies
-    // are properly expressed.
     Real boundary_conditions(boundary_type bdry, IntVect here, FArrayBox const& phi, Real t)
     {
-        // U_t(t,0,y,z) = U_t(t,1,y,z) = U_t(t,x,0,z) = U_t(t,x,1,z) = 0
-        return 0.0;//source_term(here);
+        return 0.0;
     } 
 
     Real outside_domain(boundary_type bdry, IntVect here, FArrayBox const& phi, Real t)
     {
-        // U_t(t,0,y,z) = U_t(t,1,y,z) = U_t(t,x,0,z) = U_t(t,x,1,z) = 0
-        return 0.0;//source_term(here);
+        return 0.0;
     } 
 
     typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
@@ -589,8 +455,6 @@ struct aniso_profile
         Real const kvdv = kx/(dv*dv); 
         Real const H = dt()*dtscale;
 
-//        std::cout << size << std::endl;
-
         // Sub-diagonal part of the matrix.
         std::vector<Real> dl(size-1, H*(kvdv/2.0));
         // Diagonal part of the matrix.
@@ -603,22 +467,6 @@ struct aniso_profile
         // TODO: Move these out or move the horizontal BCs into the profile.
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd();
-
-/*
-        if (is_boundary(LOWER_X, lower[0]))
-        {
-            du.back() = 0.0;
-            d.back() = 1.0;
-            dl.back() = 0.0;
-        }
-
-        if (is_boundary(UPPER_X, upper[0]))
-        {
-            du.front() = 0.0;
-            d.front() = 1.0;
-            dl.front() = 0.0;
-        }
-*/
 
         return crs_matrix(dl, d, du); 
     }
@@ -634,9 +482,6 @@ struct aniso_profile
 
         assert((&phi(IntVect(lower[0]+1, j, k)) - &phi(IntVect(lower[0], j, k))) == 1);
 
-        //phi(IntVect(lower[0], j, k)) = 0.0;
-        //phi(IntVect(upper[0], j, k)) = 0.0;
-
         Real* rhs = &phi(IntVect(lower[0], j, k)); 
 
         int info = LAPACKE_dgtsv(
@@ -650,7 +495,7 @@ struct aniso_profile
             1 // leading dimension of RHS
             );
 
-        assert(info == 0);
+        CH_assert(info == 0);
     }
 
     bool is_outside_domain(boundary_type bdry, int l)
@@ -729,85 +574,75 @@ struct aniso_profile
         return a * source_term(x, y, z);
     } 
 
-    void reflux_horizontal(problem_state& soln)
+    void reflux_horizontal(problem_state const& soln)
     {
-//        static std::uint64_t i = 0;
-//        output(soln, std::string("reflux.%06u.hdf5"), std::string("phi"), ++i);
+        auto const& U = soln.data();
+        auto& F = soln.flux();
 
-        DataIterator dit = soln.data().dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        { 
-            auto const& U = soln.data()[dit];
-            auto& F = soln.flux()[dit];
+        auto& FY = F.getFlux(1);
+        auto& FZ = F.getFlux(2); 
 
-            auto& FY = F.getFlux(1);
-            auto& FZ = F.getFlux(2); 
+        IntVect lower = U.smallEnd();
+        IntVect upper = U.bigEnd(); 
 
-            IntVect lower = U.smallEnd();
-            IntVect upper = U.bigEnd(); 
+        lower.shift(ghostVect());
+        upper.shift(-1*ghostVect());
 
-            lower.shift(soln.ghosts());
-            upper.shift(-1*soln.ghosts());
+        FY.setVal(0.0);
+        FZ.setVal(0.0);
 
-            FY.setVal(0.0);
-            FZ.setVal(0.0);
+        for (auto k = lower[2]; k <= upper[2]; ++k)
+            for (auto j = U.smallEnd()[1]+1; j <= U.bigEnd()[1]; ++j)
+                for (auto i = lower[0]; i <= upper[0]; ++i)
+                {
+                    // NOTE: This currently assumes constant-coefficients 
+                    // and assumes we're just taking an average of the
+                    // coefficients. For variable-coefficient we need
+                    // to actually take an average. 
+                    // 
+                    // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
 
-//            std::cout << lower << " "
-//                      << upper << std::endl;
-            for (auto k = lower[2]; k <= upper[2]; ++k)
-                for (auto j = U.smallEnd()[1]+1; j <= U.bigEnd()[1]; ++j)
-                    for (auto i = lower[0]; i <= upper[0]; ++i)
-                    {
-                        // NOTE: This currently assumes constant-coefficients 
-                        // and assumes we're just taking an average of the
-                        // coefficients. For variable-coefficient we need
-                        // to actually take an average. 
-                        // 
-                        // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
+                    Real const dh = std::get<1>(dp()); 
 
-                        Real const dh = std::get<1>(dp()); 
+                    IntVect U_left_y(i, j-1, k  );
 
-                        IntVect U_left_y(i, j-1, k  );
+                    IntVect U_here(i,   j,   k  );
+                    IntVect F_here(i, j, k);
 
-                        IntVect U_here(i,   j,   k  );
-                        IntVect F_here(i, j, k);
+//                    if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
+//                        std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
 
-//                        if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
-//                            std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
+                    FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
+                }
 
-                        FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
-                    }
+        for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
+            for (auto j = lower[1]; j <= upper[1]; ++j)
+                for (auto i = lower[0]; i <= upper[0]; ++i)
+                {
+                    // NOTE: This currently assumes constant-coefficients 
+                    // and assumes we're just taking an average of the
+                    // coefficients. For variable-coefficient we need
+                    // to actually take an average. 
+                    // 
+                    // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
 
-            for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
-                for (auto j = lower[1]; j <= upper[1]; ++j)
-                    for (auto i = lower[0]; i <= upper[0]; ++i)
-                    {
-                        // NOTE: This currently assumes constant-coefficients 
-                        // and assumes we're just taking an average of the
-                        // coefficients. For variable-coefficient we need
-                        // to actually take an average. 
-                        // 
-                        // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
+                    Real const dh = std::get<1>(dp()); 
 
-                        Real const dh = std::get<1>(dp()); 
+                    IntVect U_left_z(i, j,   k-1);
 
-                        IntVect U_left_z(i, j,   k-1);
+                    IntVect U_here(i,   j,   k  );
+                    IntVect F_here(i, j, k);
 
-                        IntVect U_here(i,   j,   k  );
-                        IntVect F_here(i, j, k);
+//                    if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
+//                        std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
 
-//                        if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
-//                            std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
+                    FZ(F_here) = -(kz/dh) * (U(U_here) - U(U_left_z));
+                }
+    }
 
-                        FZ(F_here) = -(kz/dh) * (U(U_here) - U(U_left_z));
-                    }
-
-//            static std::uint64_t P = 0;
-//            output(FY, std::string("flux.Y.%06u.hdf5"), std::string("fluxY"), ++P);
-//            output(FZ, std::string("flux.Z.%06u.hdf5"), std::string("fluxZ"), P);
-        }
-
-        soln.reflux_horizontal_needed = false;
+    IntVect ghostVect()
+    {
+        return config.ghost_vector;
     }
 
   private:
