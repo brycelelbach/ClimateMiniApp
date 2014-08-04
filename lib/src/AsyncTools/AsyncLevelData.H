@@ -101,8 +101,9 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     }
 };
 
+template <typename T>
 void DefineData(
-    AsyncLevelData<FArrayBox>& ld
+    AsyncLevelData<T>& ld
   , int comps = 1
     )
 {
@@ -115,8 +116,9 @@ void DefineData(
     } 
 }
 
+template <typename T>
 void DefineData(
-    LayoutData<FArrayBox>& ld
+    LayoutData<T>& ld
   , int comps = 1
   , IntVect ghosts = IntVect::Zero
     )
