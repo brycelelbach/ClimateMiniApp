@@ -58,7 +58,7 @@ struct DataflowBox
     }
 
     template <typename F>
-    hpx::future<void>& enqueue(std::size_t step, Box const& b, F&& f)
+    hpx::future<void>& enqueue(std::size_t epoch, Box const& b, F&& f)
     {
         auto it = regions.find(b);
 
@@ -70,11 +70,11 @@ struct DataflowBox
         auto WF = hpx::util::unwrapped(
             HPX_STD_BIND(std::forward<F>(f), HPX_STD_REF(data), b)
         );
-        return (*it).second->receive(step).then(WF);
+        return (*it).second->receive(epoch).then(WF);
     }
 
     template <typename F>
-    std::vector<hpx::future<void> > enqueueAll(std::size_t step, F&& f)
+    std::vector<hpx::future<void> > enqueueAll(std::size_t epoch, F&& f)
     {
         std::vector<hpx::future<void> > deps;
         deps.reserve(regions.size());
@@ -84,13 +84,13 @@ struct DataflowBox
             auto WF = hpx::util::unwrapped(
                 HPX_STD_BIND(std::forward<F>(f), HPX_STD_REF(data), kv.first)
             );
-            deps.emplace_back(kv.second->receive(step).then(WF));
+            deps.emplace_back(kv.second->receive(epoch).then(WF));
         }
 
         return deps; 
     }
 
-    hpx::future<void> depend(std::size_t step, Box const& b)
+    hpx::future<void> depend(std::size_t epoch, Box const& b)
     {
         auto it = regions.find(b);
 
@@ -99,21 +99,21 @@ struct DataflowBox
                 std::out_of_range("no such region\n")
               , BOOST_CURRENT_FUNCTION);
 
-        return (*it).second->receive(step);
+        return (*it).second->receive(epoch);
     }
 
-    std::vector<hpx::future<void> > dependAll(std::size_t step)
+    std::vector<hpx::future<void> > dependAll(std::size_t epoch)
     {
         std::vector<hpx::future<void> > deps;
         deps.reserve(regions.size());
 
         for (auto& kv : regions)
-            deps.push_back(kv.second->receive(step));
+            deps.push_back(kv.second->receive(epoch));
 
         return deps; 
     }
 
-    void store(std::size_t step, Box const& b)
+    void store(std::size_t epoch, Box const& b)
     {
         auto it = regions.find(b);
 
@@ -122,7 +122,7 @@ struct DataflowBox
                 std::out_of_range("no such region\n")
               , BOOST_CURRENT_FUNCTION);
 
-        (*it).second->store_received(step); 
+        (*it).second->store_received(epoch); 
     }
 };
 
