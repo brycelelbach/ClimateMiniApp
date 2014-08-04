@@ -75,21 +75,6 @@ void visit(LayoutData<FArrayBox>& soln, F f, unsigned comp)
 
 using boost::program_options::variables_map;
 
-void LocalExchangeSync(
-    std::size_t step
-  , DataIndex di 
-  , AsyncLevelData<FArrayBox>& ld
-    )
-{
-    std::vector<hpx::future<void> > outbound
-        = SendLocalExchangeAsync(step, di, ld);
-    std::vector<hpx::future<void> > inbound
-        = RecvLocalExchangeAsync(step, di, ld);
-
-    for (hpx::future<void>& f : outbound) f.get();
-    for (hpx::future<void>& f : inbound) f.get();
-}
-
 int chombo_main(variables_map& vm)
 {
     size_t constexpr dim = 16;
