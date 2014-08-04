@@ -25,10 +25,11 @@
 
 #include "NamespaceHeader.H"
 
-inline void LocalCopyAsync(
-    std::size_t step
+template <typename T>
+void LocalCopyAsync(
+    std::size_t epoch
   , AsyncSendInstructions asi 
-  , AsyncLevelData<FArrayBox>& ld
+  , AsyncLevelData<T>& ld
     ) 
 {
     CH_assert(ld[asi.toIndex].data.nComp() == ld[asi.fromIndex].data.nComp());
@@ -39,14 +40,15 @@ inline void LocalCopyAsync(
       , asi.toRegion,   /* starting comp */ 0
       , ld[asi.fromIndex].data.nComp());
 
-    ld[asi.toIndex].store(step, asi.toRegion); 
+    ld[asi.toIndex].store(epoch, asi.toRegion); 
 }
 
 // FIXME: Cache ASI lookup.
-inline std::vector<hpx::future<void> > SendLocalExchangeAsync(
-    std::size_t step
+template <typename T>
+std::vector<hpx::future<void> > SendLocalExchangeAsync(
+    std::size_t epoch
   , DataIndex di 
-  , AsyncLevelData<FArrayBox>& ld
+  , AsyncLevelData<T>& ld
     )
 {
     DisjointBoxLayout const& dbl = ld.disjointBoxLayout(); 
@@ -64,21 +66,39 @@ inline std::vector<hpx::future<void> > SendLocalExchangeAsync(
         CH_assert(toProcID == fromProcID);
 
         outbound.push_back(
-            hpx::async(LocalCopyAsync, step, asi, HPX_STD_REF(ld))
+            hpx::async(LocalCopyAsync<T>, epoch, asi, HPX_STD_REF(ld))
         );
     }
 
     return outbound;
 }
 
-inline std::vector<hpx::future<void> > RecvLocalExchangeAsync(
-    std::size_t step
+template <typename T>
+std::vector<hpx::future<void> > RecvLocalExchangeAsync(
+    std::size_t epoch
   , DataIndex di 
-  , AsyncLevelData<FArrayBox>& ld
+  , AsyncLevelData<T>& ld
     )
 {
-    return ld[di].dependAll(step);
+    return ld[di].dependAll(epoch);
 }
+
+template <typename T>
+void LocalExchangeSync(
+    std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T>& ld
+    )
+{
+    std::vector<hpx::future<void> > outbound
+        = SendLocalExchangeAsync(epoch, di, ld);
+    std::vector<hpx::future<void> > inbound
+        = RecvLocalExchangeAsync(epoch, di, ld);
+
+    for (hpx::future<void>& f : outbound) f.get();
+    for (hpx::future<void>& f : inbound) f.get();
+}
+
 
 #include "NamespaceFooter.H"
 
