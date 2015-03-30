@@ -73,7 +73,8 @@ void MayDay::Error(const char * const a_msg, int exit_code)
   MPI_Abort(MPI_COMM_WORLD ,exit_code);
   // this shouldn't return, but if it does, exit serially
 #endif
-  exit(exit_code);
+//  exit(exit_code);
+  abort();
 }
 
 void MayDay::Abort(const char * const a_msg)
