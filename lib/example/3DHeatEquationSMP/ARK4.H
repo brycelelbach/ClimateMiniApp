@@ -61,8 +61,6 @@ public:
   // (for example, like have resetDt() called, etc.
   IMEXOP& getImExOp();
 
-  bool hasDenseOutput() const { return m_hasDenseOutput; }
-
   /// Runge-Kutta coefficients
   static const int  s_nStages = 6;
   static const Real s_aIdiag;
@@ -75,9 +73,7 @@ public:
 
 private:
   bool m_denseOutput;               ///< True if dense output is enabled.
-  bool m_hasDenseOutput;            ///< True if there is dense output to interpolate 
   Real m_dt;                        ///< Timestep size.
-  Real m_time;                      ///< Current simulation time. 
 
   AsyncLevelData<X> m_phi[s_nStages];
   AsyncLevelData<X> m_denseCoefs[s_nDenseCoefs];
@@ -122,7 +118,6 @@ ARK4<X, IMEXOP>::ARK4(
     m_denseCoefs[coef].define(dbl, ghost); // never exchanged.
     DefineData(m_denseCoefs[coef], comps);
   }
-  m_hasDenseOutput = false;
 }
 
 /*
@@ -146,7 +141,6 @@ void ARK4<X, IMEXOP>::resetDt(Real a_dt)
   if (fabs(m_dt - a_dt) > m_dt*reltol)
   {
     m_dt = a_dt;
-    m_hasDenseOutput = false;
     m_opImEx.resetDt(m_dt);
   }
 }
@@ -165,7 +159,6 @@ void ARK4<X, IMEXOP>::advance(
   // Reset the dense output coefs
   if (m_denseOutput)
   {
-    m_hasDenseOutput = false;
     for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
       m_denseCoefs[icoef][di].data.zero();
   }
@@ -217,9 +210,6 @@ void ARK4<X, IMEXOP>::advance(
         }
       }
     }
-
-  m_hasDenseOutput = m_denseOutput;
-  m_time = a_time;
 }
 
 /*
@@ -230,7 +220,6 @@ template <class X, class IMEXOP>
 void ARK4<X, IMEXOP>::denseOutputCoefs(DataIndex di, Vector<X*>& a_interpCoefs)
 {
   const int nCoef = s_nDenseCoefs+1;
-  CH_assert(m_hasDenseOutput);
   CH_assert(a_interpCoefs.size() == nCoef); 
 
   for (int icoef=0; icoef < nCoef; ++icoef)
