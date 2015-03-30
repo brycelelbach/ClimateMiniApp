@@ -32,7 +32,7 @@ struct DataflowBox
     // These futures aren't actually storing any data, so we don't take a hit
     // by using shared futures instead of unique futures. This allows us to
     // set multi-region dependencies.
-    typedef std::shared_ptr<hpx::lcos::local::receive_buffer<void> > queue;
+    typedef boost::shared_ptr<hpx::lcos::local::receive_buffer<void> > queue;
 
     // Regions that have external dependencies.
     std::map<Box, queue> regions; 
@@ -44,6 +44,7 @@ struct DataflowBox
       , data()
     {} 
 
+    DataflowBox(DataflowBox const& rhs) = delete;
 /*
     DataflowBox(DataflowBox const& rhs)
       : regions(rhs.regions)
