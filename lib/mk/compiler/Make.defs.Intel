@@ -133,7 +133,7 @@ ifeq ($(cxxname),icc)
   # memory tracking doesn't work for the AMRTimeDependent test
   #USE_MT = FALSE
   # let's try now
-  USE_MT = TRUE
+  #USE_MT = TRUE
 
   # try commenting this out -- NDK
   # icpc in v8.[01] objects to the use of the variable name "__interface" in one of the
