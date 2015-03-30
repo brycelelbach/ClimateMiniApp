@@ -17,6 +17,7 @@
 #define CHOMBO_BFB0AB25_CB31_41FD_8990_164847DC199E
 
 #include <hpx/async.hpp>
+#include <hpx/lcos/when_all.hpp>
 
 #include "AsyncCopier.H"
 #include "AsyncLevelData.H"
@@ -65,8 +66,10 @@ std::vector<hpx::future<void> > SendLocalExchangeAsync(
 
         CH_assert(toProcID == fromProcID);
 
+        auto F = LocalCopyAsync<T>;
+
         outbound.push_back(
-            hpx::async(LocalCopyAsync<T>, epoch, asi, HPX_STD_REF(ld))
+            hpx::async(F, epoch, asi, HPX_STD_REF(ld))
         );
     }
 
@@ -95,8 +98,8 @@ void LocalExchangeSync(
     std::vector<hpx::future<void> > inbound
         = RecvLocalExchangeAsync(epoch, di, ld);
 
-    for (hpx::future<void>& f : outbound) f.get();
-    for (hpx::future<void>& f : inbound) f.get();
+    hpx::lcos::when_all(outbound).get();
+    hpx::lcos::when_all(inbound).get();
 }
 
 
