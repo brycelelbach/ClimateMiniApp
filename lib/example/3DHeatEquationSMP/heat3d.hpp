@@ -16,6 +16,8 @@
 #if !defined(CHOMBO_4EFB6852_A674_4B87_80B6_D5FBE8086AF2)
 #define CHOMBO_4EFB6852_A674_4B87_80B6_D5FBE8086AF2
 
+#include <hpx/lcos/when_all.hpp>
+
 #include "REAL.H"
 #include "LevelData.H"
 #include "FArrayBox.H"
@@ -29,7 +31,11 @@
 
 #include <assert.h>
 
-#include <lapacke.h>
+#if defined(HPX_INTEL_VERSION)
+    #include <mkl_lapacke.h>
+#else
+    #include <lapacke.h>
+#endif
 
 // Solving problems of the form:
 //
@@ -105,6 +111,25 @@ bool lower_boundary(boundary_type type)
     return !upper_boundary(type);
 }
 
+struct streamBox
+{
+    Box const& b;
+    int proc;
+
+    streamBox(Box const& b_, int proc_ = -1) : b(b_), proc(proc_) {}
+
+    friend std::ostream& operator<<(std::ostream& os, streamBox const& sb)
+    {
+        if (-1 == sb.proc) 
+            return os << "(" << sb.b.smallEnd() << " " << sb.b.bigEnd()
+                      << " " << sb.b.volume() << ")";
+        else
+            return os << "(L" << sb.proc
+                      << " " << sb.b.smallEnd() << " " << sb.b.bigEnd()
+                      << " " << sb.b.volume() << ")";
+    } 
+};
+
 struct problem_state
 {
     problem_state()
@@ -131,6 +156,16 @@ struct problem_state
               int            destcomp,
               int            numcomp)
     {
+/*
+        std::cout << "SEND: "
+                  << streamBox(src.data().box())
+                  << " " << streamBox(srcbox) 
+                  << " -> "
+                  << streamBox(data().box())
+                  << " " << streamBox(destbox) 
+                  << "\n" << std::flush;
+*/
+
         data().copy(src.data(), srcbox, srccomp, destbox, destcomp, numcomp);
     }
 
@@ -221,7 +256,7 @@ struct imex_operators
  
                 if (profile.is_outside_domain(type, V[dir]))
                 {
-                    size_t A, B;
+                    size_t A = -1, B = -1;
         
                     if      (0 == dir) { A = 1; B = 2; }
                     else if (1 == dir) { A = 0; B = 2; }
@@ -246,7 +281,7 @@ struct imex_operators
 
                 if (profile.is_boundary(type, (V+sign*profile.ghostVect())[dir]))
                 {
-                    size_t A, B;
+                    size_t A = -1, B = -1;
         
                     if      (0 == dir) { A = 1; B = 2; }
                     else if (1 == dir) { A = 0; B = 2; }
@@ -307,20 +342,59 @@ struct imex_operators
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd();
 
+        ///////////////////////////////////////////////////////////////////////
+        // Horizontal BCs
         auto BCs =
             [&] (boundary_type type, size_t dir, IntVect V)
             { 
                 int sign = (upper_boundary(type) ? -1 : 1);
  
-                if (profile.is_boundary(type, (V+sign*profile.ghostVect())[dir]))
+                if (profile.is_outside_domain(type, V[dir]))
                 {
-                    size_t A, B;
+                    size_t A = -1, B = -1;
         
                     if      (0 == dir) { A = 1; B = 2; }
                     else if (1 == dir) { A = 0; B = 2; }
                     else if (2 == dir) { A = 0; B = 1; }
                     else    assert(false);
  
+                    for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
+                        for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
+                        {
+                            IntVect out(V);
+                            out.setVal(A, a);
+                            out.setVal(B, b);
+       
+                            for (int c = 0; c <= profile.ghostVect()[dir]; ++c)
+                            {
+                                out.shift(dir, sign*c);
+                                phi(out) = 
+                                    profile.outside_domain(type, out, phi, t); 
+                            } 
+                        }
+                }
+
+                if (profile.is_boundary(type, (V+sign*profile.ghostVect())[dir]))
+                {
+                    size_t A = -1, B = -1;
+        
+                    if      (0 == dir) { A = 1; B = 2; }
+                    else if (1 == dir) { A = 0; B = 2; }
+                    else if (2 == dir) { A = 0; B = 1; }
+                    else    assert(false);
+
+                    for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
+                        for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
+                        {
+                            IntVect bdry(V);
+                            bdry.shift(dir, sign*profile.ghostVect()[dir]);
+                            bdry.setVal(A, a);
+                            bdry.setVal(B, b);
+
+                            phi(bdry) =
+                                profile.boundary_conditions(type, bdry, phi, t); 
+                        }
+
                     int sign = (upper_boundary(type) ? -1 : 1);
                     V.shift(dir, sign*IntVect::Unit[dir]);
                 }
@@ -338,13 +412,34 @@ struct imex_operators
         lower.shift(profile.ghostVect());
         upper.shift(-1*profile.ghostVect());
 
-        for (auto j = lower[1]; j <= upper[1]; ++j)
-            for (auto k = lower[2]; k <= upper[2]; ++k)
-            {
-                auto A = profile.vertical_operator(j, k, phi, dtscale);
+        Box b(lower, upper);
 
-                // TODO: give this a return value.
-                profile.vertical_solve(j, k, A, phi);
+/*
+        std::vector<hpx::future<void> > vsolves;
+
+        for (int j = lower[1]; j <= upper[1]; ++j)
+            for (int k = lower[2]; k <= upper[2]; ++k)
+            {
+                auto VSolve = [&](int j, int k)
+                    {
+                        auto A = profile.vertical_operator(j, k, phi, dtscale, b);
+
+                        profile.vertical_solve(j, k, A, phi, b);
+                    };
+
+                vsolves.push_back(hpx::async(VSolve, j, k));
+            }
+
+        hpx::lcos::when_all(vsolves).get();
+*/
+
+        // FIXME: Was this made serial for performance reasons?
+        for (int j = lower[1]; j <= upper[1]; ++j)
+            for (int k = lower[2]; k <= upper[2]; ++k)
+            {
+                auto A = profile.vertical_operator(j, k, phi, dtscale, b);
+
+                profile.vertical_solve(j, k, A, phi, b);
             }
     }
 
@@ -383,6 +478,7 @@ struct aniso_profile
 
     std::tuple<Real, Real, Real> phys_coords(IntVect here)
     {
+        // FIXME: Switch to cell centered
         return std::tuple<Real, Real, Real>(
             Real(here[0])/(Real(config.nv)-1.0)
           , Real(here[1])/(Real(config.nh)-1.0)
@@ -414,7 +510,10 @@ struct aniso_profile
 
     Real source_term(IntVect here) 
     {
-        Real x, y, z; std::tie(x, y, z) = phys_coords(here);
+        Real x, y, z;
+        x = std::get<0>(phys_coords(here));
+        y = std::get<1>(phys_coords(here));
+        z = std::get<2>(phys_coords(here));
         return source_term(x, y, z);
     }
 
@@ -431,6 +530,7 @@ struct aniso_profile
         IntVect west (here[0], here[1], here[2]);
 
         Real const dh = std::get<1>(dp()); 
+        // IntVect indexing may be expensive, compare to Hans' loops
         return (-1.0/dh) * (phi_FY(east) - phi_FY(west) + phi_FZ(north) - phi_FZ(south)); 
     }
 
@@ -448,9 +548,9 @@ struct aniso_profile
         crs_matrix;
     
     // TODO: Could be cached.
-    crs_matrix vertical_operator(int j, int k, FArrayBox const& phi, Real dtscale)
+    crs_matrix vertical_operator(int j, int k, FArrayBox const& phi, Real dtscale, Box b)
     {
-        std::uint64_t const size = phi.size()[0];
+        std::uint64_t const size = b.size()[0];
         Real const dv = std::get<0>(dp()); 
         Real const kvdv = kx/(dv*dv); 
         Real const H = dt()*dtscale;
@@ -462,20 +562,14 @@ struct aniso_profile
         // Super-diagonal part of the matrix.
         std::vector<Real> du(size-1, H*(kvdv/2.0));
 
-        ///////////////////////////////////////////////////////////////////////
-        // Vertical BCs
-        // TODO: Move these out or move the horizontal BCs into the profile.
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd();
-
         return crs_matrix(dl, d, du); 
     }
 
     // TODO: Give this a return value.
-    void vertical_solve(int j, int k, crs_matrix& A, FArrayBox& phi)
+    void vertical_solve(int j, int k, crs_matrix& A, FArrayBox& phi, Box b)
     {
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd();
+        IntVect lower = b.smallEnd();
+        IntVect upper = b.bigEnd();
 
         // This is why we've picked 'x' as our vertical dimension; x columns
         // are contiguous in memory.
@@ -495,7 +589,7 @@ struct aniso_profile
             1 // leading dimension of RHS
             );
 
-        CH_assert(info == 0);
+        assert(info == 0);
     }
 
     bool is_outside_domain(boundary_type bdry, int l)
@@ -561,7 +655,10 @@ struct aniso_profile
 
     Real exact_solution(IntVect here, Real t) 
     {
-        Real x, y, z; std::tie(x, y, z) = phys_coords(here);
+        Real x, y, z;
+        x = std::get<0>(phys_coords(here));
+        y = std::get<1>(phys_coords(here));
+        z = std::get<2>(phys_coords(here));
         if (is_outside_domain(here)) return 0.0;
         else if (is_boundary(here)) return 0.0;
         return exact_solution(x, y, z, t);
@@ -588,56 +685,69 @@ struct aniso_profile
         lower.shift(ghostVect());
         upper.shift(-1*ghostVect());
 
-        FY.setVal(0.0);
-        FZ.setVal(0.0);
+// FIXME FIXME
+//        FY.setVal(0.0);
+//        FZ.setVal(0.0);
 
-        for (auto k = lower[2]; k <= upper[2]; ++k)
-            for (auto j = U.smallEnd()[1]+1; j <= U.bigEnd()[1]; ++j)
-                for (auto i = lower[0]; i <= upper[0]; ++i)
-                {
-                    // NOTE: This currently assumes constant-coefficients 
-                    // and assumes we're just taking an average of the
-                    // coefficients. For variable-coefficient we need
-                    // to actually take an average. 
-                    // 
-                    // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
+        auto FluxY = [&](IntVect lower, IntVect upper)
+        {
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+                for (auto j = U.smallEnd()[1]+1; j <= U.bigEnd()[1]; ++j)
+                    for (auto i = lower[0]; i <= upper[0]; ++i)
+                    {
+                        // NOTE: This currently assumes constant-coefficients 
+                        // and assumes we're just taking an average of the
+                        // coefficients. For variable-coefficient we need
+                        // to actually take an average. 
+                        // 
+                        // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
+    
+                        Real const dh = std::get<1>(dp()); 
+    
+                        IntVect U_left_y(i, j-1, k  );
+    
+                        IntVect U_here(i,   j,   k  );
+                        IntVect F_here(i, j, k);
+    
+    //                    if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
+    //                        std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
+    
+                        FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
+                    }
+        };
 
-                    Real const dh = std::get<1>(dp()); 
+        auto FluxZ = [&](IntVect lower, IntVect upper)
+        {
+            for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
+                for (auto j = lower[1]; j <= upper[1]; ++j)
+                    for (auto i = lower[0]; i <= upper[0]; ++i)
+                    {
+                        // NOTE: This currently assumes constant-coefficients 
+                        // and assumes we're just taking an average of the
+                        // coefficients. For variable-coefficient we need
+                        // to actually take an average. 
+                        // 
+                        // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
+    
+                        Real const dh = std::get<1>(dp()); 
+    
+                        IntVect U_left_z(i, j,   k-1);
+    
+                        IntVect U_here(i,   j,   k  );
+                        IntVect F_here(i, j, k);
+    
+    //                    if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
+    //                        std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
+    
+                        FZ(F_here) = -(kz/dh) * (U(U_here) - U(U_left_z));
+                    }
+        };
 
-                    IntVect U_left_y(i, j-1, k  );
+        auto fut_y = hpx::async(FluxY, lower, upper);
+        auto fut_z = hpx::async(FluxZ, lower, upper);
 
-                    IntVect U_here(i,   j,   k  );
-                    IntVect F_here(i, j, k);
-
-//                    if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
-//                        std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
-
-                    FY(F_here) = -(ky/dh) * (U(U_here) - U(U_left_y));
-                }
-
-        for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
-            for (auto j = lower[1]; j <= upper[1]; ++j)
-                for (auto i = lower[0]; i <= upper[0]; ++i)
-                {
-                    // NOTE: This currently assumes constant-coefficients 
-                    // and assumes we're just taking an average of the
-                    // coefficients. For variable-coefficient we need
-                    // to actually take an average. 
-                    // 
-                    // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
-
-                    Real const dh = std::get<1>(dp()); 
-
-                    IntVect U_left_z(i, j,   k-1);
-
-                    IntVect U_here(i,   j,   k  );
-                    IntVect F_here(i, j, k);
-
-//                    if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
-//                        std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
-
-                    FZ(F_here) = -(kz/dh) * (U(U_here) - U(U_left_z));
-                }
+        fut_y.get();
+        fut_z.get();
     }
 
     IntVect ghostVect()
