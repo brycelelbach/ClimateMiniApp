@@ -32,7 +32,7 @@ int LevelFluxRegisterEdge::index(int dir, Side::LoHiSide side)
 int LevelFluxRegisterEdge::getRegComp(const int& faceDir,
                                       const int& edgeDir)
 {
-  int regcomp;
+  int regcomp = 0;
   // need to think of a better way to do this.
   // regcomp is the remaining dimension after discounting the
   // two arguments

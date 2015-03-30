@@ -90,9 +90,9 @@ FaceNodeBC::applyEitherBCs(FArrayBox& a_state,
 
   // First check (set isbc) whether a_state's box is on
   // side m_side, m_direction of a_domain.
-  bool isbc;
+  bool isbc = false;
   // endCoordinate is coordinate in m_direction on m_side
-  int endCoordinate;
+  int endCoordinate = 0;
   switch (m_side)
     {
     case Side::Lo:
@@ -412,7 +412,7 @@ DomainNodeBC::operator=(const DomainNodeBC& a_dgbcin)
 bool
 DomainNodeBC::isBCDefined(int a_dir, const Side::LoHiSide a_side) const
 {
-  bool isdefined;
+  bool isdefined = false;
 
   CH_assert ((a_side == Side::Lo) || (a_side == Side::Hi));
 
