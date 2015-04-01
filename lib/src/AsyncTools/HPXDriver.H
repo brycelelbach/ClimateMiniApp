@@ -22,7 +22,7 @@
 
 #include "NamespaceHeader.H"
 
-typedef HPX_STD_FUNCTION<int(boost::program_options::variables_map&)>
+typedef std::function<int(boost::program_options::variables_map&)>
     main_type;
 
 // FIXME: Install an actual HPX log channel instead of hijacking std::cout

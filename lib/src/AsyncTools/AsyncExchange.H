@@ -69,7 +69,7 @@ std::vector<hpx::future<void> > SendLocalExchangeAsync(
         auto F = LocalCopyAsync<T>;
 
         outbound.push_back(
-            hpx::async(F, epoch, asi, HPX_STD_REF(ld))
+            hpx::async(F, epoch, asi, std::ref(ld))
         );
     }
 
