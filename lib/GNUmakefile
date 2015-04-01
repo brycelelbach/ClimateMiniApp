@@ -214,7 +214,7 @@ clean:
 # This target removes all non-essential files from the Chombo directory tree for all configurations
 #[NOTE: the "&&" after `cd include` prevents deleting all *.H files if subdir "include" doesn't exist. <dbs>]
 realclean:
-	-cd include && chmod -R u+w . && find . -name "*.H" -exec $(RM) {} \;
+#	-cd include && chmod -R u+w . && find . -name "*.H" -exec $(RM) {} \;
 ifneq ($(wildcard include/multidim),)
 	-cd include/multidim && find . -name "*.H.*" -exec $(RM) {} \;	
 	-cd include/multidim && find . -name "dim*.txt" -exec $(RM) {} \;
