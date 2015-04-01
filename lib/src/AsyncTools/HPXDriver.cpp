@@ -37,8 +37,11 @@ int runtime_main(main_type const& f, variables_map& vm)
     int result = 0;
 
     {
+#if defined(DEBUG) 
         // For great justice (lack of Octopus ASCII art is saddening).
-        std::cout << "Bootstrapping Chombo's HPX services\n";
+        std::cout << "Bootstrapping Chombo's HPX services\n"
+                  << std::flush;
+#endif
  
         ///////////////////////////////////////////////////////////////////////
         // Initialize Chombo's HPX services.
@@ -53,9 +56,12 @@ int runtime_main(main_type const& f, variables_map& vm)
         if (localities.empty())
             HPX_THROW_IN_CURRENT_FUNC(hpx::assertion_failure,
                 "no localities supporting Chombo's HPX services");
-    
+   
+#if defined(DEBUG) 
         std::cout << "Found " << localities.size()
-                  << " usable localities, deploying service components\n";
+                  << " usable localities, deploying service components\n"
+                  << std::flush;
+#endif
 
         // Asynchronously deploy the component on every locality.
         // FIXME: Sadly, distributing factory doesn't support constructor args
@@ -77,11 +83,17 @@ int runtime_main(main_type const& f, variables_map& vm)
         ///////////////////////////////////////////////////////////////////////
         // Invoke user entry point
 
-        std::cout << "Chombo services are live, executing application code\n";
+#if defined(DEBUG)
+        std::cout << "Chombo services are live, executing application code\n"
+                  << std::flush;
+#endif
 
         result = f(vm);
 
-        std::cout << "Application execution complete, initiating shutdown\n"; 
+#if defined(DEBUG)
+        std::cout << "Application execution complete, initiating shutdown\n"
+                  << std::flush;
+#endif
     }
 
     hpx::finalize();
@@ -96,9 +108,14 @@ int init(
     std::vector<std::string> const& cfg
     )
 {
+#if defined(DEBUG)
+    // For great justice (lack of Octopus ASCII art is saddening).
+    std::cout << "Launching HPX runtime\n" << std::flush;
+#endif
+
     ///////////////////////////////////////////////////////////////////////////
     // Initialize HPX.
-    main_type Lf(HPX_STD_BIND(&runtime_main, f, HPX_STD_PLACEHOLDERS::_1)); 
+    main_type Lf(std::bind(&runtime_main, f, std::placeholders::_1)); 
     int result = hpx::init(Lf, cmdline, argc, argv, cfg); 
 
 #if !defined(BOOST_MSVC)
