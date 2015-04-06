@@ -26,7 +26,6 @@
 #include "HPXDriver.H"
 
 #include <fenv.h>
-#include <assert.h>
 
 #include "heat3d.hpp"
 
@@ -194,7 +193,8 @@ int chombo_main(variables_map& vm)
 #if defined(CH_USE_HDF5)
     if (output_flag)
     {
-        heat3d::problem_state src; src.define(soln);  
+        AsyncLevelData<heat3d::problem_state> src(dbl, config.ghost_vector);
+        DefineData(src, 1);
         visit(src,
             [&profile](Real& val, IntVect here)
             { val = profile.source_term(here); }
@@ -215,10 +215,6 @@ int chombo_main(variables_map& vm)
         DataIterator dit = data.dataIterator();
 
 #if defined(CH_USE_HDF5)
-        Real error_sum = 0.0; 
-        Real phi_sum   = 0.0; 
-        Real rel_error = 0.0;
-
         if (output_flag)
         { 
             std::vector<hpx::future<void> > exchanges;
@@ -228,10 +224,11 @@ int chombo_main(variables_map& vm)
             {
                 exchanges.push_back(
                     hpx::async(LocalExchangeSync<heat3d::problem_state>
-                             , epoch, dit(), HPX_STD_REF(data))
+                             , epoch, dit(), std::ref(data))
                 );
             }
-            for (hpx::future<void>& f : exchanges) f.get();
+
+            hpx::lcos::when_all(exchanges).get();
     
             ++epoch;
     
@@ -248,12 +245,6 @@ int chombo_main(variables_map& vm)
             for (dit.begin(); dit.ok(); ++dit)
                 exact[dit()].data.increment(data[dit()].data, -1.0);
             output(exact, "error.%06u.hdf5", "error", step); 
-    
-            heat3d::problem_state solncopy; solncopy.copy(soln);
-            exact.abs(); solncopy.abs();
-            Real error_sum = exact.sum();
-            Real phi_sum = solncopy.sum();
-            Real rel_error = (phi_sum == 0.0 ? 0.0 : error_sum/phi_sum);
         }
 #endif 
 
@@ -264,31 +255,16 @@ int chombo_main(variables_map& vm)
 
         if (verbose_flag)
         {
-#if defined(CH_USE_HDF5)
-            if (output)
-            {
-                char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g%|43t| : "
-                                  "SUM %.7g%|60t| : ERROR %.7g\n%|79t| :"
-                                  "REL_ERROR %.7g\n";
-                std::cout << ( boost::format(fmt) % step % time % dt
-                             % phi_sum % error_sum % rel_error)
-                          << std::flush;
-            }
-
-            else
-#endif
-            {
-                char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g\n";
-                std::cout << (boost::format(fmt) % step % time % dt)
-                          << std::flush;
-            }
+            char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g\n";
+            std::cout << (boost::format(fmt) % step % time % dt)
+                      << std::flush;
         }
 
         std::vector<hpx::future<void> > futures;
 
         for (dit.begin(); dit.ok(); ++dit)
         {
-                futures.push_back(
+            futures.emplace_back(
                 hpx::async(
                     [&](DataIndex di) { ark.advance(di, epoch, time, data); }
                   , dit()
@@ -316,18 +292,38 @@ int chombo_main(variables_map& vm)
               << std::flush;
 
 #if defined(CH_USE_HDF5)
-        soln.exchange();
-        output(soln, "phi.%06u.hdf5", "phi_numeric", step); 
+    if (output_flag)
+    { 
+        DataIterator dit = data.dataIterator();
+
+        std::vector<hpx::future<void> > exchanges;
     
-        heat3d::problem_state exact; exact.define(soln); 
+        // Fix ghost zones for output.
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            exchanges.push_back(
+                hpx::async(LocalExchangeSync<heat3d::problem_state>
+                         , epoch, dit(), std::ref(data))
+            );
+        }
+
+        hpx::lcos::when_all(exchanges).get();
+
+        output(data, "phi.%06u.hdf5", "phi_numeric", step); 
+    
+        AsyncLevelData<heat3d::problem_state> exact(dbl, config.ghost_vector);
+        DefineData(exact, 1);
         visit(exact,
             [&profile, time](Real& val, IntVect here)
             { val = profile.exact_solution(here, time); }
         );
+
         output(exact, "exact.%06u.hdf5", "phi_exact", step); 
     
-        exact.increment(soln, -1.0); 
+        for (dit.begin(); dit.ok(); ++dit)
+            exact[dit()].data.increment(data[dit()].data, -1.0);
         output(exact, "error.%06u.hdf5", "error", step); 
+    }
 #endif
 
     return 0;
