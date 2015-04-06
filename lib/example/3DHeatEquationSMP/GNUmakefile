@@ -14,7 +14,4 @@ ebase = driver
 # if we don't specify it here
 LibNames = BoxTools AMRTools AsyncTools
 
-cxxoptflags +=  
-XTRALIBFLAGS += -llapacke -lblas
-
 include $(CHOMBO_HOME)/mk/Make.example
