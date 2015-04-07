@@ -8,16 +8,14 @@
  */
 #endif
 
-#ifndef CHOMBO_DCFC5EBE_DAAF_4F45_837E_C17A8A94C5EA
-#define CHOMBO_DCFC5EBE_DAAF_4F45_837E_C17A8A94C5EA
+#ifndef _ARK4V3_H_
+#define _ARK4V3_H_
 
-#include "AsyncLevelData.H"
-#include "AsyncExchange.H"
 
 #include "NamespaceHeader.H"
 
-/// This is a more flexible, reduced memory version
-/// 4th-order additive Runge-Kutta algorithm
+/// This is a more flexible, reduced memory version 4th-order additive
+/// Runge-Kutta algorithm
 /**
    This templated class encapsulates
    the fourth-order additive Runge-Kutta method 
@@ -34,27 +32,23 @@ class ARK4
 public:
   ARK4(
     IMEXOP&& imex
-  , DisjointBoxLayout const& dbl
-  , int comps
-  , IntVect ghost
+  , const X& state
   , Real dt
   , bool denseOutput = false
     );
 
   // Advance one step.
   void advance(
-    DataIndex di
-  , std::size_t epoch
-  , Real a_time
-  , AsyncLevelData<X>& a_state
+    Real t
+  , X& state
     );
 
   // Return current dense output coefs, 0th power first, etc.
   // NOTE: These are probably for <JU> conserved quantities
-  void denseOutputCoefs(DataIndex di, Vector<X*>& a_interpCoefs);
+  void denseOutputCoefs(Vector<X*>& interpCoefs);
 
   // Reset the timestep.
-  void resetDt(Real a_dt);
+  void resetDt(Real dt);
 
   // Access to the operators if we're defined already
   // Caller is responsible for making sure they're in a good state 
@@ -75,12 +69,12 @@ private:
   bool m_denseOutput;               ///< True if dense output is enabled.
   Real m_dt;                        ///< Timestep size.
 
-  AsyncLevelData<X> m_phi[s_nStages];
-  AsyncLevelData<X> m_denseCoefs[s_nDenseCoefs];
-  AsyncLevelData<X> m_kE;
-  AsyncLevelData<X> m_kI;
-  IMEXOP m_opImEx;
+  X m_phi[s_nStages];
+  X m_denseCoefs[s_nDenseCoefs];
+  X m_kE;
+  X m_kI;
 
+  IMEXOP m_opImEx;
 };
 
 //==============================================
@@ -88,9 +82,7 @@ private:
 template <class X, class IMEXOP>
 ARK4<X, IMEXOP>::ARK4(
     IMEXOP&& imex
-  , DisjointBoxLayout const& dbl
-  , int comps
-  , IntVect ghost
+  , X const& state
   , Real dt
   , bool denseOutput
     )
@@ -101,23 +93,15 @@ ARK4<X, IMEXOP>::ARK4(
 
   // define X
   for (int stage = 0; stage < s_nStages; stage++)
-  {
-    m_phi[stage].define(dbl, ghost);
-    DefineData(m_phi[stage], comps);
-  }
+    m_phi[stage].define(state);
 
   // define dX
-  m_kE.define(dbl, ghost); // never exchanged.
-  m_kI.define(dbl, ghost); // never exchanged.
-  DefineData(m_kE, comps);
-  DefineData(m_kI, comps);
+  m_kE.define(state);
+  m_kI.define(state);
 
   // if dense output is requested, need more storage
   for (int coef = 0; m_denseOutput && (coef < s_nDenseCoefs); coef++)
-  {
-    m_denseCoefs[coef].define(dbl, ghost); // never exchanged.
-    DefineData(m_denseCoefs[coef], comps);
-  }
+    m_denseCoefs[coef].define(state);
 }
 
 /*
@@ -134,79 +118,77 @@ ARK4<X, IMEXOP>::getImExOp()
   Reset the timestep.
  */
 template <class X, class IMEXOP>
-void ARK4<X, IMEXOP>::resetDt(Real a_dt)
+void ARK4<X, IMEXOP>::resetDt(Real dt)
 {
   // Only update everything if dt has changed
   Real reltol = 1e-14;
-  if (fabs(m_dt - a_dt) > m_dt*reltol)
+  if (fabs(m_dt - dt) > m_dt*reltol)
   {
-    m_dt = a_dt;
+    m_dt = dt;
     m_opImEx.resetDt(m_dt);
   }
 }
 
 /*
-  Advance solution a_state in time, a_time to a_time + a_dt.
+  Advance solution state in time, t to t + dt.
  */
 template <class X, class IMEXOP>
-void ARK4<X, IMEXOP>::advance(
-    DataIndex di
-  , std::size_t epoch
-  , Real a_time
-  , AsyncLevelData<X>& a_state
-    )
+void ARK4<X, IMEXOP>::advance(Real t, X& state)
 {
   // Reset the dense output coefs
   if (m_denseOutput)
   {
     for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
-      m_denseCoefs[icoef][di].data.zero();
+      m_denseCoefs[icoef].zero();
   }
 
-  // Set m_phi[0] := a_state, all others 0
-  m_phi[0][di].data.copy(a_state[di].data);
+  // Set m_phi[0] := state, all others 0
+  m_phi[0].copy(state);
   for (int stage = 1; stage < s_nStages; stage++)
-    m_phi[stage][di].data.zero();
+    m_phi[stage].zero();
+
+  // Set the output to zero
+  // state.zero();
 
   // For each stage
   for (int stage = 0; stage < s_nStages; stage++)
     {
-      Real t = a_time + s_c[stage]*m_dt;
+      Real next_t = t + s_c[stage]*m_dt;
       if (stage > 0)
       {
         // Do the solve - copy rhs from phi[stage]
-        m_phi[stage][di].data.increment(m_phi[0][di].data);
-
-        LocalExchangeSync(epoch++, di, m_phi[stage]);
+        m_phi[stage].increment(m_phi[0]);
+   
+        m_phi[stage].exchange(); 
 
         // Solve in-place for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(m_phi[stage][di].data, t, s_aIdiag);
+        m_opImEx.solve(m_phi[stage], next_t, s_aIdiag);
       }
 
-      LocalExchangeSync(epoch++, di, m_phi[stage]);
+      m_phi[stage].exchange();
 
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(m_kE[di].data, m_phi[stage][di].data, t);
-      m_opImEx.implicitOp(m_kI[di].data, m_phi[stage][di].data, t);
+      m_opImEx.explicitOp(m_kE, m_phi[stage], next_t);
+      m_opImEx.implicitOp(m_kI, m_phi[stage], next_t);
 
       // Add the known stage operator values to future solve rhs in phi[stage]
       for (int k=stage+1; k < s_nStages; ++k)
       {
-        m_phi[k][di].data.increment(m_kE[di].data, m_dt*s_aE[k][stage]);
-        m_phi[k][di].data.increment(m_kI[di].data, m_dt*s_aI[k][stage]);
+        m_phi[k].increment(m_kE, m_dt*s_aE[k][stage]);
+        m_phi[k].increment(m_kI, m_dt*s_aI[k][stage]);
       }
 
       // Accumulate the final solution and accum registers
-      a_state[di].data.increment(m_kE[di].data, m_dt*s_b[stage]);
-      a_state[di].data.increment(m_kI[di].data, m_dt*s_b[stage]);
+      state.increment(m_kE, m_dt*s_b[stage]);
+      state.increment(m_kI, m_dt*s_b[stage]);
 
       if (m_denseOutput)
       {
         for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
         {
-          m_denseCoefs[icoef][di].data.increment(m_kE[di].data, m_dt*s_bstar[icoef][stage]);
-          m_denseCoefs[icoef][di].data.increment(m_kI[di].data, m_dt*s_bstar[icoef][stage]);
+          m_denseCoefs[icoef].increment(m_kE, m_dt*s_bstar[icoef][stage]);
+          m_denseCoefs[icoef].increment(m_kI, m_dt*s_bstar[icoef][stage]);
         }
       }
     }
@@ -217,23 +199,23 @@ void ARK4<X, IMEXOP>::advance(
   of time between t_old and t_new.
  */
 template <class X, class IMEXOP>
-void ARK4<X, IMEXOP>::denseOutputCoefs(DataIndex di, Vector<X*>& a_interpCoefs)
+void ARK4<X, IMEXOP>::denseOutputCoefs(Vector<X*>& interpCoefs)
 {
   const int nCoef = s_nDenseCoefs+1;
-  CH_assert(a_interpCoefs.size() == nCoef); 
+  CH_assert(interpCoefs.size() == nCoef); 
 
   for (int icoef=0; icoef < nCoef; ++icoef)
-    CH_assert(a_interpCoefs[icoef] != NULL);
+    CH_assert(interpCoefs[icoef] != NULL);
 
   // Copy over the dense coef values
 
-  // First coefficient is just the old state
-  a_interpCoefs[0]->copy(m_phi[0][di].data);
+  // First coeficient is just the old state
+  interpCoefs[0]->copy(m_phi[0]);
   
   // Next coefs are our dense output
   for (int icoef = 1; icoef < nCoef ; ++icoef)
   {
-    a_interpCoefs[icoef]->copy(m_denseCoefs[icoef-1][di].data);
+    interpCoefs[icoef]->copy(m_denseCoefs[icoef-1]);
   }
 }
 
@@ -276,7 +258,7 @@ template <class X, class IMEXOP>
 const Real ARK4<X, IMEXOP>::s_b[] =
   {0.15791629516167136, 0., 0.18675894052400077, 0.6805652953093346, -0.27524053099500667, 0.25};
 
-// Coefficients for dense output, 4th-order interpolation
+// Coefficients for dense ouput, 4th-order interpolation
 template <class X, class IMEXOP>
 const Real ARK4<X, IMEXOP>::s_bstar[][ARK4<X, IMEXOP>::s_nStages] = {
   {0.961753400252887, 0., 0.787405595186356, -2.74544192086633, 3.70351728061223, -1.70723435518514},
