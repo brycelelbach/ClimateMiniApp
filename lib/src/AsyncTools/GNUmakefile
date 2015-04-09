@@ -15,7 +15,7 @@ CHOMBO_HOME := $(shell pwd)/../..
 
 lbase := asynctools
 
-LibNames := BoxTools
+LibNames := BoxTools AMRTools
 
 # put this first so 'Cfile' isn't the default target
 include $(CHOMBO_HOME)/mk/Make.lib
