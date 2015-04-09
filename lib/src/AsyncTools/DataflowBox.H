@@ -26,6 +26,15 @@
 
 #include "NamespaceHeader.H"
 
+enum CommType
+{
+    Comm_ExchangeState      = 0,
+    Comm_CoarseToFineState  = 1,
+    Comm_FineToCoarseState  = 2,
+    Comm_FineToCoarseFlux   = 3,
+    Comm_Last               = Comm_FineToCoarseFlux
+};
+
 template <typename T>
 struct DataflowBox
 {
@@ -35,7 +44,7 @@ struct DataflowBox
     typedef boost::shared_ptr<hpx::lcos::local::receive_buffer<void> > queue;
 
     // Regions that have external dependencies.
-    std::map<Box, queue> regions; 
+    std::array<std::map<Box, queue>, Comm_Last> regions; 
     
     T data;
 
@@ -45,25 +54,27 @@ struct DataflowBox
     {} 
 
     DataflowBox(DataflowBox const& rhs) = delete;
-/*
-    DataflowBox(DataflowBox const& rhs)
-      : regions(rhs.regions)
-      , data(rhs.data)
-    {}
-*/
 
-    void addRegion(Box const& b)
+    void addRegion(
+        CommType ct
+      , Box const& b
+        )
     {
         queue q(new hpx::lcos::local::receive_buffer<void>());
-        regions.insert(std::make_pair(b, q));
+        regions[ct].insert(std::make_pair(b, q));
     }
 
     template <typename F>
-    hpx::future<void>& enqueue(std::size_t epoch, Box const& b, F&& f)
+    hpx::future<void>& enqueue(
+        CommType ct
+      , std::size_t epoch
+      , Box const& b
+      , F&& f
+        )
     {
-        auto it = regions.find(b);
+        auto it = regions[ct].find(b);
 
-        if (regions.end() == it)
+        if (regions[ct].end() == it)
             HPX_THROW_STD_EXCEPTION(
                 std::out_of_range("no such region\n")
               , BOOST_CURRENT_FUNCTION);
@@ -75,12 +86,16 @@ struct DataflowBox
     }
 
     template <typename F>
-    std::vector<hpx::future<void> > enqueueAll(std::size_t epoch, F&& f)
+    std::vector<hpx::future<void> > enqueueAll(
+        CommType ct
+      , std::size_t epoch
+      , F&& f
+        )
     {
         std::vector<hpx::future<void> > deps;
-        deps.reserve(regions.size());
+        deps.reserve(regions[ct].size());
 
-        for (auto& kv : regions)
+        for (auto& kv : regions[ct])
         {
             auto WF = hpx::util::unwrapped(
                 HPX_STD_BIND(std::forward<F>(f), HPX_STD_REF(data), kv.first)
@@ -91,11 +106,15 @@ struct DataflowBox
         return deps; 
     }
 
-    hpx::future<void> depend(std::size_t epoch, Box const& b)
+    hpx::future<void> depend(
+        CommType ct
+      , std::size_t epoch
+      , Box const& b
+        )
     {
-        auto it = regions.find(b);
+        auto it = regions[ct].find(b);
 
-        if (regions.end() == it)
+        if (regions[ct].end() == it)
             HPX_THROW_STD_EXCEPTION(
                 std::out_of_range("no such region\n")
               , BOOST_CURRENT_FUNCTION);
@@ -103,22 +122,29 @@ struct DataflowBox
         return (*it).second->receive(epoch);
     }
 
-    std::vector<hpx::future<void> > dependAll(std::size_t epoch)
+    std::vector<hpx::future<void> > dependAll(
+        CommType ct
+      , std::size_t epoch
+        )
     {
         std::vector<hpx::future<void> > deps;
-        deps.reserve(regions.size());
+        deps.reserve(regions[ct].size());
 
-        for (auto& kv : regions)
+        for (auto& kv : regions[ct])
             deps.push_back(kv.second->receive(epoch));
 
         return deps; 
     }
 
-    void store(std::size_t epoch, Box const& b)
+    void store(
+        CommType ct
+      , std::size_t epoch
+      , Box const& b
+        )
     {
-        auto it = regions.find(b);
+        auto it = regions[ct].find(b);
 
-        if (regions.end() == it)
+        if (regions[ct].end() == it)
             HPX_THROW_STD_EXCEPTION(
                 std::out_of_range("no such region\n")
               , BOOST_CURRENT_FUNCTION);

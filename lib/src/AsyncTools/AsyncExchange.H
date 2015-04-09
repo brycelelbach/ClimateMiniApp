@@ -27,8 +27,9 @@
 #include "NamespaceHeader.H"
 
 template <typename T>
-void LocalCopyAsync(
-    std::size_t epoch
+void LocalCopyImpl(
+    CommType ct
+  , std::size_t epoch
   , AsyncSendInstructions asi 
   , AsyncLevelData<T>& ld
     ) 
@@ -41,19 +42,20 @@ void LocalCopyAsync(
       , asi.toRegion,   /* starting comp */ 0
       , ld[asi.fromIndex].data.nComp());
 
-    ld[asi.toIndex].store(epoch, asi.toRegion); 
+    ld[asi.toIndex].store(ct, epoch, asi.toRegion); 
 }
 
 // FIXME: Cache ASI lookup.
 template <typename T>
-std::vector<hpx::future<void> > SendLocalExchangeAsync(
-    std::size_t epoch
+std::vector<hpx::future<void> > LocalSendCopyAsync(
+    CommType ct
+  , std::size_t epoch
   , DataIndex di 
   , AsyncLevelData<T>& ld
+  , AsyncCopier const& ac 
     )
 {
     DisjointBoxLayout const& dbl = ld.disjointBoxLayout(); 
-    AsyncCopier const& ac = ld.exchangeCopier();
     auto const& smp = ac.senderMotionPlan();
 
     std::vector<hpx::future<void> > outbound;
@@ -66,10 +68,10 @@ std::vector<hpx::future<void> > SendLocalExchangeAsync(
 
         CH_assert(toProcID == fromProcID);
 
-        auto F = LocalCopyAsync<T>;
+        auto F = LocalCopyImpl<T>;
 
         outbound.push_back(
-            hpx::async(F, epoch, asi, std::ref(ld))
+            hpx::async(F, ct, epoch, asi, std::ref(ld))
         );
     }
 
@@ -77,13 +79,35 @@ std::vector<hpx::future<void> > SendLocalExchangeAsync(
 }
 
 template <typename T>
-std::vector<hpx::future<void> > RecvLocalExchangeAsync(
-    std::size_t epoch
+std::vector<hpx::future<void> > LocalRecvCopyAsync(
+    CommType ct
+  , std::size_t epoch
   , DataIndex di 
   , AsyncLevelData<T>& ld
     )
 {
-    return ld[di].dependAll(epoch);
+    return ld[di].dependAll(ct, epoch);
+}
+
+// TODO: LocalCopyAsync
+
+template <typename T>
+void LocalCopySync(
+    CommType ct
+  , std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T>& src
+  , AsyncLevelData<T>& dest
+  , AsyncCopier const& ac 
+    )
+{
+    std::vector<hpx::future<void> > outbound
+        = LocalSendCopyAsync(ct, epoch, di, src, ac);
+    std::vector<hpx::future<void> > inbound
+        = LocalRecvCopyAsync(ct, epoch, di, dest);
+
+    hpx::lcos::when_all(outbound).get();
+    hpx::lcos::when_all(inbound).get();
 }
 
 template <typename T>
@@ -93,15 +117,8 @@ void LocalExchangeSync(
   , AsyncLevelData<T>& ld
     )
 {
-    std::vector<hpx::future<void> > outbound
-        = SendLocalExchangeAsync(epoch, di, ld);
-    std::vector<hpx::future<void> > inbound
-        = RecvLocalExchangeAsync(epoch, di, ld);
-
-    hpx::lcos::when_all(outbound).get();
-    hpx::lcos::when_all(inbound).get();
+    LocalCopySync(Comm_ExchangeState, epoch, di, ld, ld, ld.exchangeCopier());
 }
-
 
 #include "NamespaceFooter.H"
 

@@ -81,7 +81,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
 
         // Same-level ghost zone regions.
         for (AsyncRegion const& ar : m_exchangeCopier.regions())
-            (*this)[ar.toIndex].addRegion(ar.toRegion);
+            (*this)[ar.toIndex].addRegion(Comm_ExchangeState, ar.toRegion);
     } 
 
   public:

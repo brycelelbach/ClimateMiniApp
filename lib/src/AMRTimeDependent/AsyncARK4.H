@@ -190,7 +190,7 @@ void AsyncARK4<X, IMEXOP>::advance(
       m_opImEx.explicitOp(m_kE[di].data, m_phi[stage][di].data, next_t);
       m_opImEx.implicitOp(m_kI[di].data, m_phi[stage][di].data, next_t);
 
-      // Add the known stage operator values to future solve rhs in phi[stage]
+      // Add the known stage operator values to future solves 
       for (int k=stage+1; k < s_nStages; ++k)
       {
         m_phi[k][di].data.increment(m_kE[di].data, m_dt*s_aE[k][stage]);
