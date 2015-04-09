@@ -101,6 +101,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     }
 };
 
+// TODO: Move this into constructor?
 template <typename T>
 void DefineData(
     AsyncLevelData<T>& ld

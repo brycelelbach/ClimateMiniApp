@@ -26,23 +26,31 @@
 
 #include "NamespaceHeader.H"
 
+// FIXME: Given that the other communications get their own class (e.g. interp,
+// averaging), perhaps exchange should be removed from AsyncLevelData and these
+// functions should be made methods of a new AsyncExchange class. The downside
+// of this is that then we'd have to pass this class around everywhere.
+
 template <typename T>
 void LocalCopyImpl(
     CommType ct
   , std::size_t epoch
   , AsyncSendInstructions asi 
-  , AsyncLevelData<T>& ld
+  , AsyncLevelData<T> const& from_ld
+  , AsyncLevelData<T>& to_ld
     ) 
 {
-    CH_assert(ld[asi.toIndex].data.nComp() == ld[asi.fromIndex].data.nComp());
+    CH_assert(
+        to_ld[asi.toIndex].data.nComp() == from_ld[asi.fromIndex].data.nComp()
+    );
 
-    ld[asi.toIndex].data.copy(
-        ld[asi.fromIndex].data
+    to_ld[asi.toIndex].data.copy(
+        from_ld[asi.fromIndex].data
       , asi.fromRegion, /* starting comp */ 0
       , asi.toRegion,   /* starting comp */ 0
-      , ld[asi.fromIndex].data.nComp());
+      , from_ld[asi.fromIndex].data.nComp());
 
-    ld[asi.toIndex].store(ct, epoch, asi.toRegion); 
+    to_ld[asi.toIndex].store(ct, epoch, asi.toRegion); 
 }
 
 // FIXME: Cache ASI lookup.
@@ -51,11 +59,13 @@ std::vector<hpx::future<void> > LocalSendCopyAsync(
     CommType ct
   , std::size_t epoch
   , DataIndex di 
-  , AsyncLevelData<T>& ld
+  , AsyncLevelData<T> const& from_ld
+  , AsyncLevelData<T>& to_ld
   , AsyncCopier const& ac 
     )
 {
-    DisjointBoxLayout const& dbl = ld.disjointBoxLayout(); 
+    DisjointBoxLayout const& dbl_from = from_ld.disjointBoxLayout(); 
+    DisjointBoxLayout const& dbl_to   = to_ld.disjointBoxLayout(); 
     auto const& smp = ac.senderMotionPlan();
 
     std::vector<hpx::future<void> > outbound;
@@ -63,15 +73,15 @@ std::vector<hpx::future<void> > LocalSendCopyAsync(
     AsyncSendInstructions key(di);
     for (AsyncSendInstructions const& asi : asRange(smp.equal_range(key))) 
     {
-        unsigned fromProcID = dbl.procID(asi.fromIndex);
-        unsigned toProcID   = dbl.procID(asi.toIndex);
+        unsigned fromProcID = dbl_from.procID(asi.fromIndex);
+        unsigned toProcID   = dbl_to.procID(asi.toIndex);
 
         CH_assert(toProcID == fromProcID);
 
         auto F = LocalCopyImpl<T>;
 
         outbound.push_back(
-            hpx::async(F, ct, epoch, asi, std::ref(ld))
+            hpx::async(F, ct, epoch, asi, std::ref(from_ld), std::ref(to_ld))
         );
     }
 
@@ -83,10 +93,10 @@ std::vector<hpx::future<void> > LocalRecvCopyAsync(
     CommType ct
   , std::size_t epoch
   , DataIndex di 
-  , AsyncLevelData<T>& ld
+  , AsyncLevelData<T>& to_ld
     )
 {
-    return ld[di].dependAll(ct, epoch);
+    return to_ld[di].dependAll(ct, epoch);
 }
 
 // TODO: LocalCopyAsync
@@ -96,15 +106,15 @@ void LocalCopySync(
     CommType ct
   , std::size_t epoch
   , DataIndex di 
-  , AsyncLevelData<T>& src
-  , AsyncLevelData<T>& dest
+  , AsyncLevelData<T> const& from_ld
+  , AsyncLevelData<T>& to_ld
   , AsyncCopier const& ac 
     )
 {
     std::vector<hpx::future<void> > outbound
-        = LocalSendCopyAsync(ct, epoch, di, src, ac);
+        = LocalSendCopyAsync(ct, epoch, di, from_ld, to_ld, ac);
     std::vector<hpx::future<void> > inbound
-        = LocalRecvCopyAsync(ct, epoch, di, dest);
+        = LocalRecvCopyAsync(ct, epoch, di, to_ld);
 
     hpx::lcos::when_all(outbound).get();
     hpx::lcos::when_all(inbound).get();
