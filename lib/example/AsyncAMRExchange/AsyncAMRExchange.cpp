@@ -84,7 +84,8 @@ int main()
         (maxboxsize-1)
     );
 
-    ProblemDomain base_domain(lower_bound, upper_bound);
+    bool is_periodic[] = { true, true, true };
+    ProblemDomain base_domain(lower_bound, upper_bound, is_periodic);
 
     Vector<Vector<Box> > box_list(2);
     domainSplit(base_domain, box_list[0], maxboxsize, 1);
@@ -131,15 +132,11 @@ int main()
         for (unsigned j = 0; j < box_list[i].size(); ++j)
             load_list[i].push_back(box_list[i][j].volume());
 
-    Real eff = 0.0;
-
     mortonOrdering(box_list[0]);
     mortonOrdering(box_list[1]);
 
     LoadBalance(proc_list[0], box_list[0], procs);
     LoadBalance(proc_list[1], box_list[1], procs);
-
-    std::cout << "EFFICIENCY: " << eff << "\n";
 
     std::cout << "PROC ASSIGNMENT:\n";
 
@@ -191,61 +188,64 @@ int main()
 
     for (size_t pid = 0; pid < procs; ++pid)
     {
-        AsyncCopier ac;
-
-        ac.exchangeDefine(dbl[pid][0], IntVect::Unit, pid);
-
-        for (AsyncSendInstructions const& asi : ac.senderMotionPlan())
+        for (size_t level = 0; level < 2; ++level)
         {
-            unsigned fromProcID = dbl[pid][0].procID(asi.fromIndex);
-            unsigned toProcID   = dbl[pid][0].procID(asi.toIndex);
-
-            DataIndex fromIdx
-                = dbl[fromProcID][0].localizeDataIndex(asi.fromIndex); 
-            DataIndex toIdx  
-                = dbl[toProcID][0].localizeDataIndex(asi.toIndex); 
-
-            Box fromBox = dbl[fromProcID][0][fromIdx];
-            Box toBox   = dbl[toProcID][0][toIdx];
-
-            std::cout << "SEND: "
-                      << streamBox(fromBox, fromProcID)
-                      << " " << streamBox(asi.fromRegion) 
-                      << " -> "
-                      << streamBox(toBox, toProcID)
-                      << " " << streamBox(asi.toRegion) 
-                      << std::endl;
-
-            // Copy the processor ID to the test variable
-            (*data[toProcID][0])[toIdx].copy(
-                                          (*data[fromProcID][0])[fromIdx]
-                                        , asi.fromRegion, 0
-                                        , asi.toRegion, 1
-                                        , 1);
-        }
-
-        std::cout << "\n";
-
-        for (AsyncRegion const& ar : ac.regions())
-        {
-            unsigned toProcID = dbl[pid][0].procID(ar.toIndex);
-
-            DataIndex toIdx = dbl[toProcID][0].localizeDataIndex(ar.toIndex); 
-
-            Box toBox = dbl[toProcID][0][toIdx];
-
-            std::cout << "REGION: "
-                      << streamBox(toBox, toProcID)
-                      << " " << streamBox(ar.toRegion) 
-                      << std::endl;
+            AsyncCopier ac;
     
-            // Give each region a unique id. 
-            (*data[toProcID][0])[toIdx].setVal(
-                ++regionCount, ar.toRegion, 2, 1
-            );
+            ac.exchangeDefine(dbl[pid][level], IntVect::Unit, pid);
+    
+            for (AsyncSendInstructions const& asi : ac.senderMotionPlan())
+            {
+                unsigned fromProcID = dbl[pid][level].procID(asi.fromIndex);
+                unsigned toProcID   = dbl[pid][level].procID(asi.toIndex);
+    
+                DataIndex fromIdx
+                    = dbl[fromProcID][level].localizeDataIndex(asi.fromIndex); 
+                DataIndex toIdx  
+                    = dbl[toProcID][level].localizeDataIndex(asi.toIndex); 
+    
+                Box fromBox = dbl[fromProcID][level][fromIdx];
+                Box toBox   = dbl[toProcID][level][toIdx];
+    
+                std::cout << "SEND: "
+                          << streamBox(fromBox, fromProcID)
+                          << " " << streamBox(asi.fromRegion) 
+                          << " -> "
+                          << streamBox(toBox, toProcID)
+                          << " " << streamBox(asi.toRegion) 
+                          << std::endl;
+    
+                // Copy the processor ID to the test variable
+                (*data[toProcID][level])[toIdx].copy(
+                                              (*data[fromProcID][level])[fromIdx]
+                                            , asi.fromRegion, 0
+                                            , asi.toRegion, 1
+                                            , 1);
+            }
+    
+            std::cout << "\n";
+    
+            for (AsyncRegion const& ar : ac.regions())
+            {
+                unsigned toProcID = dbl[pid][level].procID(ar.toIndex);
+    
+                DataIndex toIdx = dbl[toProcID][level].localizeDataIndex(ar.toIndex); 
+    
+                Box toBox = dbl[toProcID][level][toIdx];
+    
+                std::cout << "REGION: "
+                          << streamBox(toBox, toProcID)
+                          << " " << streamBox(ar.toRegion) 
+                          << std::endl;
+        
+                // Give each region a unique id. 
+                (*data[toProcID][level])[toIdx].setVal(
+                    ++regionCount, ar.toRegion, 2, 1
+                );
+            }
+    
+            std::cout << "\n";
         }
-
-        std::cout << "\n";
     }
 
     Vector<LevelData<FArrayBox>*> master_data(2);
