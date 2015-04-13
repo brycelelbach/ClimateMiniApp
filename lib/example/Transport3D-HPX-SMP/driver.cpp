@@ -141,7 +141,7 @@ int chombo_main(variables_map& vm)
         /*ghost_vector                             =*/IntVect::Unit
     );
 
-    transport_3d::aniso_profile profile(config,
+    transport_3d::transport_profile profile(config,
         // sine factors in the source term
         /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
 
@@ -162,15 +162,7 @@ int chombo_main(variables_map& vm)
         const_cast<Real&>(config.nt) = profile.dt()*ns; 
     }
 
-    IntVect lower_bound(IntVect::Zero);
-    IntVect upper_bound(
-        (config.nv*numProc()-1),
-        (config.nh*numProc()-1),
-        (config.nh*numProc()-1)
-    );
-
-    bool is_periodic[] = { true, true, true };
-    ProblemDomain base_domain(lower_bound, upper_bound, is_periodic);
+    ProblemDomain base_domain = profile.problem_domain(); 
 
     Vector<Box> boxes;
     domainSplit(base_domain, boxes, config.max_box_size, 1);
@@ -189,7 +181,7 @@ int chombo_main(variables_map& vm)
         { val = profile.initial_state(here); }
     );
 
-    typedef transport_3d::imex_operators<transport_3d::aniso_profile> imexop;
+    typedef transport_3d::imex_operators<transport_3d::transport_profile> imexop;
     typedef AsyncARK4<transport_3d::problem_state, imexop> ark_type;
  
     ark_type ark(imexop(profile), dbl, 1, config.ghost_vector, profile.dt(), false);
