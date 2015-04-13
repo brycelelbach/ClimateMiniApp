@@ -43,8 +43,7 @@ public:
 
   // Advance one step.
   void advance(
-    std::size_t& epoch
-  , DataIndex di
+    DataIndex di
   , Real t
   , X& state
     );
@@ -146,8 +145,7 @@ void AsyncARK4<X, IMEXOP>::resetDt(Real dt)
  */
 template <class X, class IMEXOP>
 void AsyncARK4<X, IMEXOP>::advance(
-    std::size_t& epoch
-  , DataIndex di
+    DataIndex di
   , Real t
   , X& state
     )
@@ -175,12 +173,12 @@ void AsyncARK4<X, IMEXOP>::advance(
 
         // Solve in-place for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(epoch, di, next_t, s_aIdiag, m_phi[stage]);
+        m_opImEx.solve(di, next_t, s_aIdiag, m_phi[stage]);
       }
 
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(epoch, di, next_t, m_kE, m_phi[stage]);
-      m_opImEx.implicitOp(epoch, di, next_t, m_kI, m_phi[stage]);
+      m_opImEx.explicitOp(di, next_t, m_kE, m_phi[stage]);
+      m_opImEx.implicitOp(di, next_t, m_kI, m_phi[stage]);
 
       // Add the known stage operator values to future solves 
       for (int k=stage+1; k < s_nStages; ++k)

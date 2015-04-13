@@ -200,6 +200,35 @@ struct problem_state
         U[di].plus(A.U[di], factor);
     }
 
+    void exchangeSync(DataIndex di)
+    { 
+        LocalExchangeSync(epoch_[di]++, di, U);
+    }
+
+    hpx::future<void> exchangeAllAsync()
+    {
+        DataIterator dit = U.dataIterator();
+
+        std::vector<hpx::future<void> > exchanges;
+    
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            exchanges.push_back(
+                hpx::async(
+                    [&](DataIndex di) { this->exchangeSync(di); }
+                  , dit()
+                ) 
+            );
+        }
+
+        return hpx::lcos::when_all(exchanges);
+    }
+
+    void exchangeAllSync()
+    {
+        exchangeAllAsync().get();
+    }
+
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FY;
     AsyncLevelData<FArrayBox> FZ;
@@ -222,14 +251,13 @@ struct imex_operators
 
     // TODO: Lift stencil.
     void explicitOp(
-        std::size_t& epoch
-      , DataIndex di
+        DataIndex di
       , Real t
       , problem_state& kE_
       , problem_state& phi_
         ) 
     {
-        LocalExchangeSync(epoch++, di, phi_.U);
+        phi_.exchangeSync(di);
         profile.reflux_horizontal(di, phi_);
 
         auto&       kE     = kE_.U[di];
@@ -326,8 +354,7 @@ struct imex_operators
     }
 
     void implicitOp(
-        std::size_t& epoch
-      , DataIndex di
+        DataIndex di
       , Real t
       , problem_state& kI
       , problem_state& phi
@@ -337,14 +364,13 @@ struct imex_operators
     }
 
     void solve(
-        std::size_t& epoch
-      , DataIndex di
+        DataIndex di
       , Real t
       , Real dtscale
       , problem_state& phi_
         )
     {
-        LocalExchangeSync(epoch++, di, phi_.U);
+        phi_.exchangeSync(di);
 
         auto& phi = phi_.U[di];
  
@@ -711,7 +737,7 @@ struct aniso_profile
     Real analytic_solution(Real x, Real y, Real z, Real t) 
     {
         Real const C = 1.0;
-        Real const c1 = 0.25;
+        Real const c1 = 0.5;
         Real const c2 = 0.25;
         return (C/(4.0*t+c1))
              * std::exp(

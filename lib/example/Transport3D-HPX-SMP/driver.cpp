@@ -207,7 +207,6 @@ int chombo_main(variables_map& vm)
 #endif 
 
     std::size_t step = 0;
-    std::size_t global_epoch = 0;
 
     hpx::util::high_resolution_timer clock;
 
@@ -220,21 +219,8 @@ int chombo_main(variables_map& vm)
 #if defined(CH_USE_HDF5)
         if (output_flag)
         { 
-            std::vector<hpx::future<void> > exchanges;
-    
-            // Fix ghost zones for output.
-            for (dit.begin(); dit.ok(); ++dit)
-            {
-                exchanges.push_back(
-                    hpx::async(LocalExchangeSync<FArrayBox>
-                             , global_epoch, dit(), std::ref(data.U))
-                );
-            }
-
-            hpx::lcos::when_all(exchanges).get();
-    
-            ++global_epoch;
-    
+            data.exchangeAllSync();
+ 
             output(data.U, "phi.%06u.hdf5", "phi", step); 
     
             transport_3d::problem_state analytic(dbl, 1, config.ghost_vector);
@@ -268,16 +254,15 @@ int chombo_main(variables_map& vm)
         {
             futures.emplace_back(
                 hpx::async(
-                    [&](std::size_t epoch, DataIndex di)
-                    { ark.advance(epoch, di, time, data); }
-                  , global_epoch, dit()
+                    [&](DataIndex di)
+                    { ark.advance(di, time, data); }
+                  , dit()
                 )
             );
         }
 
         hpx::lcos::when_all(futures).get();
 
-        global_epoch += 2 * ark_type::s_nStages - 1;
         time += dt;
     } 
 
@@ -299,20 +284,7 @@ int chombo_main(variables_map& vm)
 #if defined(CH_USE_HDF5)
     if (output_flag)
     { 
-        DataIterator dit = data.U.dataIterator();
-
-        std::vector<hpx::future<void> > exchanges;
-    
-        // Fix ghost zones for output.
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            exchanges.push_back(
-                hpx::async(LocalExchangeSync<FArrayBox>
-                         , global_epoch, dit(), std::ref(data.U))
-            );
-        }
-
-        hpx::lcos::when_all(exchanges).get();
+        data.exchangeAllSync();
 
         output(data.U, "phi.%06u.hdf5", "phi", step); 
     
@@ -323,6 +295,8 @@ int chombo_main(variables_map& vm)
         );
 
         output(analytic.U, "analytic.%06u.hdf5", "phi", step); 
+
+        DataIterator dit = data.U.dataIterator();
     
         for (dit.begin(); dit.ok(); ++dit)
             analytic.increment(dit(), data, -1.0);
@@ -360,10 +334,10 @@ int main(int argc, char** argv)
         , boost::program_options::value<Real>()->default_value(0.25e-2, "0.25e-2")
         , "x diffusion coefficient")
         ( "ky"
-        , boost::program_options::value<Real>()->default_value(1.0e-2, "1.0e-2")
+        , boost::program_options::value<Real>()->default_value(1.0e-3, "1.0e-3")
         , "y diffusion coefficient")
         ( "kz"
-        , boost::program_options::value<Real>()->default_value(1.0e-2, "1.0e-2")
+        , boost::program_options::value<Real>()->default_value(1.0e-3, "1.0e-3")
         , "z diffusion coefficient")
 
         ( "vy"
