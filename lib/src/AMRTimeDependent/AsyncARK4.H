@@ -43,10 +43,10 @@ public:
 
   // Advance one step.
   void advance(
-    DataIndex di
-  , std::size_t epoch
+    std::size_t& epoch
+  , DataIndex di
   , Real t
-  , AsyncLevelData<X>& state
+  , X& state
     );
 
   // Return current dense output coefs, 0th power first, etc.
@@ -75,10 +75,10 @@ private:
   bool m_denseOutput;               ///< True if dense output is enabled.
   Real m_dt;                        ///< Timestep size.
 
-  AsyncLevelData<X> m_phi[s_nStages];
-  AsyncLevelData<X> m_denseCoefs[s_nDenseCoefs];
-  AsyncLevelData<X> m_kE;
-  AsyncLevelData<X> m_kI;
+  X m_phi[s_nStages];
+  X m_denseCoefs[s_nDenseCoefs];
+  X m_kE;
+  X m_kI;
 
   IMEXOP m_opImEx;
 };
@@ -102,21 +102,17 @@ AsyncARK4<X, IMEXOP>::AsyncARK4(
   // define X
   for (int stage = 0; stage < s_nStages; stage++)
   {
-    m_phi[stage].define(dbl, ghost);
-    DefineData(m_phi[stage], comps);
+    m_phi[stage].define(dbl, comps, ghost);
   }
 
   // define dX
-  m_kE.define(dbl, ghost); // never exchanged.
-  m_kI.define(dbl, ghost); // never exchanged.
-  DefineData(m_kE, comps);
-  DefineData(m_kI, comps);
+  m_kE.define(dbl, comps, ghost); // never exchanged.
+  m_kI.define(dbl, comps, ghost); // never exchanged.
 
   // if dense output is requested, need more storage
   for (int coef = 0; m_denseOutput && (coef < s_nDenseCoefs); coef++)
   {
-    m_denseCoefs[coef].define(dbl, ghost); // never exchanged.
-    DefineData(m_denseCoefs[coef], comps);
+    m_denseCoefs[coef].define(dbl, comps, ghost); // never exchanged.
   }
 }
 
@@ -150,23 +146,23 @@ void AsyncARK4<X, IMEXOP>::resetDt(Real dt)
  */
 template <class X, class IMEXOP>
 void AsyncARK4<X, IMEXOP>::advance(
-    DataIndex di
-  , std::size_t epoch
+    std::size_t& epoch
+  , DataIndex di
   , Real t
-  , AsyncLevelData<X>& state
+  , X& state
     )
 {
   // Reset the dense output coefs
   if (m_denseOutput)
   {
     for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
-      m_denseCoefs[icoef][di].data.zero();
+      m_denseCoefs[icoef].zero(di);
   }
 
   // Set m_phi[0] := state, all others 0
-  m_phi[0][di].data.copy(state[di].data);
+  m_phi[0].copy(di, state);
   for (int stage = 1; stage < s_nStages; stage++)
-    m_phi[stage][di].data.zero();
+    m_phi[stage].zero(di);
 
   // For each stage
   for (int stage = 0; stage < s_nStages; stage++)
@@ -175,38 +171,34 @@ void AsyncARK4<X, IMEXOP>::advance(
       if (stage > 0)
       {
         // Do the solve - copy rhs from phi[stage]
-        m_phi[stage][di].data.increment(m_phi[0][di].data);
-
-        LocalExchangeSync(epoch++, di, m_phi[stage]);
+        m_phi[stage].increment(di, m_phi[0]);
 
         // Solve in-place for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(m_phi[stage][di].data, next_t, s_aIdiag);
+        m_opImEx.solve(epoch, di, next_t, s_aIdiag, m_phi[stage]);
       }
 
-      LocalExchangeSync(epoch++, di, m_phi[stage]);
-
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(m_kE[di].data, m_phi[stage][di].data, next_t);
-      m_opImEx.implicitOp(m_kI[di].data, m_phi[stage][di].data, next_t);
+      m_opImEx.explicitOp(epoch, di, next_t, m_kE, m_phi[stage]);
+      m_opImEx.implicitOp(epoch, di, next_t, m_kI, m_phi[stage]);
 
       // Add the known stage operator values to future solves 
       for (int k=stage+1; k < s_nStages; ++k)
       {
-        m_phi[k][di].data.increment(m_kE[di].data, m_dt*s_aE[k][stage]);
-        m_phi[k][di].data.increment(m_kI[di].data, m_dt*s_aI[k][stage]);
+        m_phi[k].increment(di, m_kE, m_dt*s_aE[k][stage]);
+        m_phi[k].increment(di, m_kI, m_dt*s_aI[k][stage]);
       }
 
       // Accumulate the final solution and accum registers
-      state[di].data.increment(m_kE[di].data, m_dt*s_b[stage]);
-      state[di].data.increment(m_kI[di].data, m_dt*s_b[stage]);
+      state.increment(di, m_kE, m_dt*s_b[stage]);
+      state.increment(di, m_kI, m_dt*s_b[stage]);
 
       if (m_denseOutput)
       {
         for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
         {
-          m_denseCoefs[icoef][di].data.increment(m_kE[di].data, m_dt*s_bstar[icoef][stage]);
-          m_denseCoefs[icoef][di].data.increment(m_kI[di].data, m_dt*s_bstar[icoef][stage]);
+          m_denseCoefs[icoef].increment(di, m_kE, m_dt*s_bstar[icoef][stage]);
+          m_denseCoefs[icoef].increment(di, m_kI, m_dt*s_bstar[icoef][stage]);
         }
       }
     }
@@ -228,12 +220,12 @@ void AsyncARK4<X, IMEXOP>::denseOutputCoefs(DataIndex di, Vector<X*>& interpCoef
   // Copy over the dense coef values
 
   // First coefficient is just the old state
-  interpCoefs[0]->copy(m_phi[0][di].data);
+  interpCoefs[0]->copy(di, m_phi[0]);
   
   // Next coefs are our dense output
   for (int icoef = 1; icoef < nCoef ; ++icoef)
   {
-    interpCoefs[icoef]->copy(m_denseCoefs[icoef-1][di].data);
+    interpCoefs[icoef]->copy(di, m_denseCoefs[icoef-1]);
   }
 }
 
