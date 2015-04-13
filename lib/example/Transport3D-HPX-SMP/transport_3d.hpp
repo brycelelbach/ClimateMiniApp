@@ -249,6 +249,50 @@ struct imex_operators
     {
     }
 
+    void horizontalFlux(DataIndex di, Real t, problem_state& phi_) const
+    { // {{{
+        auto const& phi = phi_.U[di];
+
+        auto& FY = phi_.FY[di];
+        auto& FZ = phi_.FZ[di]; 
+
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd(); 
+
+        lower.shift(profile.ghostVect());
+        upper.shift(-1*profile.ghostVect());
+
+        auto FluxY = [&](IntVect lower, IntVect upper)
+        {
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+                for (auto j = phi.smallEnd()[1]+1; j <= phi.bigEnd()[1]; ++j)
+                    for (auto i = lower[0]; i <= upper[0]; ++i)
+                    {
+                        IntVect here(i, j, k);
+
+                        FY(here) = profile.horizontal_flux_stencil(here, 1, phi);
+                    };
+        };
+
+        auto FluxZ = [&](IntVect lower, IntVect upper)
+        {
+            for (auto k = phi.smallEnd()[2]+1; k <= phi.bigEnd()[2]; ++k)
+                for (auto j = lower[1]; j <= upper[1]; ++j)
+                    for (auto i = lower[0]; i <= upper[0]; ++i)
+                    {
+                        IntVect here(i, j, k);
+    
+                        FZ(here) = profile.horizontal_flux_stencil(here, 2, phi);
+                    };
+        };
+
+        auto fut_y = hpx::async(FluxY, lower, upper);
+        auto fut_z = hpx::async(FluxZ, lower, upper);
+
+        fut_y.get();
+        fut_z.get();
+    } // }}}
+
     // TODO: Lift stencil.
     void explicitOp(
         DataIndex di
@@ -258,12 +302,12 @@ struct imex_operators
         ) 
     {
         phi_.exchangeSync(di);
-        profile.reflux_horizontal(di, t, phi_);
+        horizontalFlux(di, t, phi_);
 
-        auto&       kE     = kE_.U[di];
-        auto const& phi    = phi_.U[di];
-        auto const& phi_FY = phi_.FY[di];
-        auto const& phi_FZ = phi_.FZ[di];
+        auto&       kE  = kE_.U[di];
+        auto const& phi = phi_.U[di];
+        auto const& FY  = phi_.FY[di];
+        auto const& FZ  = phi_.FZ[di];
  
         IntVect lower, upper;
 
@@ -280,7 +324,7 @@ struct imex_operators
                 {
                     IntVect here(i, j, k);
 
-                    kE(here) = profile.horizontal_stencil(here, phi_FY, phi_FZ)
+                    kE(here) = profile.horizontal_stencil(here, FY, FZ)
                              + profile.source_term(here, t); 
                 }
     }
@@ -355,23 +399,23 @@ struct dirichlet_boundary_conditions
         Profile const& profile
       , DataIndex di
       , Real t
-      , problem_state& U
+      , problem_state& O
       , problem_state& phi
         )
       : profile_(profile)
       , di_(di)
       , t_(t)
-      , kE_(ke)
+      , O_(O)
       , phi_(phi)
     {} 
     
     IntVect operator()(
         boundary_type type
-      , size_t dir
+      , std::size_t dir
       , IntVect V
         ) const
     { 
-        auto&       kE     = kE_.U[di];
+        auto&       O      = O_.U[di];
         auto const& phi    = phi_.U[di];
 
         int sign = (upper_boundary(type) ? -1 : 1);
@@ -395,7 +439,7 @@ struct dirichlet_boundary_conditions
                     for (int c = 0; c <= profile_.ghostVect()[dir]; ++c)
                     {
                         out.shift(dir, sign*c);
-                        U(out) = profile_.outside_domain(type, out, phi, t); 
+                        O(out) = profile_.outside_domain(type, out, phi, t); 
                     } 
                 }
         }
@@ -417,7 +461,7 @@ struct dirichlet_boundary_conditions
                     bdry.setVal(A, a);
                     bdry.setVal(B, b);
 
-                    U(bdry) = profile_.boundary(type, bdry, phi, t); 
+                    O(bdry) = profile_.boundary(type, bdry, phi, t); 
                 }
 
             int sign = (upper_boundary(type) ? -1 : 1);
@@ -431,7 +475,7 @@ struct dirichlet_boundary_conditions
     Profile const& profile_;
     DataIndex di_;
     Real t_;
-    problem_state& kE_;
+    problem_state& O_;
     problem_state& phi_;
 }; 
 
@@ -627,7 +671,6 @@ struct transport_profile : profile_base<transport_profile>
       , problem_state& phi_
         ) const
     { // {{{
-        auto&       kE     = kE_.U[di];
         auto const& phi    = phi_.U[di];
 
         IntVect lower = phi.smallEnd();
@@ -666,12 +709,53 @@ struct transport_profile : profile_base<transport_profile>
         return 0.0;
     } 
 */
+    
+    Real horizontal_flux_stencil(
+        IntVect here
+      , std::size_t dir
+      , FArrayBox const& phi
+        ) const
+    { // {{{
+        Real const dh = std::get<1>(dp()); 
+
+        Real k = 0.0;
+        Real v = 0.0;
+        IntVect left;
+
+        if      (1 == dir)
+        { 
+            k = ky;
+            v = vy;
+            left = IntVect(here[0], here[1]-1, here[2]);
+        }
+
+        else if (2 == dir)
+        {
+            k = kz;
+            v = vz;
+            left = IntVect(here[0], here[1], here[2]-1);
+        }
+
+        else
+            assert(false);
+
+        // NOTE: This currently assumes constant-coefficients 
+        // and assumes we're just taking an average of the
+        // coefficients. For variable-coefficient we need
+        // to actually take an average. 
+        // 
+        // F_{j-1/2} ~= -k_{j-1/2}/h (phi_j - phi_{j-1})
+
+        return -1.0 * ( (k/dh) * (phi(here) - phi(left))  // Diffusion 
+                      - 0.5 * v * (phi(here) + phi(left)) // Advection 
+                      );
+    } // }}}
 
     // FIXME: IntVect indexing may be expensive, compare to Hans' loops
     Real horizontal_stencil(
         IntVect here
-      , FArrayBox const& phi_FY
-      , FArrayBox const& phi_FZ
+      , FArrayBox const& FY
+      , FArrayBox const& FZ
         ) const
     { // {{{ 
         IntVect n(here[0], here[1], here[2]+1); // north
@@ -680,92 +764,7 @@ struct transport_profile : profile_base<transport_profile>
         IntVect w(here[0], here[1], here[2]);   // west
 
         Real const dh = std::get<1>(dp()); 
-        return (-1.0/dh) * (phi_FY(e) - phi_FY(w) + phi_FZ(n) - phi_FZ(s)); 
-    } // }}}
-
-    // FIXME: Move to imex_operator
-    void reflux_horizontal(DataIndex di, Real t, problem_state& soln) const
-    { // {{{
-        auto const& U = soln.U[di];
-
-        auto& FY = soln.FY[di];
-        auto& FZ = soln.FZ[di]; 
-
-        IntVect lower = U.smallEnd();
-        IntVect upper = U.bigEnd(); 
-
-        lower.shift(ghostVect());
-        upper.shift(-1*ghostVect());
-
-// FIXME FIXME
-//        FY.setVal(0.0);
-//        FZ.setVal(0.0);
-
-        auto FluxY = [&](IntVect lower, IntVect upper)
-        {
-            for (auto k = lower[2]; k <= upper[2]; ++k)
-                for (auto j = U.smallEnd()[1]+1; j <= U.bigEnd()[1]; ++j)
-                    for (auto i = lower[0]; i <= upper[0]; ++i)
-                    {
-                        // NOTE: This currently assumes constant-coefficients 
-                        // and assumes we're just taking an average of the
-                        // coefficients. For variable-coefficient we need
-                        // to actually take an average. 
-                        // 
-                        // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
-    
-                        Real const dh = std::get<1>(dp()); 
-    
-                        IntVect U_left_y(i, j-1, k  );
-    
-                        IntVect U_here(i,   j,   k  );
-                        IntVect F_here(i, j, k);
-    
-    //                    if (U(U_here) > 1e200 || U(U_left_y) > 1e200)
-    //                        std::cout << "y: " << U_here << " " << U(U_here) << " " << U(U_left_y) << "\n";
-    
-                        FY(F_here) =
-                            -1.0 * ( (ky/dh) * (U(U_here) - U(U_left_y))  // Diffusion
-                                   - 0.5 * vy * (U(U_here) + U(U_left_y)) // Advection
-                                   );
-                    }
-        };
-
-        auto FluxZ = [&](IntVect lower, IntVect upper)
-        {
-            for (auto k = U.smallEnd()[2]+1; k <= U.bigEnd()[2]; ++k)
-                for (auto j = lower[1]; j <= upper[1]; ++j)
-                    for (auto i = lower[0]; i <= upper[0]; ++i)
-                    {
-                        // NOTE: This currently assumes constant-coefficients 
-                        // and assumes we're just taking an average of the
-                        // coefficients. For variable-coefficient we need
-                        // to actually take an average. 
-                        // 
-                        // F_{j-1/2} ~= -k_{j-1/2}/h (U_j - U_{j-1})
-    
-                        Real const dh = std::get<1>(dp()); 
-    
-                        IntVect U_left_z(i, j,   k-1);
-    
-                        IntVect U_here(i,   j,   k  );
-                        IntVect F_here(i, j, k);
-    
-    //                    if (U(U_here) > 1e200 || U(U_left_z) > 1e200)
-    //                        std::cout << "z: " << U_here << " " << U(U_here) << " " << U(U_left_z) << "\n";
-    
-                        FZ(F_here) =
-                            -1.0 * ( (kz/dh) * (U(U_here) - U(U_left_z))  // Diffusion 
-                                   - 0.5 * vz * (U(U_here) + U(U_left_z)) // Advection 
-                                   );
-                    }
-        };
-
-        auto fut_y = hpx::async(FluxY, lower, upper);
-        auto fut_z = hpx::async(FluxZ, lower, upper);
-
-        fut_y.get();
-        fut_z.get();
+        return (-1.0/dh) * (FY(e) - FY(w) + FZ(n) - FZ(s)); 
     } // }}}
 
     typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
