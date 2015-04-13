@@ -66,8 +66,8 @@ void AsyncFineInterp::pwcInterpToFine(
 {
     if (averageFromDest)
     {
-        FArrayBox const& fineFab = fineData[di].data;
-        FArrayBox&       crseFab = m_cf_data[di].data;
+        FArrayBox const& fineFab = fineData[di];
+        FArrayBox&       crseFab = m_cf_data[di];
         Box const&       crseBox = m_cf_data.disjointBoxLayout()[di];
 
         Box refbox(IntVect::Zero, (m_ref_ratio-1)*IntVect::Unit);
@@ -87,8 +87,8 @@ void AsyncFineInterp::pwcInterpToFine(
       , m_interpCopier
     );
 
-    FArrayBox const& cfFab   = m_cf_data[di].data;
-    FArrayBox&       fineFab = fineData[di].data;
+    FArrayBox const& cfFab   = m_cf_data[di];
+    FArrayBox&       fineFab = fineData[di];
     Box const&       cfBox   = m_cf_data.disjointBoxLayout()[di];
 
     pwcInterpGridData(cfFab, fineFab, cfBox);

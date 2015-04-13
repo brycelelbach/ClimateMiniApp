@@ -41,14 +41,14 @@ void LocalCopyImpl(
     ) 
 {
     CH_assert(
-        to_ld[asi.toIndex].data.nComp() == from_ld[asi.fromIndex].data.nComp()
+        to_ld[asi.toIndex].nComp() == from_ld[asi.fromIndex].nComp()
     );
 
-    to_ld[asi.toIndex].data.copy(
-        from_ld[asi.fromIndex].data
+    to_ld[asi.toIndex].copy(
+        from_ld[asi.fromIndex]
       , asi.fromRegion, /* starting comp */ 0
       , asi.toRegion,   /* starting comp */ 0
-      , from_ld[asi.fromIndex].data.nComp());
+      , from_ld[asi.fromIndex].nComp());
 
     to_ld[asi.toIndex].store(ct, epoch, asi.toRegion); 
 }

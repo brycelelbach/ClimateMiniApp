@@ -113,7 +113,7 @@ void DefineData(
     {
         Box b = ld.disjointBoxLayout()[dit()];
         b.grow(ld.ghostVect());
-        ld[dit()].data.define(b, comps);
+        ld[dit()].define(b, comps);
     } 
 }
 
@@ -121,14 +121,14 @@ template <typename T>
 void DefineData(
     LayoutData<T>& ld
   , int comps = 1
-  , IntVect ghosts = IntVect::Zero
+  , IntVect ghost = IntVect::Zero
     )
 {
     DataIterator dit(ld.dataIterator());
     for (dit.begin(); dit.ok(); ++dit)
     {
         Box b = ld.boxLayout()[dit()];
-        b.grow(ghosts);
+        b.grow(ghost);
         ld[dit()].define(b, comps);
     } 
 }

@@ -36,7 +36,7 @@ enum CommType
 };
 
 template <typename T>
-struct DataflowBox
+struct DataflowBox : T
 {
     // These futures aren't actually storing any data, so we don't take a hit
     // by using shared futures instead of unique futures. This allows us to
@@ -45,12 +45,10 @@ struct DataflowBox
 
     // Regions that have external dependencies.
     std::array<std::map<Box, queue>, Comm_Last> regions; 
-    
-    T data;
 
     DataflowBox()
-      : regions()
-      , data()
+      : T()
+      , regions()
     {} 
 
     DataflowBox(DataflowBox const& rhs) = delete;
@@ -80,7 +78,7 @@ struct DataflowBox
               , BOOST_CURRENT_FUNCTION);
 
         auto WF = hpx::util::unwrapped(
-            HPX_STD_BIND(std::forward<F>(f), HPX_STD_REF(data), b)
+            std::bind(std::forward<F>(f), std::ref(*this), b)
         );
         return (*it).second->receive(epoch).then(WF);
     }
@@ -98,7 +96,7 @@ struct DataflowBox
         for (auto& kv : regions[ct])
         {
             auto WF = hpx::util::unwrapped(
-                HPX_STD_BIND(std::forward<F>(f), HPX_STD_REF(data), kv.first)
+                std::bind(std::forward<F>(f), std::ref(*this), kv.first)
             );
             deps.emplace_back(kv.second->receive(epoch).then(WF));
         }
