@@ -125,7 +125,7 @@ int chombo_main(variables_map& vm)
     for (dit.begin(); dit.ok(); ++dit)
     {
         exchanges.push_back(
-            hpx::async(LocalExchangeSync, 0, dit(), HPX_STD_REF(ald))
+            hpx::async(LocalExchangeSync<FArrayBox>, 0, dit(), std::ref(ald))
         ); 
     }
 
