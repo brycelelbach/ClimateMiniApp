@@ -27,7 +27,7 @@
 
 #include <fenv.h>
 
-#include "transport_3d.hpp"
+#include "solver.hpp"
 
 template <typename F>
 void visit(AsyncLevelData<FArrayBox>& soln, F f)
@@ -133,7 +133,7 @@ int chombo_main(variables_map& vm)
         return -1;
     } 
 
-    transport_3d::configuration config(
+    climate_mini_app::configuration config(
         /*nt: physical time to step to             =*/vm["nt"].as<Real>(),
         /*nh: y and z (horizontal) extent per core =*/vm["nh"].as<std::uint64_t>(),
         /*nv: x (vertical) extent per core         =*/vm["nv"].as<std::uint64_t>(),
@@ -141,9 +141,11 @@ int chombo_main(variables_map& vm)
         /*ghost_vector                             =*/IntVect::Unit
     );
 
-    transport_3d::transport_profile profile(config,
-        // sine factors in the source term
-        /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
+#if 0
+    typedef climate_mini_app::transport_profile profile_type;
+
+    profile_type profile(config,
+        /*C=*/2.0,   /*c1=*/0.5,   /*c2=*/0.25,
 
         // diffusion coefficients
         /*kx=*/vm["kx"].as<Real>(),
@@ -153,6 +155,18 @@ int chombo_main(variables_map& vm)
         // velocity components
         /*ky=*/vm["vy"].as<Real>(), 
         /*kz=*/vm["vz"].as<Real>()
+    ); 
+#endif
+
+    typedef climate_mini_app::diffusion_profile profile_type;
+
+    profile_type profile(config,
+        /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
+
+        // diffusion coefficients
+        /*kx=*/vm["kx"].as<Real>(),
+        /*ky=*/vm["ky"].as<Real>(), 
+        /*kz=*/vm["kz"].as<Real>()
     ); 
 
     if (vm.count("ns"))
@@ -174,22 +188,22 @@ int chombo_main(variables_map& vm)
 
     DisjointBoxLayout dbl(boxes, procs, base_domain);
 
-    transport_3d::problem_state data(dbl, 1, config.ghost_vector);
+    climate_mini_app::problem_state data(dbl, 1, config.ghost_vector);
 
     visit(data.U,
         [&profile](Real& val, IntVect here)
         { val = profile.initial_state(here); }
     );
 
-    typedef transport_3d::imex_operators<transport_3d::transport_profile> imexop;
-    typedef AsyncARK4<transport_3d::problem_state, imexop> ark_type;
+    typedef climate_mini_app::imex_operators<profile_type> imexop;
+    typedef AsyncARK4<climate_mini_app::problem_state, imexop> ark_type;
  
     ark_type ark(imexop(profile), dbl, 1, config.ghost_vector, profile.dt(), false);
 
 #if defined(CH_USE_HDF5)
     if (output_flag)
     {
-        transport_3d::problem_state src(dbl, 1, config.ghost_vector);
+        climate_mini_app::problem_state src(dbl, 1, config.ghost_vector);
         visit(src.U,
             [&profile](Real& val, IntVect here)
             { val = profile.source_term(here, 0.0); }
@@ -215,7 +229,7 @@ int chombo_main(variables_map& vm)
  
             output(data.U, "phi.%06u.hdf5", "phi", step); 
     
-            transport_3d::problem_state analytic(dbl, 1, config.ghost_vector);
+            climate_mini_app::problem_state analytic(dbl, 1, config.ghost_vector);
             visit(analytic.U,
                 [&profile, time](Real& val, IntVect here)
                 { val = profile.analytic_solution(here, time); }
@@ -280,7 +294,7 @@ int chombo_main(variables_map& vm)
 
         output(data.U, "phi.%06u.hdf5", "phi", step); 
     
-        transport_3d::problem_state analytic(dbl, 1, config.ghost_vector);
+        climate_mini_app::problem_state analytic(dbl, 1, config.ghost_vector);
         visit(analytic.U,
             [&profile, time](Real& val, IntVect here)
             { val = profile.analytic_solution(here, time); }
