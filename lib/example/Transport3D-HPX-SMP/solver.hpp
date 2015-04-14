@@ -46,10 +46,20 @@
 namespace climate_mini_app
 {
 
+enum ProblemType
+{
+    Problem_Invalid             = -1,
+    Problem_Diffusion           = 0,
+    Problem_AdvectionDiffusion  = 1,
+    Problem_Last                = Problem_AdvectionDiffusion
+};
+
 struct configuration
 {
     ///////////////////////////////////////////////////////////////////////////
     // Parameters.
+
+    ProblemType const problem;
 
     Real const nt; ///< Physical time to step to.
 
@@ -60,20 +70,39 @@ struct configuration
 
     IntVect const ghost_vector;
 
+    bool const header;  ///< Print header for CSV timing data.
+    bool const verbose; ///< Print status updates.
+
+#if defined(CH_USE_HDF5)
+    bool const output; ///< Generate HDF5 output.
+#endif    
+
     ///////////////////////////////////////////////////////////////////////////
 
     configuration(
-        Real nt_ 
+        ProblemType problem_
+      , Real nt_ 
       , std::uint64_t nh_
       , std::uint64_t nv_
       , std::uint64_t max_box_size_
       , IntVect ghost_vector_
+      , bool header_
+      , bool verbose_
+#if defined(CH_USE_HDF5)
+      , bool output_
+#endif
         )
-      : nt(nt_)
+      : problem(problem_)
+      , nt(nt_)
       , nh(nh_)
       , nv(nv_)
       , max_box_size(max_box_size_)
       , ghost_vector(ghost_vector_)
+      , header(header_)
+      , verbose(verbose_)
+#if defined(CH_USE_HDF5)
+      , output(output_)
+#endif
     {}
 }; 
 
@@ -575,22 +604,20 @@ struct profile_base
             || is_boundary(LOWER_Z, z);
     } // }}}
 
+    configuration const config;
+
   private:
     Derived const& derived() const
     {
         return static_cast<Derived const&>(*this);
     }
-
-  protected:
-    configuration config;
-
 };
 
-struct transport_profile : profile_base<transport_profile>
+struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 {
-    typedef profile_base<transport_profile> base_type;
+    typedef profile_base<advection_diffusion_profile> base_type;
 
-    transport_profile(
+    advection_diffusion_profile(
         configuration config_
       , Real C_, Real c1_, Real c2_
       , Real kx_, Real ky_, Real kz_

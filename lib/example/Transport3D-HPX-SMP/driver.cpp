@@ -99,81 +99,27 @@ void output(
 }
 #endif
 
-using boost::program_options::variables_map;
+template <typename Profile>
+void stepLoop(
+    Profile const& profile
+    )
+{ 
+    climate_mini_app::configuration const& config = profile.config;
 
-int chombo_main(variables_map& vm)
-{
-    feenableexcept(FE_DIVBYZERO);
-    feenableexcept(FE_INVALID);
-    feenableexcept(FE_OVERFLOW);
-
-    bool verbose_flag = vm.count("verbose");
-#if defined(CH_USE_HDF5)
-    bool output_flag = vm["output"].as<bool>();
-#endif
-
-    if (verbose_flag)
+    if (config.verbose)
         std::cout << "Starting HPX/Chombo Climate Mini-App...\n"
                   << std::flush; 
 
-    if (vm.count("header"))
-        std::cout << "nt,ns,nh,nv,mbs,kx,ky,kz,vy,vz,Boxes,PUs,Walltime [s]\n"
-                  << std::flush;
-
-    // If both time parameters were specified, give an error.
-    if (!vm["nt"].defaulted() && vm.count("ns"))
+    if (config.header)
     {
-        char const* fmt = "ERROR: Both --nt (=%.4g) and --ns (%u) were "
-                          "specified, please provide only one time "
-                          "parameter.\n"; 
-        std::cout << ( boost::format(fmt)
-                     % vm["nt"].as<Real>()
-                     % vm["ns"].as<std::uint64_t>()) 
-                  << std::flush;
-        return -1;
-    } 
-
-    climate_mini_app::configuration config(
-        /*nt: physical time to step to             =*/vm["nt"].as<Real>(),
-        /*nh: y and z (horizontal) extent per core =*/vm["nh"].as<std::uint64_t>(),
-        /*nv: x (vertical) extent per core         =*/vm["nv"].as<std::uint64_t>(),
-        /*max_box_size                             =*/vm["mbs"].as<std::uint64_t>(),
-        /*ghost_vector                             =*/IntVect::Unit
-    );
-
-#if 0
-    typedef climate_mini_app::transport_profile profile_type;
-
-    profile_type profile(config,
-        /*C=*/2.0,   /*c1=*/0.5,   /*c2=*/0.25,
-
-        // diffusion coefficients
-        /*kx=*/vm["kx"].as<Real>(),
-        /*ky=*/vm["ky"].as<Real>(), 
-        /*kz=*/vm["kz"].as<Real>(),
-
-        // velocity components
-        /*ky=*/vm["vy"].as<Real>(), 
-        /*kz=*/vm["vz"].as<Real>()
-    ); 
-#endif
-
-    typedef climate_mini_app::diffusion_profile profile_type;
-
-    profile_type profile(config,
-        /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
-
-        // diffusion coefficients
-        /*kx=*/vm["kx"].as<Real>(),
-        /*ky=*/vm["ky"].as<Real>(), 
-        /*kz=*/vm["kz"].as<Real>()
-    ); 
-
-    if (vm.count("ns"))
-    {
-        // We want a multiplier slightly smaller than the desired timestep count.
-        Real ns = Real(vm["ns"].as<std::uint64_t>()-1)+0.8;
-        const_cast<Real&>(config.nt) = profile.dt()*ns; 
+        if      (climate_mini_app::Problem_Diffusion == config.problem) 
+            std::cout << "nt,ns,nh,nv,mbs,kx,ky,kz,Boxes,PUs,Walltime [s]\n"
+                      << std::flush;
+        else if (climate_mini_app::Problem_AdvectionDiffusion == config.problem) 
+            std::cout << "nt,ns,nh,nv,mbs,kx,ky,kz,vy,vz,Boxes,PUs,Walltime [s]\n"
+                      << std::flush;
+        else
+            assert(false);
     }
 
     ProblemDomain base_domain = profile.problem_domain(); 
@@ -195,13 +141,13 @@ int chombo_main(variables_map& vm)
         { val = profile.initial_state(here); }
     );
 
-    typedef climate_mini_app::imex_operators<profile_type> imexop;
+    typedef climate_mini_app::imex_operators<Profile> imexop;
     typedef AsyncARK4<climate_mini_app::problem_state, imexop> ark_type;
  
     ark_type ark(imexop(profile), dbl, 1, config.ghost_vector, profile.dt(), false);
 
 #if defined(CH_USE_HDF5)
-    if (output_flag)
+    if (config.output)
     {
         climate_mini_app::problem_state src(dbl, 1, config.ghost_vector);
         visit(src.U,
@@ -223,7 +169,7 @@ int chombo_main(variables_map& vm)
         DataIterator dit = data.U.dataIterator();
 
 #if defined(CH_USE_HDF5)
-        if (output_flag)
+        if (config.output)
         { 
             data.exchangeAllSync();
  
@@ -247,7 +193,7 @@ int chombo_main(variables_map& vm)
         double const dt = profile.dt();
         ark.resetDt(dt);
 
-        if (verbose_flag)
+        if (config.verbose)
         {
             char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g\n";
             std::cout << (boost::format(fmt) % step % time % dt)
@@ -272,23 +218,42 @@ int chombo_main(variables_map& vm)
         time += dt;
     } 
 
-    std::cout << config.nt << "," 
-              << step << ","
-              << config.nh << ","
-              << config.nv << ","
-              << config.max_box_size << ","
-              << profile.kx << ","
-              << profile.ky << ","
-              << profile.kz << ","
-              << profile.vy << ","
-              << profile.vz << ","
-              << boxes.size() << ","
-              << hpx::get_num_worker_threads() << ","
-              << clock.elapsed() << "\n"
-              << std::flush;
+    if (config.header)
+    {
+        if      (climate_mini_app::Problem_Diffusion == config.problem) 
+            std::cout << config.nt << "," 
+                      << step << ","
+                      << config.nh << ","
+                      << config.nv << ","
+                      << config.max_box_size << ","
+                      << profile.kx << ","
+                      << profile.ky << ","
+                      << profile.kz << ","
+                      << boxes.size() << ","
+                      << hpx::get_num_worker_threads() << ","
+                      << clock.elapsed() << "\n"
+                      << std::flush;
+        else if (climate_mini_app::Problem_AdvectionDiffusion == config.problem) 
+            std::cout << config.nt << "," 
+                      << step << ","
+                      << config.nh << ","
+                      << config.nv << ","
+                      << config.max_box_size << ","
+                      << profile.kx << ","
+                      << profile.ky << ","
+                      << profile.kz << ","
+                      << profile.vy << ","
+                      << profile.vz << ","
+                      << boxes.size() << ","
+                      << hpx::get_num_worker_threads() << ","
+                      << clock.elapsed() << "\n"
+                      << std::flush;
+        else
+            assert(false);
+    }
 
 #if defined(CH_USE_HDF5)
-    if (output_flag)
+    if (config.output)
     { 
         data.exchangeAllSync();
 
@@ -309,6 +274,124 @@ int chombo_main(variables_map& vm)
         output(analytic.U, "error.%06u.hdf5", "phi", step); 
     }
 #endif
+}
+
+using boost::program_options::variables_map;
+
+int chombo_main(variables_map& vm)
+{
+    feenableexcept(FE_DIVBYZERO);
+    feenableexcept(FE_INVALID);
+    feenableexcept(FE_OVERFLOW);
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Command-line processing
+
+    // If both time parameters were specified, give an error.
+    if (!vm["nt"].defaulted() && vm.count("ns"))
+    {
+        char const* fmt = "ERROR: Both --nt (=%.4g) and --ns (%u) were "
+                          "specified, please provide only one time "
+                          "parameter.\n"; 
+        std::cout << ( boost::format(fmt)
+                     % vm["nt"].as<Real>()
+                     % vm["ns"].as<std::uint64_t>()) 
+                  << std::flush;
+        return 1;
+    } 
+
+    std::string const problem_str = vm["problem"].as<std::string>();
+
+    climate_mini_app::ProblemType problem = climate_mini_app::Problem_Invalid;    
+
+    if      ("diffusion" == problem_str)
+        problem = climate_mini_app::Problem_Diffusion;
+    else if ("advection-diffusion" == problem_str)
+        problem = climate_mini_app::Problem_AdvectionDiffusion;
+    else
+    {
+        char const* fmt = "ERROR: Invalid argument provided to "
+                          "--problem (=%s), options are 'diffusion' "
+                          "and 'advection-diffusion'\n"; 
+        std::cout << (boost::format(fmt) % problem_str)
+                  << std::flush;
+        return 1;
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Configuration
+
+    climate_mini_app::configuration config(
+        /*problem: type of problem                 =*/problem, 
+        /*nt: physical time to step to             =*/vm["nt"].as<Real>(),
+        /*nh: y and z (horizontal) extent per core =*/vm["nh"].as<std::uint64_t>(),
+        /*nv: x (vertical) extent per core         =*/vm["nv"].as<std::uint64_t>(),
+        /*max_box_size                             =*/vm["mbs"].as<std::uint64_t>(),
+        /*ghost_vector                             =*/IntVect::Unit,
+        /*header: print header for CSV timing data =*/vm.count("header"),
+        /*verbose: print status updates            =*/vm.count("verbose"), 
+#if defined(CH_USE_HDF5)
+        /*output: generate HDF5 output             =*/vm["output"].as<bool>()
+#endif
+    );
+
+    if      (climate_mini_app::Problem_Diffusion == config.problem) 
+    {
+        typedef climate_mini_app::diffusion_profile profile_type;
+    
+        profile_type profile(config,
+            /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
+    
+            // diffusion coefficients
+            /*kx=*/vm["kx"].as<Real>(),
+            /*ky=*/vm["ky"].as<Real>(), 
+            /*kz=*/vm["kz"].as<Real>()
+        );
+
+        // Correct nt if --ns was specified.
+        if (vm.count("ns"))
+        {
+            // We want a multiplier slightly smaller than the desired
+            // timestep count.
+            Real ns = Real(vm["ns"].as<std::uint64_t>()-1)+0.8;
+            const_cast<Real&>(profile.config.nt) = profile.dt()*ns; 
+        }
+
+        stepLoop(profile);
+    }
+
+    else if (climate_mini_app::Problem_AdvectionDiffusion == config.problem)
+    {
+        typedef climate_mini_app::advection_diffusion_profile profile_type;
+
+        profile_type profile(config,
+            /*C=*/2.0,   /*c1=*/0.5,   /*c2=*/0.25,
+
+            // diffusion coefficients
+            /*kx=*/vm["kx"].as<Real>(),
+            /*ky=*/vm["ky"].as<Real>(), 
+            /*kz=*/vm["kz"].as<Real>(),
+
+            // velocity components
+            /*ky=*/vm["vy"].as<Real>(), 
+            /*kz=*/vm["vz"].as<Real>()
+        ); 
+
+        // Correct nt if --ns was specified.
+        if (vm.count("ns"))
+        {
+            // We want a multiplier slightly smaller than the desired
+            // timestep count.
+            Real ns = Real(vm["ns"].as<std::uint64_t>()-1)+0.8;
+            const_cast<Real&>(profile.config.nt) = profile.dt()*ns; 
+        }
+
+        stepLoop(profile);
+    }
+
+    // Invalid problem type.
+    else
+        assert(false);
 
     return 0;
 }
@@ -316,10 +399,14 @@ int chombo_main(variables_map& vm)
 int main(int argc, char** argv)
 {
     boost::program_options::options_description cmdline(
-        "HPX/Chombo AMR Climate Mini-App (Transport Problem)"
+        "HPX/Chombo AMR Climate Mini-App"
         );
 
     cmdline.add_options()
+        ( "problem"
+        , boost::program_options::value<std::string>()->default_value("diffusion")
+        , "type of problem (options: diffusion, advection-diffusion)") 
+
         ( "nt"
         , boost::program_options::value<Real>()->default_value(5.0e-5, "5.0e-5")  
         , "physical time to step to")
@@ -341,24 +428,24 @@ int main(int argc, char** argv)
         , "x diffusion coefficient")
         ( "ky"
         , boost::program_options::value<Real>()->default_value(1.0e-3, "1.0e-3")
-        , "y diffusion coefficient")
+        , "y diffusion coefficient (diffusion problem only)")
         ( "kz"
         , boost::program_options::value<Real>()->default_value(1.0e-3, "1.0e-3")
-        , "z diffusion coefficient")
+        , "z diffusion coefficient (diffusion problem only)")
 
         ( "vy"
         , boost::program_options::value<Real>()->default_value(1.0e-1, "1.0e-1")
-        , "y velocity component")
+        , "y velocity component (advection-diffusion problem only)")
         ( "vz"
         , boost::program_options::value<Real>()->default_value(1.0e-1, "1.0e-1")
-        , "z velocity component")
+        , "z velocity component (advection-diffusion problem only)")
 
-        ( "header", "print the csv header")
-        ( "verbose", "display status updates after each timestep")
+        ( "header", "print header for the CSV timing data")
+        ( "verbose", "display status updates")
 #if defined(CH_USE_HDF5)
         ( "output"
         , boost::program_options::value<bool>()->default_value(true, "true")
-        , "generate HDF5 output and sum phi every timestep") 
+        , "generate HDF5 output every timestep") 
 #endif
         ; 
 
