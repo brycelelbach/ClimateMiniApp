@@ -28,6 +28,7 @@
 
 enum CommType
 {
+    Comm_Invalid            = -1,
     Comm_ExchangeState      = 0,
     Comm_CoarseToFineState  = 1,
     Comm_FineToCoarseState  = 2,
