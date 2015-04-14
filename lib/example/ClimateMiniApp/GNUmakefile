@@ -6,7 +6,7 @@
 # included makefiles need an absolute path
 CHOMBO_HOME := $(shell pwd)/../..
 
-makefiles+=lib_example_Transport3D-HPX-SMP
+makefiles+=lib_example_ClimateMiniApp
 
 ebase = driver 
 
