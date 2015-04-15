@@ -30,55 +30,99 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
 
   private:
     DisjointBoxLayout m_disjointBoxLayout;
+    unsigned          m_nComp;
     IntVect           m_ghost;
     AsyncCopier       m_exchangeCopier;
 
   public:
     AsyncLevelData()
       : m_disjointBoxLayout()
+      , m_nComp(0)
       , m_ghost()
       , m_exchangeCopier()
     {}
 
+    template <typename F>
     AsyncLevelData(
         DisjointBoxLayout const& dbl
+      , unsigned nComp
       , IntVect ghost
+      , F&& defineElement
         )
     {
-        define(dbl, ghost);
+        define(dbl, nComp, ghost, std::forward<F>(defineElement));
     }
 
+    AsyncLevelData(
+        DisjointBoxLayout const& dbl
+      , unsigned nComp
+      , IntVect ghost = IntVect::Zero
+        )
+    {
+        define(dbl, nComp, ghost);
+    }
+
+    template <typename F>
     void define(
         DisjointBoxLayout const& dbl
+      , unsigned nComp 
       , IntVect ghost
+      , F&& defineElement
         )
     {
         CH_assert(dbl.isClosed());
 
         m_disjointBoxLayout = dbl;
+        m_nComp = nComp;
         m_ghost = ghost;
 
         this->base_type::define(dbl);
+
+        defineData(std::forward<F>(defineElement));
 
         m_exchangeCopier.exchangeDefine(dbl, ghost, dbl.getLocalProcID()); 
 
         installRegions();
     }
 
+    void define(
+        DisjointBoxLayout const& dbl
+      , unsigned nComp
+      , IntVect ghost = IntVect::Zero
+        )
+    {
+        define(dbl, nComp, ghost, defineFAB);
+    }
+
+    unsigned nComp() const
+    {
+        return m_nComp;
+    }
+
+    Interval interval() const
+    {
+        Interval outint(0, m_nComp-1);
+        return outint;
+    }
+
   private:
+    static void defineFAB(AsyncLevelData<T>& ld, DataIndex di)
+    {
+        Box b = ld.disjointBoxLayout()[di];
+        b.grow(ld.ghostVect());
+        ld[di].define(b, ld.nComp());
+    }
+
+    template <typename F>
+    void defineData(F&& defineElement)
+    {
+        DataIterator dit(this->dataIterator());
+        for (dit.begin(); dit.ok(); ++dit)
+            defineElement(*this, dit());
+    }
+
     void installRegions()
     {
-/*
-        // Interior region.
-        DataIterator dit = this->dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            Box b = m_disjointBoxLayout[dit()];
-
-            (*this)[dit()].addRegion(b);
-        }
-*/
-
         // Same-level ghost zone regions.
         for (AsyncRegion const& ar : m_exchangeCopier.regions())
             (*this)[ar.toIndex].addRegion(Comm_ExchangeState, ar.toRegion);
@@ -100,22 +144,6 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
         return m_ghost;
     }
 };
-
-// TODO: Move this into constructor?
-template <typename T>
-void DefineData(
-    AsyncLevelData<T>& ld
-  , int comps = 1
-    )
-{
-    DataIterator dit(ld.dataIterator());
-    for (dit.begin(); dit.ok(); ++dit)
-    {
-        Box b = ld.disjointBoxLayout()[dit()];
-        b.grow(ld.ghostVect());
-        ld[dit()].define(b, comps);
-    } 
-}
 
 template <typename T>
 void DefineData(
