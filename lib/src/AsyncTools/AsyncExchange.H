@@ -31,13 +31,18 @@
 // functions should be made methods of a new AsyncExchange class. The downside
 // of this is that then we'd have to pass this class around everywhere.
 
+// FIXME: Add communicate operator to AsyncLevelData.
+
 template <typename T>
 void LocalCopyImpl(
     CommType ct
   , std::size_t epoch
   , AsyncSendInstructions asi 
   , AsyncLevelData<T> const& from_ld
+  , unsigned from_comp
   , AsyncLevelData<T>& to_ld
+  , unsigned to_comp
+  , unsigned num_comp
     ) 
 {
     CH_assert(
@@ -46,21 +51,24 @@ void LocalCopyImpl(
 
     to_ld[asi.toIndex].copy(
         from_ld[asi.fromIndex]
-      , asi.fromRegion, /* starting comp */ 0
-      , asi.toRegion,   /* starting comp */ 0
-      , from_ld[asi.fromIndex].nComp());
+      , asi.fromRegion, /* starting comp */ from_comp
+      , asi.toRegion,   /* starting comp */ to_comp
+      , num_comp);
 
     to_ld[asi.toIndex].store(ct, epoch, asi.toRegion); 
 }
 
 // FIXME: Cache ASI lookup.
 template <typename T>
-std::vector<hpx::future<void> > LocalSendCopyAsync(
+hpx::future<void> LocalSendCopyAsync(
     CommType ct
   , std::size_t epoch
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
+  , unsigned from_comp
   , AsyncLevelData<T>& to_ld
+  , unsigned to_comp
+  , unsigned num_comp
   , AsyncCopier const& ac 
     )
 {
@@ -78,18 +86,49 @@ std::vector<hpx::future<void> > LocalSendCopyAsync(
 
         CH_assert(toProcID == fromProcID);
 
+/*
+        void (&F)( CommType
+                 , std::size_t
+                 , AsyncSendInstructions
+                 , AsyncLevelData<T> const&
+                 , unsigned
+                 , AsyncLevelData<T>& 
+                 , unsigned
+                 , unsigned
+                 )
+*/
         auto F = LocalCopyImpl<T>;
 
         outbound.push_back(
-            hpx::async(F, ct, epoch, asi, std::ref(from_ld), std::ref(to_ld))
+            hpx::async(
+                F, ct, epoch, asi
+              , std::ref(from_ld), from_comp
+              , std::ref(to_ld), to_comp
+              , num_comp
+            )
         );
     }
 
-    return outbound;
+    return hpx::lcos::when_all(outbound);
+}
+
+// Copies all components.
+template <typename T>
+hpx::future<void> LocalSendCopyAsync(
+    CommType ct
+  , std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T> const& from_ld
+  , AsyncLevelData<T>& to_ld
+  , AsyncCopier const& ac 
+    )
+{
+    unsigned const num_comp = from_ld.nComp();
+    return LocalSendCopyAsync(ct, epoch, asi, from_ld, 0, to_ld, 0, num_comp);
 }
 
 template <typename T>
-std::vector<hpx::future<void> > LocalRecvCopyAsync(
+hpx::future<void> LocalRecvCopyAsync(
     CommType ct
   , std::size_t epoch
   , DataIndex di 
@@ -99,8 +138,72 @@ std::vector<hpx::future<void> > LocalRecvCopyAsync(
     return to_ld[di].dependAll(ct, epoch);
 }
 
-// TODO: LocalCopyAsync
+///////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+hpx::future<void> LocalCopyAsync(
+    CommType ct
+  , std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T> const& from_ld
+  , unsigned from_comp
+  , AsyncLevelData<T>& to_ld
+  , unsigned to_comp
+  , unsigned num_comp
+  , AsyncCopier const& ac 
+    )
+{
+    hpx::future<void> outbound
+        = LocalSendCopyAsync(
+              ct, epoch, di 
+            , from_ld, from_comp
+            , to_ld, to_comp
+            , num_comp, ac
+          );
+
+    hpx::future<void> inbound
+        = LocalRecvCopyAsync(ct, epoch, di, to_ld);
+
+    return hpx::lcos::when_all(outbound, inbound);
+}
+
+// Copies all components.
+template <typename T>
+hpx::future<void> LocalCopyAsync(
+    CommType ct
+  , std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T> const& from_ld
+  , AsyncLevelData<T>& to_ld
+  , AsyncCopier const& ac 
+    )
+{
+    unsigned const num_comp = from_ld.nComp();
+    return LocalCopyAsync(ct, epoch, di, from_ld, 0, to_ld, 0, num_comp, ac);
+}
+
+template <typename T>
+void LocalCopySync(
+    CommType ct
+  , std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T> const& from_ld
+  , unsigned from_comp
+  , AsyncLevelData<T>& to_ld
+  , unsigned to_comp
+  , unsigned num_comp
+  , AsyncCopier const& ac 
+    )
+{
+    LocalCopyAsync(    
+        ct, epoch, di 
+      , from_ld, from_comp
+      , to_ld, to_comp
+      , num_comp, ac
+    ).get();
+}
+
+// Copies all components.
 template <typename T>
 void LocalCopySync(
     CommType ct
@@ -111,13 +214,40 @@ void LocalCopySync(
   , AsyncCopier const& ac 
     )
 {
-    std::vector<hpx::future<void> > outbound
-        = LocalSendCopyAsync(ct, epoch, di, from_ld, to_ld, ac);
-    std::vector<hpx::future<void> > inbound
-        = LocalRecvCopyAsync(ct, epoch, di, to_ld);
+    LocalCopyAsync(ct, epoch, di, from_ld, to_ld, ac).get();
+}
 
-    hpx::lcos::when_all(outbound).get();
-    hpx::lcos::when_all(inbound).get();
+///////////////////////////////////////////////////////////////////////////////
+
+template <typename T>
+hpx::future<void> LocalExchangeAsync(
+    std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T>& ld
+  , unsigned from_comp
+  , unsigned to_comp
+  , unsigned num_comp
+    )
+{
+    return LocalCopyAsync(
+        Comm_ExchangeState, epoch, di
+      , ld, from_comp
+      , ld, to_comp
+      , num_comp, ld.exchangeCopier()
+    );
+}
+
+// Copies all components.
+template <typename T>
+hpx::future<void> LocalExchangeAsync(
+    std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T>& ld
+    )
+{
+    return LocalCopyAsync(
+        Comm_ExchangeState, epoch, di, ld, ld, ld.exchangeCopier()
+    );
 }
 
 template <typename T>
@@ -125,9 +255,23 @@ void LocalExchangeSync(
     std::size_t epoch
   , DataIndex di 
   , AsyncLevelData<T>& ld
+  , unsigned from_comp
+  , unsigned to_comp
+  , unsigned num_comp
     )
 {
-    LocalCopySync(Comm_ExchangeState, epoch, di, ld, ld, ld.exchangeCopier());
+    LocalExchangeAsync(epoch, di, ld, from_comp, to_comp, num_comp).get();
+}
+
+// Copies all components.
+template <typename T>
+void LocalExchangeSync(
+    std::size_t epoch
+  , DataIndex di 
+  , AsyncLevelData<T>& ld
+    )
+{
+    LocalExchangeAsync(epoch, di, ld).get();
 }
 
 #include "NamespaceFooter.H"

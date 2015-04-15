@@ -20,6 +20,7 @@
 #include <hpx/lcos/local/promise.hpp>
 #include <hpx/lcos/local/receive_buffer.hpp>
 #include <hpx/lcos/future.hpp>
+#include <hpx/lcos/when_all.hpp>
 #include <hpx/util/unwrapped.hpp>
 
 #include "Box.H"
@@ -85,7 +86,7 @@ struct DataflowBox : T
     }
 
     template <typename F>
-    std::vector<hpx::future<void> > enqueueAll(
+    hpx::future<void> enqueueAll(
         CommType ct
       , std::size_t epoch
       , F&& f
@@ -102,7 +103,7 @@ struct DataflowBox : T
             deps.emplace_back(kv.second->receive(epoch).then(WF));
         }
 
-        return deps; 
+        return hpx::lcos::when_all(deps); 
     }
 
     hpx::future<void> depend(
@@ -121,7 +122,7 @@ struct DataflowBox : T
         return (*it).second->receive(epoch);
     }
 
-    std::vector<hpx::future<void> > dependAll(
+    hpx::future<void> dependAll(
         CommType ct
       , std::size_t epoch
         )
@@ -132,7 +133,7 @@ struct DataflowBox : T
         for (auto& kv : regions[ct])
             deps.push_back(kv.second->receive(epoch));
 
-        return deps; 
+        return hpx::lcos::when_all(deps); 
     }
 
     void store(
