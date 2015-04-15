@@ -18,6 +18,8 @@
 
 #include <utility>
 
+#include "NamespaceHeader.H"
+
 template <typename Iterator>
 struct iterator_pair_range : std::pair<Iterator, Iterator>
 {
@@ -88,5 +90,5 @@ iterator_pair_range<Iterator> asRange(
     );
 }
 
+#include "NamespaceFooter.H"
 #endif // CHOMBO_2C3E26CF_46EB_47E4_A329_956DEC0B8C09
-
