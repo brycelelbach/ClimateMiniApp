@@ -181,11 +181,28 @@ struct problem_state
 
     void define(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     {
-        U.define(dbl, ghost);
-        DefineData(U, comps);
+        U.define(dbl, comps, ghost);
+
+        auto defineFY =
+            [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
+            {
+                Box b = ld.disjointBoxLayout()[di];
+                b.grow(ld.ghostVect());
+                b = surroundingNodes(b, 1);
+                ld[di].define(b, ld.nComp());
+            }; 
+
+        auto defineFZ =
+            [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
+            {
+                Box b = ld.disjointBoxLayout()[di];
+                b.grow(ld.ghostVect());
+                b = surroundingNodes(b, 2);
+                ld[di].define(b, ld.nComp());
+            }; 
  
-        FY.define(dbl, ghost);
-        FZ.define(dbl, ghost);
+        FY.define(dbl, comps, ghost, defineFY);
+        FZ.define(dbl, comps, ghost, defineFZ);
 
         epoch_.define(dbl);
 
@@ -193,16 +210,6 @@ struct problem_state
 
         for (dit.begin(); dit.ok(); ++dit)
         {
-            Box by = dbl[dit()];
-            by.grow(ghost);
-            by = surroundingNodes(by, 1);
-            FY[dit()].define(by, comps);
-
-            Box bz = dbl[dit()];
-            bz.grow(ghost);
-            bz = surroundingNodes(bz, 2);
-            FZ[dit()].define(bz, comps);
-
             epoch_[dit()] = 0;
         }
     }

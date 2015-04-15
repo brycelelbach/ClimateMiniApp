@@ -40,8 +40,7 @@ void AsyncFineInterp::define(
     DisjointBoxLayout cf_dbl;
     coarsen(cf_dbl, fineDbl, m_ref_ratio);
 
-    m_cf_data.define(cf_dbl, IntVect::Unit);
-    DefineData(m_cf_data, numComps);
+    m_cf_data.define(cf_dbl, numComps, IntVect::Unit);
 
     // Create the copier.
     m_interpCopier.unilateralDefine(
