@@ -115,9 +115,9 @@ public:
                       const IntVect& a_ghost,
                       int a_procID = -1);
 
-  // Using Boost.Intrusive would be more efficienct storage wise (and probably
-  // faster), but I want to avoid adding a direct dependency on Boost for
-  // something this generic.
+  // FIXME: Using Boost.Intrusive would be more efficienct storage wise (and
+  // probably faster), but I want to avoid adding a direct dependency on Boost
+  // for something this generic.
 
   typedef std::multiset<
     AsyncSendInstructions // from DataIndex, to DataIndex, from (Box), to (Box) 
