@@ -22,14 +22,14 @@
 
 #include "NamespaceHeader.H"
 
-struct streamBox
+struct StreamBox
 {
     Box const& b;
     int proc;
 
-    streamBox(Box const& b_, int proc_ = -1) : b(b_), proc(proc_) {}
+    StreamBox(Box const& b_, int proc_ = -1) : b(b_), proc(proc_) {}
 
-    friend std::ostream& operator<<(std::ostream& os, streamBox const& sb)
+    friend std::ostream& operator<<(std::ostream& os, StreamBox const& sb)
     {
         if (-1 == sb.proc) 
             return os << "(" << sb.b.smallEnd() << " " << sb.b.bigEnd()
