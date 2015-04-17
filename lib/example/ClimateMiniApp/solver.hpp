@@ -18,10 +18,16 @@
 
 #include <hpx/lcos/when_all.hpp>
 
+#include <boost/format.hpp>
+
 #include "REAL.H"
 #include "LevelData.H"
 #include "FArrayBox.H"
 #include "FluxBox.H"
+
+#include "AsyncLevelData.H"
+#include "AsyncExchange.H"
+#include "StreamCSV.H"
 
 #include <cstdint>
 #include <cmath>
@@ -37,12 +43,6 @@
     #include <lapacke.h>
 #endif
 
-// Solving problems of the form:
-//
-//      U_t = (kx * U_xx + ky * U_yy + kz * U_zz)   [Diffusion]
-//          -             (vy * U_y  + vz * U_z)    [Advection]
-//          + h                                     [Sources] 
-
 namespace climate_mini_app
 {
 
@@ -54,14 +54,30 @@ enum ProblemType
     Problem_Last                = Problem_AdvectionDiffusion
 };
 
+inline std::ostream& operator<<(std::ostream& os, ProblemType problem)
+{
+    switch (problem)
+    {
+        default:
+        case Problem_Invalid:
+            os << "Invalid";
+            break;
+        case Problem_Diffusion:
+            os << "Diffusion";
+            break;
+        case Problem_AdvectionDiffusion:
+            os << "Advection-Diffusion";
+            break;
+    }
+    return os;
+}
+
 struct configuration
 {
     ///////////////////////////////////////////////////////////////////////////
     // Parameters.
 
     ProblemType const problem;
-
-    Real const nt; ///< Physical time to step to.
 
     std::uint64_t const nh; ///< "Horizontal" extent (y and z dimensions) per core.
     std::uint64_t const nv; ///< "Vertical" extent (x dimension) per core.
@@ -81,7 +97,6 @@ struct configuration
 
     configuration(
         ProblemType problem_
-      , Real nt_ 
       , std::uint64_t nh_
       , std::uint64_t nv_
       , std::uint64_t max_box_size_
@@ -93,7 +108,6 @@ struct configuration
 #endif
         )
       : problem(problem_)
-      , nt(nt_)
       , nh(nh_)
       , nv(nv_)
       , max_box_size(max_box_size_)
@@ -104,6 +118,20 @@ struct configuration
       , output(output_)
 #endif
     {}
+
+    std::string print_csv_header() const
+    {
+        return "Problem,"
+               "Horizontal Extent (nh),"
+               "Vertical Extent (nv),"
+               "Max Box Size (mbs)";
+    }
+
+    CSVTuple<ProblemType, std::uint64_t, std::uint64_t, std::uint64_t>
+    print_csv() const
+    {
+        return StreamCSV(problem, nh, nv, max_box_size); 
+    }
 }; 
 
 enum boundary_type
@@ -141,25 +169,6 @@ bool lower_boundary(boundary_type type)
 {
     return !upper_boundary(type);
 }
-
-struct streamBox
-{
-    Box const& b;
-    int proc;
-
-    streamBox(Box const& b_, int proc_ = -1) : b(b_), proc(proc_) {}
-
-    friend std::ostream& operator<<(std::ostream& os, streamBox const& sb)
-    {
-        if (-1 == sb.proc) 
-            return os << "(" << sb.b.smallEnd() << " " << sb.b.bigEnd()
-                      << " " << sb.b.volume() << ")";
-        else
-            return os << "(L" << sb.proc
-                      << " " << sb.b.smallEnd() << " " << sb.b.bigEnd()
-                      << " " << sb.b.volume() << ")";
-    } 
-};
 
 struct problem_state
 {
@@ -233,6 +242,11 @@ struct problem_state
         U[di].plus(A.U[di], factor);
     }
 
+    hpx::future<void> exchangeAsync(DataIndex di)
+    { 
+        return LocalExchangeAsync(epoch_[di]++, di, U);
+    }
+
     void exchangeSync(DataIndex di)
     { 
         LocalExchangeSync(epoch_[di]++, di, U);
@@ -245,14 +259,7 @@ struct problem_state
         std::vector<hpx::future<void> > exchanges;
     
         for (dit.begin(); dit.ok(); ++dit)
-        {
-            exchanges.push_back(
-                hpx::async(
-                    [&](DataIndex di) { this->exchangeSync(di); }
-                  , dit()
-                ) 
-            );
-        }
+            exchanges.push_back(exchangeAsync(dit()));
 
         return hpx::lcos::when_all(exchanges);
     }
@@ -298,7 +305,7 @@ struct imex_operators
         auto FluxY = [&](IntVect lower, IntVect upper)
         {
             for (auto k = lower[2]; k <= upper[2]; ++k)
-                for (auto j = phi.smallEnd()[1]+1; j <= phi.bigEnd()[1]; ++j)
+                for (auto j = phi.smallEnd()[1]; j <= phi.bigEnd()[1]; ++j)
                     for (auto i = lower[0]; i <= upper[0]; ++i)
                     {
                         IntVect here(i, j, k);
@@ -309,7 +316,7 @@ struct imex_operators
 
         auto FluxZ = [&](IntVect lower, IntVect upper)
         {
-            for (auto k = phi.smallEnd()[2]+1; k <= phi.bigEnd()[2]; ++k)
+            for (auto k = phi.smallEnd()[2]; k <= phi.bigEnd()[2]; ++k)
                 for (auto j = lower[1]; j <= upper[1]; ++j)
                     for (auto i = lower[0]; i <= upper[0]; ++i)
                     {
@@ -525,13 +532,14 @@ struct profile_base
         return config.ghost_vector;
     } // }}}
 
+    // FIXME: This should stop being a tuple
     // FIXME: Switch to cell centered
     std::tuple<Real, Real, Real> phys_coords(IntVect here) const
     { // {{{
         return std::tuple<Real, Real, Real>(
-            Real(here[0])/(Real(config.nv)-1.0)
-          , Real(here[1])/(Real(config.nh)-1.0)
-          , Real(here[2])/(Real(config.nh)-1.0)
+            Real(here[0])/(Real(config.nv))
+          , Real(here[1])/(Real(config.nh))
+          , Real(here[2])/(Real(config.nh))
         );
     } // }}}
 
@@ -626,14 +634,12 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
     advection_diffusion_profile(
         configuration config_
-      , Real C_, Real c1_, Real c2_
-      , Real kx_, Real ky_, Real kz_
-      , Real vy_, Real vz_
+      , Real cx_, Real cy_, Real cz_
+      , Real kx_, Real vy_, Real vz_
         )
       : base_type(config_)
-      , C(C_), c1(c1_), c2(c2_)
-      , kx(kx_), ky(ky_), kz(kz_)
-      , vy(vy_), vz(vz_)
+      , cx(cx_), cy(cy_), cz(cz_)
+      , kx(kx_), vy(vy_), vz(vz_)
     {}
 
     // Time step size
@@ -641,43 +647,19 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         // For advection-diffusion: 
         //
-        //      dt = CFL*min( (dh*dh)/(2*ky)
-        //                  , (dh*dh)/(2*kz)
-        //                  , (2*ky)/(vy*vy)
-        //                  , (2*kz)/(vz*vz)
-        //                  )
-        //
-        // If we just have advection:
-        //
-        //      dt = CFL*min( dh/vy
-        //                  , dh/vz
-        //                  )
-        //
-        Real constexpr CFL = 0.9;
+        //      dt = CFL*dh/(vy+vz) 
+        // 
+        //      with CFL < 1.0 
+        // 
+
+        Real constexpr CFL = 0.8;
         Real const dh = std::get<1>(dp()); 
 
-        // (ky>0) || (kz>0) || (vy!=0) || (vz!=0)
-        assert(  (ky > 0.0)
-              || (kz > 0.0)
-              || (std::fabs(vy-0.0) > 1e-16)
+        // (vy!=0) || (vz!=0)
+        assert(  (std::fabs(vy-0.0) > 1e-16)
               || (std::fabs(vz-0.0) > 1e-16));
 
-        double dt = 10000.0;
-
-        if ((ky > 0.0) || (kz > 0.0))
-            dt = std::min(dt, (dh*dh)/(2.0*std::max(ky, kz)));
-        else
-            dt = std::min(dt, dh/std::max(vy, vz));
-
-        if ((ky > 0.0) && (std::fabs(vy-0.0) > 1e-16))
-            dt = std::min(dt, (2.0*ky)/(vy*vy));
-
-        if ((kz > 0.0) && (std::fabs(vz-0.0) > 1e-16))
-            dt = std::min(dt, (2.0*kz)/(vz*vz));
-
-        assert(std::fabs(dt-10000.0) < 1e-16);
-
-        return CFL*dt;
+        return CFL*dh/(std::abs(vy)+std::abs(vz)); 
     } // }}}
 
     ProblemDomain problem_domain() const
@@ -718,20 +700,17 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         Real const dh = std::get<1>(dp()); 
 
-        Real k = 0.0;
         Real v = 0.0;
         IntVect left;
 
         if      (1 == dir)
         { 
-            k = ky;
             v = vy;
             left = IntVect(here[0], here[1]-1, here[2]);
         }
 
         else if (2 == dir)
         {
-            k = kz;
             v = vz;
             left = IntVect(here[0], here[1], here[2]-1);
         }
@@ -739,16 +718,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         else
             assert(false);
 
-        // NOTE: This currently assumes constant-coefficients 
-        // and assumes we're just taking an average of the
-        // coefficients. For variable-coefficient we need
-        // to actually take an average. 
-        // 
-        // F_{j-1/2} ~= -k_{j-1/2}/h (phi_j - phi_{j-1})
-
-        return -1.0 * ( (k/dh) * (phi(here) - phi(left))  // Diffusion 
-                      - 0.5 * v * (phi(here) + phi(left)) // Advection 
-                      );
+        return v * phi(left);
     } // }}}
 
     // FIXME: IntVect indexing may be expensive, compare to Hans' loops
@@ -764,7 +734,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         IntVect w(here[0], here[1], here[2]);   // west
 
         Real const dh = std::get<1>(dp()); 
-        return (-1.0/dh) * (FY(e) - FY(w) + FZ(n) - FZ(s)); 
+        return (-1.0/dh) * (FY(w) - FY(e) + FZ(s) - FZ(n)); 
     } // }}}
 
     typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
@@ -781,6 +751,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         std::uint64_t const size = b.size()[0];
         Real const dv = std::get<0>(dp()); 
+        Real const kx = 1.0;
         Real const kvdv = kx/(dv*dv); 
         Real const H = dt()*dtscale;
 
@@ -841,14 +812,10 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         y = std::get<1>(phys_coords(here));
         z = std::get<2>(phys_coords(here));
 
-        //if (is_outside_domain(here)) return 0.0;
-        //else if (is_boundary(here)) return 0.0;
-        return (C/(4.0*t+c1))
-             * std::exp(
-                    -1.0*(((x-c2)*(x-c2))/(kx*(4.0*t+c1)))
-                    - (((y-vy*t-c2)*(y-vy*t-c2))/(ky*(4.0*t+c1)))
-                    - (((z-vz*t-c2)*(z-vz*t-c2))/(kz*(4.0*t+c1)))
-               );
+        Real const omega_x = cx*cx*kx;
+        Real const omega_yz = -cz*vz - cy*vy; 
+        return std::exp(-omega_x*t)*std::cos(cx*x)
+             + std::sin(cy*y + cz*z - omega_yz*t);
     } // }}}
 
     Real source_term(IntVect here, Real t) const
@@ -856,18 +823,28 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         return 0.0; 
     } // }}}
 
+    std::string print_csv_header() const
+    { // {{{
+        return "X Diffusion Coefficient (kx)"
+               "Y Velocity (vy),"
+               "Z Velocity (vz)";
+    } // }}}
+
+    CSVTuple<Real, Real, Real> print_csv() const
+    { // {{{
+        return StreamCSV(kx, vy, vz);
+    } // }}}
+
   private:
-    Real const C;
-    Real const c1;
-    Real const c2;
+    Real const cx;
+    Real const cy;
+    Real const cz;
 
   public:
-    Real kx;
-    Real ky;
-    Real kz;
 
-    Real vy;
-    Real vz;
+    Real const kx;
+    Real const vy;
+    Real const vz;
 };
 
 struct diffusion_profile : profile_base<diffusion_profile>
@@ -895,6 +872,7 @@ struct diffusion_profile : profile_base<diffusion_profile>
         //
         // Conveniently, I've required dy == dz and ky/kz are constant for this
         // particular problem, so:
+
         Real constexpr CFL = 0.4;
         Real const dh = std::get<1>(dp()); 
 
@@ -1107,18 +1085,27 @@ struct diffusion_profile : profile_base<diffusion_profile>
         return std::sin(A*M_PI*x)*std::sin(B*M_PI*y)*std::sin(C*M_PI*z);
     } // }}}
 
+    std::string print_csv_header() const
+    { // {{{
+        return "X Diffusion Coefficient (kx),"
+               "Y Diffusion Coefficient (ky),"
+               "Z Diffusion Coefficient (kz)";
+    } // }}}
+
+    CSVTuple<Real, Real, Real> print_csv() const
+    { // {{{
+        return StreamCSV(kx, ky, kz);
+    } // }}}
+
   private:
     Real const A;
     Real const B;
     Real const C;
 
   public:
-    Real kx;
-    Real ky;
-    Real kz;
-
-    Real vy;
-    Real vz;
+    Real const kx;
+    Real const ky;
+    Real const kz;
 };
 
 }
