@@ -207,7 +207,7 @@ int chombo_main(variables_map& vm)
 
         for (std::uint64_t j = 0; j < box_list[L].size(); ++j)
             std::cout << "  L" << L << " "
-                      << streamBox(box_list[L][j])
+                      << StreamBox(box_list[L][j])
                       << "\n";
 
         std::cout << "\n";
@@ -251,8 +251,8 @@ int chombo_main(variables_map& vm)
             Box toBox = dbl[L][ar.toIndex];
     
             std::cout << "REGION: "
-                      << streamBox(toBox)
-                      << " CONTAINS " << streamBox(ar.toRegion) 
+                      << StreamBox(toBox)
+                      << " CONTAINS " << StreamBox(ar.toRegion) 
                       << "\n";
         
             // Give each region a unique id. 
