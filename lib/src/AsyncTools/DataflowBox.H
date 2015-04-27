@@ -45,9 +45,11 @@ struct DataflowBox : T
     // set multi-region dependencies.
     typedef boost::shared_ptr<hpx::lcos::local::receive_buffer<void> > queue;
 
+  private:
     // Regions that have external dependencies.
     std::array<std::map<Box, queue>, Comm_Last> regions; 
 
+  public:
     DataflowBox()
       : T()
       , regions()
