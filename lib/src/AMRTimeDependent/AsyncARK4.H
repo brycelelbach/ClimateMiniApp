@@ -74,11 +74,13 @@ private:
   bool m_denseOutput;               ///< True if dense output is enabled.
   Real m_dt;                        ///< Timestep size.
 
+public:
   X m_phi[s_nStages];
   X m_denseCoefs[s_nDenseCoefs];
   X m_kE;
   X m_kI;
 
+priavte:
   IMEXOP m_opImEx;
 };
 
@@ -159,11 +161,11 @@ void AsyncARK4<X, IMEXOP>::advance(
 
   // Set m_phi[0] := state, all others 0
   m_phi[0].copy(di, state);
-  for (int stage = 1; stage < s_nStages; stage++)
+  for (std::size_t stage = 1; stage < s_nStages; stage++)
     m_phi[stage].zero(di);
 
   // For each stage
-  for (int stage = 0; stage < s_nStages; stage++)
+  for (std::size_t stage = 0; stage < s_nStages; stage++)
     {
       Real next_t = t + s_c[stage]*m_dt;
       if (stage > 0)
@@ -173,12 +175,12 @@ void AsyncARK4<X, IMEXOP>::advance(
 
         // Solve in-place for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(di, next_t, s_aIdiag, m_phi[stage]);
+        m_opImEx.solve(di, next_t, stage, s_aIdiag, m_phi[stage]);
       }
 
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(di, next_t, m_kE, m_phi[stage]);
-      m_opImEx.implicitOp(di, next_t, m_kI, m_phi[stage]);
+      m_opImEx.explicitOp(di, next_t, stage, m_kE, m_phi[stage]);
+      m_opImEx.implicitOp(di, next_t, stage, m_kI, m_phi[stage]);
 
       // Add the known stage operator values to future solves 
       for (int k=stage+1; k < s_nStages; ++k)
