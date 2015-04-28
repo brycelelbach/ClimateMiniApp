@@ -46,29 +46,45 @@ void visit(AsyncLevelData<FArrayBox>& soln, F f)
 }
  
 #if defined(CH_USE_HDF5)
-template <typename Profile>
+std::string format_filename(boost::format& fmter)
+{
+    return boost::str(fmter);
+}
+ 
+template <typename T, typename... Args>
+std::string format_filename(boost::format& fmter, T&& value, Args&&... args)
+{
+    return format_filename(fmter % value, args...); 
+}
+
+template <typename... Args>
+std::string format_filename(std::string const& fmt, Args&&... args)
+{
+    boost::format fmter(fmt);
+    return format_filename(fmter, args...); 
+}
+
+template <typename Profile, typename... Args>
 void output(
     Profile const& profile
   , AsyncLevelData<FArrayBox>& data
-  , std::string const& format
   , std::string const& name
   , Real nt  
-  , std::uint64_t ns
+  , std::string const& fmt
+  , Args&&... fmt_args
     )
 {
-    std::string file;
-    try { file = boost::str(boost::format(format) % ns); }
-    catch (boost::io::too_many_args&) { file = format; }
+    std::string file = format_filename(fmt, fmt_args...);
 
-    Vector<DisjointBoxLayout> dbl;
-    dbl.push_back(data.disjointBoxLayout());
+    Vector<DisjointBoxLayout> level_dbl;
+    level_dbl.push_back(data.disjointBoxLayout());
 
     Vector<std::string> names;
     names.push_back(name);
 
     Vector<LevelData<FArrayBox>*> level;
     level.push_back(new LevelData<FArrayBox>);
-    level.back()->define(dbl[0], names.size(), data.ghostVect());
+    level.back()->define(level_dbl[0], names.size(), data.ghostVect());
 
     DataIterator dit = data.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
@@ -91,10 +107,10 @@ void output(
 
     WriteAnisotropicAMRHierarchyHDF5(
         file 
-      , dbl 
+      , level_dbl 
       , level
       , names
-      , dbl[0].physDomain().domainBox() 
+      , level_dbl[0].physDomain().domainBox()
       , dp // dx
       , profile.dt() // dt
       , nt // time
@@ -156,7 +172,7 @@ void stepLoop(
             [&profile](Real& val, IntVect here)
             { val = profile.source_term(here, 0.0); }
         );
-        output(profile, src.U, "source.hdf5", "phi", 0.0, 0); 
+        output(profile, src.U, "phi", 0.0, "source.hdf5"); 
     }
 #endif 
 
@@ -175,18 +191,18 @@ void stepLoop(
         { 
             data.exchangeAllSync();
  
-            output(profile, data.U,  "phi.%06u.hdf5", "phi", time, step); 
-    
+            output(profile, data.U, "phi", time, "phi.%06u.hdf5", step); 
+
             climate_mini_app::problem_state analytic(dbl, 1, config.ghost_vector);
             visit(analytic.U,
                 [&profile, time](Real& val, IntVect here)
                 { val = profile.analytic_solution(here, time); }
             );
-            output(profile, analytic.U, "analytic.%06u.hdf5", "phi", time, step); 
+            output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
     
             for (dit.begin(); dit.ok(); ++dit)
                 analytic.increment(dit(), data, -1.0);
-            output(profile, analytic.U, "error.%06u.hdf5", "phi", time, step); 
+            output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
         }
 #endif 
 
@@ -217,6 +233,23 @@ void stepLoop(
 
         hpx::lcos::when_all(futures).get();
 
+#if defined(CH_USE_HDF5)
+        if (config.output)
+        { 
+            for (std::size_t stage = 0; stage < ark_type::s_nStages; ++stage) 
+            {
+                Real s_time = time + ark_type::s_c[stage]*dt;
+                std::size_t s_step = ark_type::s_nStages*(step-1) + stage;
+
+                auto& FY = ark.m_phi[stage].FY;
+                auto& FZ = ark.m_phi[stage].FZ;
+
+                output(profile, FY, "phi", s_time, "FY.%06u.hdf5", s_step); 
+                output(profile, FZ, "phi", s_time, "FZ.%06u.hdf5", s_step); 
+            }
+        }
+#endif
+
         time += dt;
     } 
 
@@ -234,21 +267,21 @@ void stepLoop(
     { 
         data.exchangeAllSync();
 
-        output(profile, data.U, "phi.%06u.hdf5", "phi", time, step); 
-    
+        output(profile, data.U, "phi", time, "phi.%06u.hdf5", step); 
+
         climate_mini_app::problem_state analytic(dbl, 1, config.ghost_vector);
         visit(analytic.U,
             [&profile, time](Real& val, IntVect here)
             { val = profile.analytic_solution(here, time); }
         );
 
-        output(profile, analytic.U, "analytic.%06u.hdf5", "phi", time, step); 
+        output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
 
         DataIterator dit = data.U.dataIterator();
     
         for (dit.begin(); dit.ok(); ++dit)
             analytic.increment(dit(), data, -1.0);
-        output(profile, analytic.U, "error.%06u.hdf5", "phi", time, step); 
+        output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
     }
 #endif
 }
@@ -281,15 +314,13 @@ int chombo_main(variables_map& vm)
 
     climate_mini_app::ProblemType problem = climate_mini_app::Problem_Invalid;    
 
-    if      ("diffusion" == problem_str)
-        problem = climate_mini_app::Problem_Diffusion;
-    else if ("advection-diffusion" == problem_str)
+    if ("advection-diffusion" == problem_str)
         problem = climate_mini_app::Problem_AdvectionDiffusion;
     else
     {
         char const* fmt = "ERROR: Invalid argument provided to "
-                          "--problem (=%s), options are 'diffusion' "
-                          "and 'advection-diffusion'\n"; 
+                          "--problem (=%s), current problem(s): "
+                          "'advection-diffusion'\n"; 
         std::cout << (boost::format(fmt) % problem_str)
                   << std::flush;
         return 1;
@@ -311,35 +342,7 @@ int chombo_main(variables_map& vm)
 #endif
     );
 
-    if      (climate_mini_app::Problem_Diffusion == config.problem) 
-    {
-        typedef climate_mini_app::diffusion_profile profile_type;
-    
-        profile_type profile(config,
-            /*A=*/2.0,   /*B=*/2.0,   /*C=*/2.0,
-    
-            // diffusion coefficients
-            /*kx=*/vm["kx"].as<Real>(),
-            /*ky=*/vm["ky"].as<Real>(), 
-            /*kz=*/vm["kz"].as<Real>()
-        );
-
-        Real nt = vm["nt"].as<Real>();
-
-        // Correct nt if --ns was specified.
-        if (vm.count("ns"))
-        {
-            // We want a multiplier slightly smaller than the desired
-            // timestep count.
-            Real ns = Real(vm["ns"].as<std::uint64_t>()-1)+0.8;
-            nt = profile.dt()*ns; 
-        }
-
-        // FIXME: Pass a boost::variant
-        stepLoop(profile, nt);
-    }
-
-    else if (climate_mini_app::Problem_AdvectionDiffusion == config.problem)
+    if (climate_mini_app::Problem_AdvectionDiffusion == config.problem)
     {
         typedef climate_mini_app::advection_diffusion_profile profile_type;
 

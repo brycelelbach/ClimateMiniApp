@@ -49,7 +49,6 @@ namespace climate_mini_app
 enum ProblemType
 {
     Problem_Invalid             = -1,
-    Problem_Diffusion           = 0,
     Problem_AdvectionDiffusion  = 1,
     Problem_Last                = Problem_AdvectionDiffusion
 };
@@ -61,9 +60,6 @@ inline std::ostream& operator<<(std::ostream& os, ProblemType problem)
         default:
         case Problem_Invalid:
             os << "Invalid";
-            break;
-        case Problem_Diffusion:
-            os << "Diffusion";
             break;
         case Problem_AdvectionDiffusion:
             os << "Advection-Diffusion";
@@ -337,6 +333,7 @@ struct imex_operators
     void explicitOp(
         DataIndex di
       , Real t
+      , std::size_t stage
       , problem_state& kE_
       , problem_state& phi_
         ) 
@@ -352,9 +349,6 @@ struct imex_operators
         IntVect lower, upper;
 
         std::tie(lower, upper) = profile.boundary_conditions(di, t, kE_, phi_); 
-
-        lower.shift(profile.ghostVect());
-        upper.shift(-1*profile.ghostVect());
     
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
@@ -372,6 +366,7 @@ struct imex_operators
     void implicitOp(
         DataIndex di
       , Real t
+      , std::size_t stage
       , problem_state& kI
       , problem_state& phi
         )
@@ -382,6 +377,7 @@ struct imex_operators
     void solve(
         DataIndex di
       , Real t
+      , std::size_t stage
       , Real dtscale
       , problem_state& phi_
         )
@@ -393,9 +389,6 @@ struct imex_operators
         IntVect lower, upper;
 
         std::tie(lower, upper) = profile.boundary_conditions(di, t, phi_, phi_); 
-
-        lower.shift(profile.ghostVect());
-        upper.shift(-1*profile.ghostVect());
 
         Box b(lower, upper);
 
@@ -533,8 +526,7 @@ struct profile_base
     } // }}}
 
     // FIXME: This should stop being a tuple
-    // FIXME: Switch to cell centered
-    std::tuple<Real, Real, Real> phys_coords(IntVect here) const
+    std::tuple<Real, Real, Real> face_coords(IntVect here) const
     { // {{{
         return std::tuple<Real, Real, Real>(
             Real(here[0])/(Real(config.nv))
@@ -543,10 +535,19 @@ struct profile_base
         );
     } // }}}
 
+    std::tuple<Real, Real, Real> center_coords(IntVect here) const
+    { // {{{
+        return std::tuple<Real, Real, Real>(
+            std::get<0>(face_coords(here))+0.5*std::get<0>(dp()) 
+          , std::get<1>(face_coords(here))+0.5*std::get<1>(dp()) 
+          , std::get<2>(face_coords(here))+0.5*std::get<2>(dp()) 
+        );
+    } // }}}
+
     // Spatial step size
     std::tuple<Real, Real, Real> dp() const
     { // {{{
-        return phys_coords(IntVect(1, 1, 1));
+        return face_coords(IntVect(1, 1, 1));
     } // }}}
 
     bool is_outside_domain(boundary_type bdry, int l) const
@@ -689,6 +690,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd();
 
+        lower.shift(ghostVect());
+        upper.shift(-1*ghostVect());
+
         return std::make_pair(lower, upper);
     } // }}}
     
@@ -808,9 +812,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     Real analytic_solution(IntVect here, Real t) const
     { // {{{
         Real x, y, z;
-        x = std::get<0>(phys_coords(here));
-        y = std::get<1>(phys_coords(here));
-        z = std::get<2>(phys_coords(here));
+        x = std::get<0>(center_coords(here));
+        y = std::get<1>(center_coords(here));
+        z = std::get<2>(center_coords(here));
 
         Real const omega_x = cx*cx*kx;
         Real const omega_yz = -cz*vz - cy*vy; 
@@ -845,267 +849,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     Real const kx;
     Real const vy;
     Real const vz;
-};
-
-struct diffusion_profile : profile_base<diffusion_profile>
-{
-    typedef profile_base<diffusion_profile> base_type;
-
-    diffusion_profile(
-        configuration config_
-      , Real A_, Real B_, Real C_
-      , Real kx_, Real ky_, Real kz_
-        )
-      : base_type(config_)
-      , A(A_), B(B_), C(C_)
-      , kx(kx_), ky(ky_), kz(kz_)
-    {}
-
-    // Time step size
-    Real dt() const
-    { // {{{
-        // We only need to consider the horizontal dimensions, so we have: 
-        //
-        //      dt = min((CFL*(dy*dy))/ky, (CFL*(dz*dz))/kz)
-        //
-        //      with CFL < 0.5
-        //
-        // Conveniently, I've required dy == dz and ky/kz are constant for this
-        // particular problem, so:
-
-        Real constexpr CFL = 0.4;
-        Real const dh = std::get<1>(dp()); 
-
-        // (ky>0) || (kz>0) 
-        assert(  (ky > 0.0)
-              || (kz > 0.0));
-
-        return (CFL*(dh*dh))/std::max(ky, kz);
-    } // }}}
-
-    ProblemDomain problem_domain() const
-    { // {{{
-        IntVect lower_bound(IntVect::Zero);
-        IntVect upper_bound(
-            (config.nv*numProc()-1),
-            (config.nh*numProc()-1),
-            (config.nh*numProc()-1)
-        );
-
-        ProblemDomain domain(lower_bound, upper_bound);
-
-        return domain;
-    } // }}} 
-
-    std::tuple<IntVect, IntVect> boundary_conditions(
-        DataIndex di
-      , Real t
-      , problem_state& O_
-      , problem_state const& phi_
-        ) const
-    { // {{{
-        auto const& phi = phi_.U[di];
-
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd();
-
-        dirichlet_boundary_conditions<diffusion_profile>
-            BCs(*this, di, t, O_, phi_);
-
-        lower = BCs(LOWER_X, 0, lower);
-        upper = BCs(UPPER_X, 0, upper);
-        lower = BCs(LOWER_Y, 1, lower);
-        upper = BCs(UPPER_Y, 1, upper);
-        lower = BCs(LOWER_Z, 2, lower);
-        upper = BCs(UPPER_Z, 2, upper);
-
-        return std::make_pair(lower, upper);
-    } // }}}
-
-    Real boundary(
-        boundary_type bdry
-      , IntVect here
-      , FArrayBox const& phi
-      , Real t
-        ) const
-    {
-        return 0.0;
-    } 
-
-    Real outside_domain(
-        boundary_type bdry
-      , IntVect here
-      , FArrayBox const& phi
-      , Real t
-        ) const
-    {
-        return 0.0;
-    } 
-    
-    Real horizontal_flux_stencil(
-        IntVect here
-      , std::size_t dir
-      , FArrayBox const& phi
-        ) const
-    { // {{{
-        Real const dh = std::get<1>(dp()); 
-
-        Real k = 0.0;
-        IntVect left;
-
-        if      (1 == dir)
-        { 
-            k = ky;
-            left = IntVect(here[0], here[1]-1, here[2]);
-        }
-
-        else if (2 == dir)
-        {
-            k = kz;
-            left = IntVect(here[0], here[1], here[2]-1);
-        }
-
-        else
-            assert(false);
-
-        // NOTE: This currently assumes constant-coefficients 
-        // and assumes we're just taking an average of the
-        // coefficients. For variable-coefficient we need
-        // to actually take an average. 
-        // 
-        // F_{j-1/2} ~= -k_{j-1/2}/h (phi_j - phi_{j-1})
-
-        return -1.0 * ((k/dh) * (phi(here) - phi(left)));
-    } // }}}
-
-    // FIXME: IntVect indexing may be expensive, compare to Hans' loops
-    Real horizontal_stencil(
-        IntVect here
-      , FArrayBox const& FY
-      , FArrayBox const& FZ
-        ) const
-    { // {{{ 
-        IntVect n(here[0], here[1], here[2]+1); // north
-        IntVect s(here[0], here[1], here[2]);   // south
-        IntVect e(here[0], here[1]+1, here[2]); // east
-        IntVect w(here[0], here[1], here[2]);   // west
-
-        Real const dh = std::get<1>(dp()); 
-        return (-1.0/dh) * (FY(e) - FY(w) + FZ(n) - FZ(s)); 
-    } // }}}
-
-    typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
-        crs_matrix;
-    
-    // TODO: Could be cached.
-    crs_matrix vertical_operator(
-        int j
-      , int k
-      , FArrayBox const& phi
-      , Real dtscale
-      , Box b
-        ) const
-    { // {{{
-        std::uint64_t const size = b.size()[0];
-        Real const dv = std::get<0>(dp()); 
-        Real const kvdv = kx/(dv*dv); 
-        Real const H = dt()*dtscale;
-
-        // Sub-diagonal part of the matrix.
-        std::vector<Real> dl(size-1, H*(kvdv/2.0));
-        // Diagonal part of the matrix.
-        std::vector<Real> d(size, 1.0-H*kvdv);
-        // Super-diagonal part of the matrix.
-        std::vector<Real> du(size-1, H*(kvdv/2.0));
-
-        return crs_matrix(dl, d, du); 
-    } // }}}
-
-    void vertical_solve(
-        int j
-      , int k
-      , crs_matrix& A
-      , FArrayBox& phi
-      , Box b
-        ) const
-    { // {{{
-        if (std::fabs(kx-0.0) < 1e-16)
-            return;
-
-        IntVect lower = b.smallEnd();
-        IntVect upper = b.bigEnd();
-
-        // This is why we've picked 'x' as our vertical dimension; x columns
-        // are contiguous in memory.
-
-        assert((&phi(IntVect(lower[0]+1, j, k)) - &phi(IntVect(lower[0], j, k))) == 1);
-
-        Real* rhs = &phi(IntVect(lower[0], j, k)); 
-
-        int info = LAPACKE_dgtsv(
-            LAPACK_ROW_MAJOR, // matrix format
-            std::get<1>(A).size(), // matrix order
-            1, // # of right hand sides 
-            std::get<0>(A).data(), // subdiagonal part
-            std::get<1>(A).data(), // diagonal part
-            std::get<2>(A).data(), // superdiagonal part
-            rhs, // column to solve 
-            1 // leading dimension of RHS
-            );
-
-        assert(info == 0);
-    } // }}}
-
-    Real initial_state(IntVect here) const
-    { // {{{
-        return 0.0;
-    } // }}}
-
-    Real analytic_solution(IntVect here, Real t) const
-    { // {{{
-        Real x, y, z;
-        x = std::get<0>(phys_coords(here));
-        y = std::get<1>(phys_coords(here));
-        z = std::get<2>(phys_coords(here));
-
-        if (is_outside_domain(here)) return 0.0;
-        else if (is_boundary(here)) return 0.0;
-
-        Real const K = (A*A*kx + B*B*ky + C*C*kz)*M_PI*M_PI;
-        Real const a = (1.0 - std::exp(-t*K)) / (K); 
-        return a * source_term(here, t);
-    } // }}}
-
-    Real source_term(IntVect here, Real t) const
-    { // {{{
-        Real x, y, z;
-        x = std::get<0>(phys_coords(here));
-        y = std::get<1>(phys_coords(here));
-        z = std::get<2>(phys_coords(here));
-        return std::sin(A*M_PI*x)*std::sin(B*M_PI*y)*std::sin(C*M_PI*z);
-    } // }}}
-
-    std::string print_csv_header() const
-    { // {{{
-        return "X Diffusion Coefficient (kx),"
-               "Y Diffusion Coefficient (ky),"
-               "Z Diffusion Coefficient (kz)";
-    } // }}}
-
-    CSVTuple<Real, Real, Real> print_csv() const
-    { // {{{
-        return StreamCSV(kx, ky, kz);
-    } // }}}
-
-  private:
-    Real const A;
-    Real const B;
-    Real const C;
-
-  public:
-    Real const kx;
-    Real const ky;
-    Real const kz;
 };
 
 }
