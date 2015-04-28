@@ -80,7 +80,7 @@ public:
   X m_kE;
   X m_kI;
 
-priavte:
+private:
   IMEXOP m_opImEx;
 };
 
