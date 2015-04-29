@@ -347,7 +347,9 @@ int chombo_main(variables_map& vm)
         typedef climate_mini_app::advection_diffusion_profile profile_type;
 
         profile_type profile(config,
-            /*cx=*/2.0*M_PI,   /*cy=*/2.0*M_PI,   /*cz=*/2.0*M_PI,
+            /*cx=*/vm["cx"].as<Real>(),
+            /*cy=*/vm["cy"].as<Real>(),
+            /*cz=*/vm["cz"].as<Real>(),
 
             // diffusion coefficients
             /*kx=*/vm["kx"].as<Real>(),
@@ -404,6 +406,16 @@ int main(int argc, char** argv)
         ( "mbs"
         , boost::program_options::value<std::uint64_t>()->default_value(15)
         , "max box size")
+
+        ( "cx"
+        , boost::program_options::value<Real>()->default_value(2.0, "2.0")
+        , "x constant")
+        ( "cy"
+        , boost::program_options::value<Real>()->default_value(2.0, "2.0")
+        , "y constant")
+        ( "cz"
+        , boost::program_options::value<Real>()->default_value(2.0, "2.0")
+        , "z constant")
 
         ( "kx"
         , boost::program_options::value<Real>()->default_value(0.25e-2, "0.25e-2")

@@ -722,7 +722,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         else
             assert(false);
 
-        return v * phi(left);
+        return v * 0.5 * (phi(left) + phi(here));
     } // }}}
 
     // FIXME: IntVect indexing may be expensive, compare to Hans' loops
@@ -732,13 +732,13 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox const& FZ
         ) const
     { // {{{ 
-        IntVect n(here[0], here[1], here[2]+1); // north
+        IntVect n(here[0], here[1], here[2]+1); // south
         IntVect s(here[0], here[1], here[2]);   // south
         IntVect e(here[0], here[1]+1, here[2]); // east
         IntVect w(here[0], here[1], here[2]);   // west
 
         Real const dh = std::get<1>(dp()); 
-        return (-1.0/dh) * (FY(w) - FY(e) + FZ(s) - FZ(n)); 
+        return (-1.0/dh) * (FY(e) - FY(w) + FZ(n) - FZ(s)); 
     } // }}}
 
     typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
@@ -816,10 +816,14 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         y = std::get<1>(center_coords(here));
         z = std::get<2>(center_coords(here));
 
-        Real const omega_x = cx*cx*kx;
-        Real const omega_yz = -cz*vz - cy*vy; 
-        return std::exp(-omega_x*t)*std::cos(cx*x)
-             + std::sin(cy*y + cz*z - omega_yz*t);
+        Real const cx_pi = cx*M_PI;
+        Real const cy_pi = cy*M_PI;
+        Real const cz_pi = cz*M_PI;
+
+        Real const omega_x = cx_pi*cx_pi*kx;
+        Real const omega_yz = -cz_pi*vz - cy_pi*vy; 
+        return std::exp(-omega_x*t)*std::cos(cx_pi*x)
+             + std::sin(cy_pi*y + cz_pi*z + omega_yz*t);
     } // }}}
 
     Real source_term(IntVect here, Real t) const
@@ -829,7 +833,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
     std::string print_csv_header() const
     { // {{{
-        return "X Diffusion Coefficient (kx)"
+        return "X Diffusion Coefficient (kx),"
                "Y Velocity (vy),"
                "Z Velocity (vz)";
     } // }}}
