@@ -425,93 +425,6 @@ struct imex_operators
     Profile profile;
 };
 
-template <typename Profile>
-struct dirichlet_boundary_conditions
-{
-    dirichlet_boundary_conditions(
-        Profile const& profile_
-      , DataIndex di_
-      , Real t_
-      , problem_state& O
-      , problem_state const& phi
-        )
-      : profile(profile_)
-      , di(di_)
-      , t(t_)
-      , O_(O)
-      , phi_(phi)
-    {} 
-    
-    IntVect operator()(
-        boundary_type type
-      , std::size_t dir
-      , IntVect V
-        ) const
-    { 
-        auto&       O      = O_.U[di];
-        auto const& phi    = phi_.U[di];
-
-        int sign = (upper_boundary(type) ? -1 : 1);
- 
-        if (profile.is_outside_domain(type, V[dir]))
-        {
-            std::size_t A = -1, B = -1;
-    
-            if      (0 == dir) { A = 1; B = 2; }
-            else if (1 == dir) { A = 0; B = 2; }
-            else if (2 == dir) { A = 0; B = 1; }
-            else    assert(false);
- 
-            for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
-                for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
-                {
-                    IntVect out(V);
-                    out.setVal(A, a);
-                    out.setVal(B, b);
-    
-                    for (int c = 0; c <= profile.ghostVect()[dir]; ++c)
-                    {
-                        out.shift(dir, sign*c);
-                        O(out) = profile.outside_domain(type, out, phi, t); 
-                    } 
-                }
-        }
-
-        if (profile.is_boundary(type, (V+sign*profile.ghostVect())[dir]))
-        {
-            std::size_t A = -1, B = -1;
-    
-            if      (0 == dir) { A = 1; B = 2; }
-            else if (1 == dir) { A = 0; B = 2; }
-            else if (2 == dir) { A = 0; B = 1; }
-            else    assert(false);
-
-            for (int a = phi.smallEnd()[A]; a <= phi.bigEnd()[A]; ++a)
-                for (int b = phi.smallEnd()[B]; b <= phi.bigEnd()[B]; ++b)
-                {
-                    IntVect bdry(V);
-                    bdry.shift(dir, sign*profile.ghostVect()[dir]);
-                    bdry.setVal(A, a);
-                    bdry.setVal(B, b);
-
-                    O(bdry) = profile.boundary(type, bdry, phi, t); 
-                }
-
-            int sign = (upper_boundary(type) ? -1 : 1);
-            V.shift(dir, sign*IntVect::Unit[dir]);
-        }
-
-        return V;
-    }
-
-  private:
-    Profile const& profile;
-    DataIndex di;
-    Real t;
-    problem_state& O_;
-    problem_state const& phi_;
-}; 
-
 template <typename Derived>
 struct profile_base 
 {
@@ -732,13 +645,52 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox const& FZ
         ) const
     { // {{{ 
-        IntVect n(here[0], here[1], here[2]+1); // south
-        IntVect s(here[0], here[1], here[2]);   // south
-        IntVect e(here[0], here[1]+1, here[2]); // east
-        IntVect w(here[0], here[1], here[2]);   // west
+        return horizontal_stencil_1d(here, 1, FY)
+             + horizontal_stencil_1d(here, 2, FZ);
+    } // }}}
+
+    Real horizontal_stencil_1d(
+        IntVect here
+      , std::size_t dir
+      , FArrayBox const& F
+        ) const
+    { // {{{
+        assert((dir == 1) || (dir == 2));
+
+#if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
+        IntVect right1(here); right1.setVal(dir, here[dir]+1);
 
         Real const dh = std::get<1>(dp()); 
-        return (-1.0/dh) * (FY(e) - FY(w) + FZ(n) - FZ(s)); 
+        return (-1.0/dh) * (F(right1) - F(here)); 
+#else
+        IntVect left3(here); left3.setVal(dir, here[dir]-3);
+        IntVect left2(here); left2.setVal(dir, here[dir]-2);
+        IntVect left1(here); left1.setVal(dir, here[dir]-1);
+
+        IntVect right1(here); right1.setVal(dir, here[dir]+1);
+        IntVect right2(here); right2.setVal(dir, here[dir]+2);
+        IntVect right3(here); right3.setVal(dir, here[dir]+3);
+
+        Real constexpr alpha = -12.0;
+
+        Real constexpr a        = 0.0 - (5.0*alpha)/3.0;   // a_{i}
+
+        Real constexpr a_left1  = -45.0 + (5.0*alpha)/4.0; // a_{i-1}
+        Real constexpr a_right1 = +45.0 + (5.0*alpha)/4.0; // a_{i+1}
+
+        Real constexpr a_left2  = +9.0 - alpha/2.0;        // a_{i-2}
+        Real constexpr a_right2 = -9.0 - alpha/2.0;        // a_{i+2}
+
+        Real constexpr a_left3  = -1.0 + alpha/12.0;       // a_{i-3}
+        Real constexpr a_right3 = +1.0 + alpha/12.0;       // a_{i+3}
+
+        Real const dh = std::get<1>(dp()); 
+        return (-1.0/(60.0*dh))
+             * ( -a_right3*F(left3) + -a_right2*F(left2) + -a_right1*F(left1)
+               + -a*F(here)
+               + -a_left1*F(right1) + -a_left2*F(right2) + -a_left3*F(right3)
+               ); 
+#endif
     } // }}}
 
     typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
