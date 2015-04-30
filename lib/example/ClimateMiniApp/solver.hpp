@@ -54,7 +54,7 @@ enum ProblemType
 };
 
 inline std::ostream& operator<<(std::ostream& os, ProblemType problem)
-{
+{ // {{{
     switch (problem)
     {
         default:
@@ -66,7 +66,7 @@ inline std::ostream& operator<<(std::ostream& os, ProblemType problem)
             break;
     }
     return os;
-}
+} // }}}
 
 struct configuration
 {
@@ -116,18 +116,18 @@ struct configuration
     {}
 
     std::string print_csv_header() const
-    {
+    { // {{{
         return "Problem,"
                "Horizontal Extent (nh),"
                "Vertical Extent (nv),"
                "Max Box Size (mbs)";
-    }
+    } // }}}
 
     CSVTuple<ProblemType, std::uint64_t, std::uint64_t, std::uint64_t>
     print_csv() const
-    {
+    { // {{{
         return StreamCSV(problem, nh, nv, max_box_size); 
-    }
+    } // }}}
 }; 
 
 enum boundary_type
@@ -144,7 +144,7 @@ enum boundary_type
 };
 
 bool upper_boundary(boundary_type bdry)
-{
+{ // {{{
     switch (bdry)
     {
         case LOWER_X:
@@ -159,12 +159,12 @@ bool upper_boundary(boundary_type bdry)
 
     assert(false);
     return false;
-}
+} // }}}
 
 bool lower_boundary(boundary_type type)
-{
+{ // {{{
     return !upper_boundary(type);
-}
+} // }}}
 
 struct problem_state
 {
@@ -180,12 +180,12 @@ struct problem_state
       , FY()
       , FZ()
       , epoch_()
-    {
+    { // {{{
         define(dbl, comps, ghost);
-    }
+    } // }}}
 
     void define(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
-    {
+    { // {{{
         U.define(dbl, comps, ghost);
 
         auto defineFY =
@@ -217,39 +217,39 @@ struct problem_state
         {
             epoch_[dit()] = 0;
         }
-    }
+    } // }}}
 
     void copy(DataIndex di, problem_state const& A)
-    {
+    { // {{{
         U[di].copy(A.U[di]);
         FY[di].copy(A.FY[di]);
         FZ[di].copy(A.FZ[di]);
-    }
+    } // }}}
 
     void zero(DataIndex di)
-    {
+    { // {{{
         U[di].setVal(0.0);
         FY[di].setVal(0.0);
         FZ[di].setVal(0.0);
-    }
+    } // }}}
 
     void increment(DataIndex di, problem_state const& A, Real factor = 1.0)
-    {
+    { // {{{
         U[di].plus(A.U[di], factor);
-    }
+    } // }}}
 
     hpx::future<void> exchangeAsync(DataIndex di)
-    { 
+    { // {{{
         return LocalExchangeAsync(epoch_[di]++, di, U);
-    }
+    } // }}}
 
     void exchangeSync(DataIndex di)
-    { 
+    { // {{{
         LocalExchangeSync(epoch_[di]++, di, U);
-    }
+    } // }}}
 
     hpx::future<void> exchangeAllAsync()
-    {
+    { // {{{
         DataIterator dit = U.dataIterator();
 
         std::vector<hpx::future<void> > exchanges;
@@ -258,12 +258,12 @@ struct problem_state
             exchanges.push_back(exchangeAsync(dit()));
 
         return hpx::lcos::when_all(exchanges);
-    }
+    } // }}}
 
     void exchangeAllSync()
-    {
+    { // {{{
         exchangeAllAsync().get();
-    }
+    } // }}}
 
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FY;
@@ -282,8 +282,7 @@ struct imex_operators
 
     // TODO: Implement caching in profile.
     void resetDt(Real)
-    {
-    }
+    {}
 
     void horizontalFlux(DataIndex di, Real t, problem_state& phi_) const
     { // {{{
@@ -329,7 +328,6 @@ struct imex_operators
         fut_z.get();
     } // }}}
 
-    // TODO: Lift stencil.
     void explicitOp(
         DataIndex di
       , Real t
@@ -337,7 +335,7 @@ struct imex_operators
       , problem_state& kE_
       , problem_state& phi_
         ) 
-    {
+    { // {{{
         phi_.exchangeSync(di);
         horizontalFlux(di, t, phi_);
 
@@ -361,18 +359,18 @@ struct imex_operators
                     kE(here) = profile.horizontal_stencil(here, FY, FZ)
                              + profile.source_term(here, t); 
                 }
-    }
+    } // }}}
 
     void implicitOp(
         DataIndex di
       , Real t
       , std::size_t stage
-      , problem_state& kI
-      , problem_state& phi
+      , problem_state& kI_
+      , problem_state& phi_
         )
-    {
-        kI.zero(di);
-    }
+    { // {{{
+        kI_.zero(di);
+    } // }}}
 
     void solve(
         DataIndex di
@@ -381,7 +379,7 @@ struct imex_operators
       , Real dtscale
       , problem_state& phi_
         )
-    {
+    { // {{{
         phi_.exchangeSync(di);
 
         auto& phi = phi_.U[di];
@@ -392,25 +390,6 @@ struct imex_operators
 
         Box b(lower, upper);
 
-/*
-        std::vector<hpx::future<void> > vsolves;
-
-        for (int j = lower[1]; j <= upper[1]; ++j)
-            for (int k = lower[2]; k <= upper[2]; ++k)
-            {
-                auto VSolve = [&](int j, int k)
-                    {
-                        auto A = profile.vertical_operator(j, k, phi, dtscale, b);
-
-                        profile.vertical_solve(j, k, A, phi, b);
-                    };
-
-                vsolves.push_back(hpx::async(VSolve, j, k));
-            }
-
-        hpx::lcos::when_all(vsolves).get();
-*/
-
         // FIXME: Was this made serial for performance reasons?
         for (int j = lower[1]; j <= upper[1]; ++j)
             for (int k = lower[2]; k <= upper[2]; ++k)
@@ -419,7 +398,7 @@ struct imex_operators
 
                 profile.vertical_solve(j, k, A, phi, b);
             }
-    }
+    } // }}}
 
   private:
     Profile profile;
@@ -537,9 +516,9 @@ struct profile_base
 
   private:
     Derived const& derived() const
-    {
+    { // {{{
         return static_cast<Derived const&>(*this);
-    }
+    } // }}}
 };
 
 struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
@@ -559,21 +538,31 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     // Time step size
     Real dt() const
     { // {{{
-        // For advection-diffusion: 
-        //
-        //      dt = CFL*dh/(vy+vz) 
-        // 
-        //      with CFL < 1.0 
-        // 
-
-        Real constexpr CFL = 0.8;
-        Real const dh = std::get<1>(dp()); 
-
+        // Check if advection is on. 
         // (vy!=0) || (vz!=0)
-        assert(  (std::fabs(vy-0.0) > 1e-16)
-              || (std::fabs(vz-0.0) > 1e-16));
+        if ((std::fabs(vy-0.0) > 1e-16) || (std::fabs(vz-0.0) > 1e-16))
+        {
+            // For advection: 
+            //
+            //      dt = CFL*dh/(vy+vz) 
+            // 
+            //      with CFL < 1.0 
+            // 
+            Real constexpr CFL = 0.8;
+            Real const dh = std::get<1>(dp()); 
 
-        return CFL*dh/(std::abs(vy)+std::abs(vz)); 
+            return CFL*dh/(std::abs(vy)+std::abs(vz));
+        }
+
+        // Diffusion only.
+        else
+        {
+            // We want something with the same magnitude as dv.
+            Real constexpr A = 0.8;
+            Real const dv = std::get<0>(dp());
+
+            return A*dv;
+        }
     } // }}}
 
     ProblemDomain problem_domain() const
@@ -707,7 +696,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         std::uint64_t const size = b.size()[0];
         Real const dv = std::get<0>(dp()); 
-        Real const kx = 1.0;
         Real const kvdv = kx/(dv*dv); 
         Real const H = dt()*dtscale;
 
