@@ -388,57 +388,63 @@ int main(int argc, char** argv)
 
     cmdline.add_options()
         ( "problem"
-        , boost::program_options::value<std::string>()->default_value("diffusion")
-        , "type of problem (options: diffusion, advection-diffusion)") 
+        , boost::program_options::value<std::string>()->
+            default_value("advection-diffusion")
+        , "type of problem (options: advection-diffusion)") 
 
         ( "nt"
-        , boost::program_options::value<Real>()->default_value(5.0e-5, "5.0e-5")  
+        , boost::program_options::value<Real>()->
+            default_value(5.0e-5, "5.0e-5")  
         , "physical time to step to")
         ( "ns"
         , boost::program_options::value<std::uint64_t>()
         , "number of steps to take")
         ( "nh"
-        , boost::program_options::value<std::uint64_t>()->default_value(480)
+        , boost::program_options::value<std::uint64_t>()->
+            default_value(480)
         , "horizontal (y and z) extent per locality")
         ( "nv"
-        , boost::program_options::value<std::uint64_t>()->default_value(30)
+        , boost::program_options::value<std::uint64_t>()->
+            default_value(30)
         , "vertical (x) extent per locality")
         ( "mbs"
-        , boost::program_options::value<std::uint64_t>()->default_value(15)
+        , boost::program_options::value<std::uint64_t>()->
+            default_value(15)
         , "max box size")
 
         ( "cx"
-        , boost::program_options::value<Real>()->default_value(2.0, "2.0")
+        , boost::program_options::value<Real>()->
+            default_value(2.0, "2.0")
         , "x constant")
         ( "cy"
-        , boost::program_options::value<Real>()->default_value(2.0, "2.0")
+        , boost::program_options::value<Real>()->
+            default_value(2.0, "2.0")
         , "y constant")
         ( "cz"
-        , boost::program_options::value<Real>()->default_value(2.0, "2.0")
+        , boost::program_options::value<Real>()->
+            default_value(2.0, "2.0")
         , "z constant")
 
         ( "kx"
-        , boost::program_options::value<Real>()->default_value(0.25e-2, "0.25e-2")
+        , boost::program_options::value<Real>()->
+            default_value(1.0e-2, "1.0e-2")
         , "x diffusion coefficient")
-        ( "ky"
-        , boost::program_options::value<Real>()->default_value(1.0e-3, "1.0e-3")
-        , "y diffusion coefficient (diffusion problem only)")
-        ( "kz"
-        , boost::program_options::value<Real>()->default_value(1.0e-3, "1.0e-3")
-        , "z diffusion coefficient (diffusion problem only)")
 
         ( "vy"
-        , boost::program_options::value<Real>()->default_value(1.0e-1, "1.0e-1")
-        , "y velocity component (advection-diffusion problem only)")
+        , boost::program_options::value<Real>()->
+            default_value(1.0e-1, "1.0e-1")
+        , "y velocity component")
         ( "vz"
-        , boost::program_options::value<Real>()->default_value(1.0e-1, "1.0e-1")
-        , "z velocity component (advection-diffusion problem only)")
+        , boost::program_options::value<Real>()->
+            default_value(1.0e-1, "1.0e-1")
+        , "z velocity component")
 
         ( "header", "print header for the CSV timing data")
         ( "verbose", "display status updates")
 #if defined(CH_USE_HDF5)
         ( "output"
-        , boost::program_options::value<bool>()->default_value(true, "true")
+        , boost::program_options::value<bool>()->
+            default_value(true, "true")
         , "generate HDF5 output every timestep") 
 #endif
         ; 
