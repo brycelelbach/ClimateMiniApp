@@ -696,15 +696,18 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         std::uint64_t const size = b.size()[0];
         Real const dv = std::get<0>(dp()); 
-        Real const kvdv = kx/(dv*dv); 
-        Real const H = dt()*dtscale;
+        Real const beta = (kx*(dt()*dtscale))/(dv*dv);
 
         // Sub-diagonal part of the matrix.
-        std::vector<Real> dl(size-1, H*(kvdv/2.0));
+        std::vector<Real> dl(size-1, -beta);
         // Diagonal part of the matrix.
-        std::vector<Real> d(size, 1.0-H*kvdv);
+        std::vector<Real> d(size, 1.0+2.0*beta);
         // Super-diagonal part of the matrix.
-        std::vector<Real> du(size-1, H*(kvdv/2.0));
+        std::vector<Real> du(size-1, -beta);
+
+        // No-flux boundaries.
+        du.front() = -2.0*beta;
+        dl.back()  = -2.0*beta;
 
         return crs_matrix(dl, d, du); 
     } // }}}
@@ -730,6 +733,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
         Real* rhs = &phi(IntVect(lower[0], j, k)); 
 
+//        for (int i = lower[0]; i <= upper[0]; ++i)
+//            std::cout << "phi[" << i << "] == " << rhs[i] << "\n";
+
         int info = LAPACKE_dgtsv(
             LAPACK_ROW_MAJOR, // matrix format
             std::get<1>(A).size(), // matrix order
@@ -741,6 +747,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
             1 // leading dimension of RHS
             );
 
+//        for (int i = lower[0]; i <= upper[0]; ++i)
+//            std::cout << "rhs[" << i << "] == " << rhs[i] << "\n";
+ 
         assert(info == 0);
     } // }}}
 

@@ -226,6 +226,7 @@ void stepLoop(
                 hpx::async(
                     [&](DataIndex di)
                     { ark.advance(di, time, data); }
+                    //{ ark.getImExOp().solve(di, time, 0, 1.0, data); }
                   , dit()
                 )
             );
