@@ -627,13 +627,18 @@ public:
 
   inline unsigned int indexI(const LayoutIndex&) const;
 
+#if defined(CH_MPI) || defined(CH_HPX)
   int getLocalProcID() const;
 
   /// Use with caution. This function constructs a compatible DataIndex for
   /// this BoxLayout based on a DataIndex from another BoxLayout. There is no
   /// gurantee that the new DataIndex will be valid; if it is invalid, things
   /// will blow up.  
+#if defined(CH_HPX)
   DataIndex localizeDataIndex(DataIndex idx) const;
+#endif
+
+#endif
 
 protected:
 
@@ -733,18 +738,23 @@ BoxLayout::setProcID(const LayoutIndex& a_layoutIndex, unsigned int a_procID)
   m_boxes->operator[](a_layoutIndex.m_index).m_procID = a_procID;
 }
 
+#if defined(CH_MPI) || defined(CH_HPX)
 inline int
 BoxLayout::getLocalProcID() const
 {
   return *m_localProcID;
 }
   
+#if defined(CH_HPX)
 inline DataIndex
 BoxLayout::localizeDataIndex(DataIndex idx) const
 {
   idx.setLayoutID(m_layout);
   return idx;
 }
+#endif
+
+#endif
 
 // global functions
 // ================
