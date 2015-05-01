@@ -155,7 +155,7 @@ void AsyncARK4<X, IMEXOP>::advance(
   // Reset the dense output coefs
   if (m_denseOutput)
   {
-    for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
+    for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
       m_denseCoefs[icoef].zero(di);
   }
 
@@ -183,7 +183,7 @@ void AsyncARK4<X, IMEXOP>::advance(
       m_opImEx.implicitOp(di, next_t, stage, m_kI, m_phi[stage]);
 
       // Add the known stage operator values to future solves 
-      for (int k=stage+1; k < s_nStages; ++k)
+      for (std::size_t k=stage+1; k < s_nStages; ++k)
       {
         m_phi[k].increment(di, m_kE, m_dt*s_aE[k][stage]);
         m_phi[k].increment(di, m_kI, m_dt*s_aI[k][stage]);
@@ -195,7 +195,7 @@ void AsyncARK4<X, IMEXOP>::advance(
 
       if (m_denseOutput)
       {
-        for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
+        for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
         {
           m_denseCoefs[icoef].increment(di, m_kE, m_dt*s_bstar[icoef][stage]);
           m_denseCoefs[icoef].increment(di, m_kI, m_dt*s_bstar[icoef][stage]);

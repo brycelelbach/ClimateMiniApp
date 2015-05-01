@@ -132,7 +132,7 @@ testARK4 ()
   Real coef = TestImExOp::s_cE + TestImExOp::s_cI;
 
   bool denseOutput = true;
-  ARK4<TestOpData, TestImExOp> ark(soln, basedt, denseOutput); 
+  ARK4<TestOpData, TestImExOp> ark(TestImExOp(0.0), soln, basedt, denseOutput); 
   LevelDataOps<FArrayBox> ops;
   for (int res=0; res < Nres; ++res)
   {

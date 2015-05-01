@@ -138,20 +138,20 @@ void ARK4<X, IMEXOP>::advance(Real t, X& state)
   // Reset the dense output coefs
   if (m_denseOutput)
   {
-    for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
+    for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
       m_denseCoefs[icoef].zero();
   }
 
   // Set m_phi[0] := state, all others 0
   m_phi[0].copy(state);
-  for (int stage = 1; stage < s_nStages; stage++)
+  for (std::size_t stage = 1; stage < s_nStages; stage++)
     m_phi[stage].zero();
 
   // Set the output to zero
   // state.zero();
 
   // For each stage
-  for (int stage = 0; stage < s_nStages; stage++)
+  for (std::size_t stage = 0; stage < s_nStages; stage++)
     {
       Real next_t = t + s_c[stage]*m_dt;
       if (stage > 0)
@@ -163,17 +163,17 @@ void ARK4<X, IMEXOP>::advance(Real t, X& state)
 
         // Solve in-place for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(m_phi[stage], next_t, s_aIdiag);
+        m_opImEx.solve(next_t, stage, s_aIdiag, m_phi[stage]);
       }
 
       m_phi[stage].exchange();
 
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(m_kE, m_phi[stage], next_t);
-      m_opImEx.implicitOp(m_kI, m_phi[stage], next_t);
+      m_opImEx.explicitOp(next_t, stage, m_kE, m_phi[stage]);
+      m_opImEx.implicitOp(next_t, stage, m_kI, m_phi[stage]);
 
       // Add the known stage operator values to future solve rhs in phi[stage]
-      for (int k=stage+1; k < s_nStages; ++k)
+      for (std::size_t k=stage+1; k < s_nStages; ++k)
       {
         m_phi[k].increment(m_kE, m_dt*s_aE[k][stage]);
         m_phi[k].increment(m_kI, m_dt*s_aI[k][stage]);
@@ -185,7 +185,7 @@ void ARK4<X, IMEXOP>::advance(Real t, X& state)
 
       if (m_denseOutput)
       {
-        for (int icoef=0; icoef < s_nDenseCoefs; ++icoef)
+        for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
         {
           m_denseCoefs[icoef].increment(m_kE, m_dt*s_bstar[icoef][stage]);
           m_denseCoefs[icoef].increment(m_kI, m_dt*s_bstar[icoef][stage]);
