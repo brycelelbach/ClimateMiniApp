@@ -66,7 +66,8 @@ testVerticalSolveConvergence()
       // Initialize the rhs to exact soln
       Real initCoef = 1;
       TestOperator::setExact(rhs,kx,initCoef);
-      TestOperator::implicitSolve2ndOrder(soln, rhs, coef);
+      // TestOperator::implicitSolve2ndOrder(soln, rhs, coef);
+      TestOperator::implicitSolve4thOrder(soln, rhs, coef);
 
       // Calculate the error versus exact solution
       Real exactcoef = 1.0 / (1.0 + coef * pow(M_PI*(Real) kx,2));

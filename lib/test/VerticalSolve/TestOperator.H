@@ -25,6 +25,11 @@ public:
                                     FArrayBox& a_rhs,
                                     Real a_coef);
 
+  static void implicitSolve4thOrder(FArrayBox& a_state,
+                                    FArrayBox& a_rhs,
+                                    Real a_coef);
+
+
   static void setExact(FArrayBox& a_exact,
                        int a_kx,
                        Real a_coef);

@@ -24,8 +24,8 @@ LibNames := AMRElliptic AMRTools BoxTools BaseTools AMRTimeDependent
 # relative paths to source code directories
 base_dir = .
 
-src_dirs = 
-# \
+src_dirs = \
+$(base_dir)/../../src/MiscUtil
 # $(base_dir)/../util \
 # $(base_dir)/../../src/advect \
 # $(base_dir)/../../src/AMRTimeDependent \
