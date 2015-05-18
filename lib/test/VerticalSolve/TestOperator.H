@@ -14,6 +14,13 @@
 #include "FArrayBox.H"
 
 #include "NamespaceHeader.H"
+/// A struct to hold the diagonals of a banded matrix
+struct band_matrix
+{
+  const static int maxbands = 7;
+  int nbands;
+  std::vector<Real> d[maxbands];
+};
 
 class TestOperator
 {
@@ -21,17 +28,28 @@ public:
   TestOperator();
   virtual ~TestOperator();
 
-  static void implicitSolve2ndOrder(FArrayBox& a_state,
-                                    FArrayBox& a_rhs,
-                                    Real a_coef);
+  static void build4thOrderOperator(band_matrix& a_A, 
+      Real& a_coef, Real& a_dx, int a_N);
 
-  static void implicitSolve4thOrder(FArrayBox& a_state,
-                                    FArrayBox& a_rhs,
-                                    Real a_coef);
+  static void build2ndOrderOperator(band_matrix& a_A, 
+      Real& a_coef, Real& a_dx, int a_N);
 
+  static void build2ndOrderSolver(band_matrix& a_A, 
+      Real& a_coef, Real& a_dx, int a_N);
+
+  static void build4thOrderSolver(band_matrix& a_A, 
+      Real& a_coef, Real& a_dx, int a_N);
+
+  static void applyBandedMatrix(FArrayBox& a_state, 
+      FArrayBox& a_rhs, const band_matrix& a_A, Real a_alpha, Real a_beta);
+
+  static void implicitSolve(FArrayBox& a_state,
+                            FArrayBox& a_rhs,
+                            const band_matrix& a_A);
 
   static void setExact(FArrayBox& a_exact,
                        int a_kx,
+                       Real a_dx,
                        Real a_coef);
 
 };

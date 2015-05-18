@@ -44,7 +44,7 @@ testVerticalSolveConvergence()
     // parameters that should probably be in an input file
     int minN = 10;     // minimum number of vertical cells
     int nRes = 4;     // number of resolutions to test
-    Real minDt = 0.1;    // timestep
+    Real minDt = 1.0;    // timestep
     Real errorTol = 1.e-13; // tolerance of error in final answer (exact)
     Real goalOrder = 1.8; // order we'd like the solve to be
 
@@ -59,26 +59,47 @@ testVerticalSolveConvergence()
       FArrayBox soln(b,1);
       FArrayBox rhs(b,1);
 
-      Real dt = minDt / pow(2,res);
-      Real coef = 1.0; // * dt;
+      Real dx = 1.0/(Real) N;
+      // Real dt = minDt * dx; // temporal error for 1 step is O(dt^2)
+      Real dt = minDt; // temporal error for 1 step is O(dt^2)
+      Real coef = dt;
       int kx = 2;
 
       // Initialize the rhs to exact soln
       Real initCoef = 1;
-      TestOperator::setExact(rhs,kx,initCoef);
-      // TestOperator::implicitSolve2ndOrder(soln, rhs, coef);
-      TestOperator::implicitSolve4thOrder(soln, rhs, coef);
+      TestOperator::setExact(rhs, kx, dx, initCoef);
 
+      // Build the Laplacian
+      // band_matrix L;
+      // TestOperator::build2ndOrderOperator(L, coef, dx, N);
+ 
+      // Build the Helmholtz matrix and solve
+      band_matrix H;
+      TestOperator::build4thOrderSolver(H, coef, dx, N);
+      TestOperator::implicitSolve(soln, rhs, H);
+
+      // Just make sure the residual is zero
+      /*
+      // Soln is initial soln value
+      TestOperator::setExact(soln, kx, dx, initCoef); 
+      // apply coef D_{xx} to it
+      Real alpha = coef;
+      Real beta = 0.0;
+      TestOperator::applyBandedMatrix(soln, rhs, L, alpha, beta);
+      // pout() << "N: " << N <<" residual = "<< rhs.norm(0) << endl;
+      */
+ 
       // Calculate the error versus exact solution
       Real exactcoef = 1.0 / (1.0 + coef * pow(M_PI*(Real) kx,2));
-      TestOperator::setExact(rhs,kx,exactcoef);
+      // Real exactcoef = -coef * pow(M_PI*(Real) kx,2);
+      TestOperator::setExact(rhs, kx, dx, exactcoef);
       rhs.minus(soln);
 
-      // Output error norms
+      // Output soln error norms
       errorNorm[res][0] = rhs.norm(1) / pow((Real) N, 3); // L1 norm
       errorNorm[res][1] = rhs.norm(2) / pow((Real) N, 1.5); // L2 norm
       errorNorm[res][2] = rhs.norm(0); // max norm
-      pout()<<"N: "<<N<<" error = "<<errorNorm[res]<<endl;
+      pout()<<"N: "<<N<<" soln error = "<<errorNorm[res]<<endl;
 
     } // loop over resolutions
 
@@ -118,6 +139,7 @@ main(int argc ,char* argv[])
   // Check for an input file
   char* inFile = NULL;
 
+  /*
   if (argc > 1)
   {
     inFile = argv[1];
@@ -131,6 +153,7 @@ main(int argc ,char* argv[])
 
   // Parse the input file
   ParmParse pp(argc-2, argv+2, NULL, inFile);
+  */
 
   pout () << indent2 << "Beginning " << pgmname << " ..." << endl ;
 

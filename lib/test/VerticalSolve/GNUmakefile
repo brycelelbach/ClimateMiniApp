@@ -45,7 +45,7 @@ INPUT = inputs
 include $(CHOMBO_HOME)/mk/Make.example
 
 # additional libraries
-LAPACKLIBS = -llapack
+LAPACKLIBS = -llapack -lblas
 LIBFLAGS += $(LAPACKLIBS)
 
 # application-specific variables

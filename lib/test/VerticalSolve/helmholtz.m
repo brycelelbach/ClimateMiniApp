@@ -4,7 +4,7 @@
 % Fix the ends for dphi/dz = 0
 % Clean up so number of bands is minimized
 
-for res=1:3
+for res=1:1
     
 N=5*2^res;
 h = 1/N;
@@ -62,7 +62,10 @@ phi = (sin(kx * x(2:N+1)) - sin(kx * x(1:N)))/(kx * h);
 % phi0 = sin(kx*
 rhs = - kx^2 * phi;
 
-err(res) = max(abs(rhs - L*phi))
+error = abs(rhs - L*phi);
+semilogy(x(1:N),error);
+hold on;
+err(res) = max(error)
 end
 
 
