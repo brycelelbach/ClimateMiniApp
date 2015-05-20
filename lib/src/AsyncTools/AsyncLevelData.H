@@ -24,13 +24,24 @@
 #include "NamespaceHeader.H"
 
 template <typename T>
+struct AsyncLevelData;
+
+template <typename T>
+void defineFAB(AsyncLevelData<T>& ld, DataIndex di)
+{
+    Box b = ld.disjointBoxLayout()[di];
+    b.grow(ld.ghostVect());
+    ld[di].define(b, ld.nComp());
+}
+
+template <typename T>
 struct AsyncLevelData : LayoutData<DataflowBox<T> >
 {
     typedef LayoutData<DataflowBox<T> > base_type;
 
   private:
     DisjointBoxLayout m_disjointBoxLayout;
-    unsigned          m_nComp;
+    std::size_t       m_nComp;
     IntVect           m_ghost;
     AsyncCopier       m_exchangeCopier;
 
@@ -45,7 +56,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     template <typename F>
     AsyncLevelData(
         DisjointBoxLayout const& dbl
-      , unsigned nComp
+      , std::size_t nComp
       , IntVect ghost
       , F&& defineElement
         )
@@ -55,7 +66,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
 
     AsyncLevelData(
         DisjointBoxLayout const& dbl
-      , unsigned nComp
+      , std::size_t nComp
       , IntVect ghost = IntVect::Zero
         )
     {
@@ -65,7 +76,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     template <typename F>
     void define(
         DisjointBoxLayout const& dbl
-      , unsigned nComp 
+      , std::size_t nComp 
       , IntVect ghost
       , F&& defineElement
         )
@@ -87,14 +98,14 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
 
     void define(
         DisjointBoxLayout const& dbl
-      , unsigned nComp
+      , std::size_t nComp
       , IntVect ghost = IntVect::Zero
         )
     {
-        define(dbl, nComp, ghost, defineFAB);
+        define(dbl, nComp, ghost, defineFAB<T>);
     }
 
-    unsigned nComp() const
+    std::size_t nComp() const
     {
         return m_nComp;
     }
@@ -106,13 +117,6 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     }
 
   private:
-    static void defineFAB(AsyncLevelData<T>& ld, DataIndex di)
-    {
-        Box b = ld.disjointBoxLayout()[di];
-        b.grow(ld.ghostVect());
-        ld[di].define(b, ld.nComp());
-    }
-
     template <typename F>
     void defineData(F&& defineElement)
     {
