@@ -189,7 +189,7 @@ applyBandedMatrix(FArrayBox& a_state,
     int size = size0 - abs(invd-diagIx);
     for (int i=0; i < size; i++)
     {
-      int offset = (max(invd-diagIx,0) + i) * nA;
+      int offset = (std::max(invd-diagIx,0) + i) * nA;
       // (a_A.nbands-1-d)*size0 + max(d-diagIx,0);
       int ix = d + offset; // where the first entry goes
       A[ix] = a_A.d[invd][i];
