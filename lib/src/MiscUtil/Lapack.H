@@ -33,6 +33,10 @@ extern "C"
     // Band matrix LU solve
     void dgbtrs_(char* TRANS, int* N, int* KL, int* KU, int* NRHS, double* AB, 
                  int* LDAB, int* IPIV, double* B, int* LDB, int* INFO);
+
+    void dgbmv_(char *trans, int *m, int *n, int *kl, int *ku, double *alpha,
+                double *a, int *lda, double *x, int *incx, double *beta,
+                double *y, int *incy);
 }
 
 #include "NamespaceFooter.H"
