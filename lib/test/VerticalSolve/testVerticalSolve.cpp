@@ -8,10 +8,10 @@
  */
 #endif
 
+#include <iostream>
 #include "parstream.H"
-using std::endl;
 #include "ParmParse.H"
-#include "CH_TIMER.H"
+#include "CH_Timer.H"
 #include "FArrayBox.H"
 #include "LayoutIterator.H"
 #include "LoadBalance.H"
