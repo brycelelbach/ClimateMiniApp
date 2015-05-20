@@ -219,35 +219,6 @@ struct problem_state
         }
     } // }}}
 
-    void copy(DataIndex di, problem_state const& A)
-    { // {{{
-        U[di].copy(A.U[di]);
-        FY[di].copy(A.FY[di]);
-        FZ[di].copy(A.FZ[di]);
-    } // }}}
-
-    void zero(DataIndex di)
-    { // {{{
-        U[di].setVal(0.0);
-        FY[di].setVal(0.0);
-        FZ[di].setVal(0.0);
-    } // }}}
-
-    void increment(DataIndex di, problem_state const& A, Real factor = 1.0)
-    { // {{{
-        U[di].plus(A.U[di], factor);
-    } // }}}
-
-    hpx::future<void> exchangeAsync(DataIndex di)
-    { // {{{
-        return LocalExchangeAsync(epoch_[di]++, di, U);
-    } // }}}
-
-    void exchangeSync(DataIndex di)
-    { // {{{
-        LocalExchangeSync(epoch_[di]++, di, U);
-    } // }}}
-
     hpx::future<void> exchangeAllAsync()
     { // {{{
         DataIterator dit = U.dataIterator();
@@ -255,7 +226,7 @@ struct problem_state
         std::vector<hpx::future<void> > exchanges;
     
         for (dit.begin(); dit.ok(); ++dit)
-            exchanges.push_back(exchangeAsync(dit()));
+            exchanges.push_back(LocalExchangeAsync(epoch_[dit()]++, dit(), U));
 
         return hpx::lcos::when_all(exchanges);
     } // }}}
@@ -271,6 +242,115 @@ struct problem_state
 
   private:
     LayoutData<std::size_t> epoch_;
+
+  public:
+    friend struct sub_problem_state;
+};
+
+struct sub_problem_state
+{
+    sub_problem_state()
+      : ps_(0)
+      , di_()
+    {}
+
+    sub_problem_state(problem_state& ps, DataIndex di)
+      : ps_(&ps)
+      , di_(di)
+    {}
+
+    sub_problem_state(sub_problem_state const& other)
+      : ps_(other.ps_)
+      , di_(other.di_)
+/*
+      , U(ps_->U[di_].interval(), ps_->U[di_])
+      , FY(ps_->FY[di_].interval(), ps_->FY[di_])
+      , FZ(ps_->FZ[di_].interval(), ps_->FZ[di_])
+*/
+    {}
+
+    sub_problem_state& operator=(sub_problem_state const& other)
+    { // {{{
+        ps_ = other.ps_;
+        di_ = other.di_;
+/*
+        U.define(ps_->U[di_].interval(), ps_->U[di_]);
+        FY.define(ps_->FY[di_].interval(), ps_->FY[di_]);
+        FZ.define(ps_->FZ[di_].interval(), ps_->FZ[di_]);
+*/
+        return *this;
+    } // }}}
+
+    void copy(sub_problem_state const& A)
+    { // {{{
+        U().copy(A.U());
+        FY().copy(A.FY());
+        FZ().copy(A.FZ());
+    } // }}}
+
+    void zero()
+    { // {{{
+        U().setVal(0.0);
+        FY().setVal(0.0);
+        FZ().setVal(0.0);
+    } // }}}
+
+    void increment(sub_problem_state const& A, Real factor = 1.0)
+    { // {{{
+        U().plus(A.U(), factor);
+    } // }}}
+
+    hpx::future<void> exchangeAsync()
+    { // {{{
+        assert(ps_);
+        return LocalExchangeAsync(ps_->epoch_[di_]++, di_, ps_->U);
+    } // }}}
+
+    void exchangeSync()
+    { // {{{
+        assert(ps_);
+        LocalExchangeSync(ps_->epoch_[di_]++, di_, ps_->U);
+    } // }}}
+
+    FArrayBox& U()
+    { // {{{
+        assert(ps_);
+        return ps_->U[di_]; 
+    } // }}}
+
+    FArrayBox const& U() const
+    { // {{{
+        assert(ps_);
+        return ps_->U[di_]; 
+    } // }}}
+
+    FArrayBox& FY()
+    { // {{{
+        assert(ps_);
+        return ps_->FY[di_]; 
+    } // }}}
+
+    FArrayBox const& FY() const
+    { // {{{
+        assert(ps_);
+        return ps_->FY[di_]; 
+    } // }}}
+
+    FArrayBox& FZ()
+    { // {{{
+        assert(ps_);
+        return ps_->FZ[di_]; 
+    } // }}}
+
+    FArrayBox const& FZ() const
+    { // {{{
+        assert(ps_);
+        return ps_->FZ[di_]; 
+    } // }}}
+
+  private:
+    problem_state* ps_;
+    DataIndex di_;
 };
 
 template <typename Profile>
@@ -284,12 +364,12 @@ struct imex_operators
     void resetDt(Real)
     {}
 
-    void horizontalFlux(DataIndex di, Real t, problem_state& phi_) const
+    void horizontalFlux(Real t, sub_problem_state& phi_) const
     { // {{{
-        auto const& phi = phi_.U[di];
+        auto const& phi = phi_.U();
 
-        auto& FY = phi_.FY[di];
-        auto& FZ = phi_.FZ[di]; 
+        auto& FY = phi_.FY();
+        auto& FZ = phi_.FZ(); 
 
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -329,24 +409,23 @@ struct imex_operators
     } // }}}
 
     void explicitOp(
-        DataIndex di
-      , Real t
+        Real t
       , std::size_t stage
-      , problem_state& kE_
-      , problem_state& phi_
+      , sub_problem_state& kE_
+      , sub_problem_state& phi_
         ) 
     { // {{{
-        phi_.exchangeSync(di);
-        horizontalFlux(di, t, phi_);
+        phi_.exchangeSync();
+        horizontalFlux(t, phi_);
 
-        auto&       kE  = kE_.U[di];
-        auto const& phi = phi_.U[di];
-        auto const& FY  = phi_.FY[di];
-        auto const& FZ  = phi_.FZ[di];
+        auto&       kE  = kE_.U();
+        auto const& phi = phi_.U();
+        auto const& FY  = phi_.FY();
+        auto const& FZ  = phi_.FZ();
  
         IntVect lower, upper;
 
-        std::tie(lower, upper) = profile.boundary_conditions(di, t, kE_, phi_); 
+        std::tie(lower, upper) = profile.boundary_conditions(t, kE_, phi_); 
     
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
@@ -362,31 +441,29 @@ struct imex_operators
     } // }}}
 
     void implicitOp(
-        DataIndex di
-      , Real t
+        Real t
       , std::size_t stage
-      , problem_state& kI_
-      , problem_state& phi_
+      , sub_problem_state& kI_
+      , sub_problem_state& phi_
         )
     { // {{{
-        kI_.zero(di);
+        kI_.zero();
     } // }}}
 
     void solve(
-        DataIndex di
-      , Real t
+        Real t
       , std::size_t stage
       , Real dtscale
-      , problem_state& phi_
+      , sub_problem_state& phi_
         )
     { // {{{
-        phi_.exchangeSync(di);
+        phi_.exchangeSync();
 
-        auto& phi = phi_.U[di];
+        auto& phi = phi_.U();
  
         IntVect lower, upper;
 
-        std::tie(lower, upper) = profile.boundary_conditions(di, t, phi_, phi_); 
+        std::tie(lower, upper) = profile.boundary_conditions(t, phi_, phi_); 
 
         Box b(lower, upper);
 
@@ -581,13 +658,12 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     } // }}} 
 
     std::tuple<IntVect, IntVect> boundary_conditions(
-        DataIndex di
-      , Real t
-      , problem_state& O_
-      , problem_state const& phi_
+        Real t
+      , sub_problem_state& O_
+      , sub_problem_state const& phi_
         ) const
     { // {{{
-        auto const& phi = phi_.U[di];
+        auto const& phi = phi_.U();
 
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd();

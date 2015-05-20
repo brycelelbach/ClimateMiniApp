@@ -122,6 +122,34 @@ void output(
 }
 #endif
 
+template <typename T, typename IMEX, std::size_t N, std::size_t M>
+T make_ark(
+    DataIndex di
+  , std::array<climate_mini_app::problem_state, N>& phi 
+  , std::array<climate_mini_app::problem_state, M>& denseCoefs 
+  , climate_mini_app::problem_state& kE
+  , climate_mini_app::problem_state& kI
+  , IMEX&& imex
+  , Real dt
+  , bool denseOutput
+    )
+{
+    std::array<climate_mini_app::sub_problem_state, N> sub_phi;
+    std::array<climate_mini_app::sub_problem_state, M> sub_denseCoefs;
+
+    for (std::size_t i = 0; i < phi.size(); ++i)
+        sub_phi[i] = climate_mini_app::sub_problem_state(phi[i], di);
+
+    for (std::size_t i = 0; i < denseCoefs.size(); ++i)
+        sub_denseCoefs[i] = climate_mini_app::sub_problem_state(denseCoefs[i], di);
+
+    climate_mini_app::sub_problem_state sub_kE(kE, di);
+    climate_mini_app::sub_problem_state sub_kI(kI, di);
+
+    return T(sub_phi, sub_denseCoefs, sub_kE, sub_kI
+           , std::forward<IMEX>(imex), dt, denseOutput);
+} 
+
 template <typename Profile>
 void stepLoop(
     Profile const& profile
@@ -160,9 +188,20 @@ void stepLoop(
     );
 
     typedef climate_mini_app::imex_operators<Profile> imexop;
-    typedef AsyncARK4<climate_mini_app::problem_state, imexop> ark_type;
+    typedef AsyncARK4<climate_mini_app::sub_problem_state, imexop> ark_type;
+
+    std::array<climate_mini_app::problem_state, ark_type::s_nStages> phi;
+    std::array<climate_mini_app::problem_state, ark_type::s_nDenseCoefs> denseCoefs;
+
+    for (climate_mini_app::problem_state& ps : phi)
+        ps.define(dbl, 1, config.ghost_vector);
+
+    for (climate_mini_app::problem_state& ps : denseCoefs)
+        ps.define(dbl, 1, config.ghost_vector);
  
-    ark_type ark(imexop(profile), dbl, 1, config.ghost_vector, profile.dt(), false);
+    // FIXME: Can we remove flux, ghost zones?
+    climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
+    climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
 
 #if defined(CH_USE_HDF5)
     if (config.output)
@@ -201,7 +240,7 @@ void stepLoop(
             output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
     
             for (dit.begin(); dit.ok(); ++dit)
-                analytic.increment(dit(), data, -1.0);
+                analytic.U[dit()].plus(data.U[dit()], -1.0);
             output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
         }
 #endif 
@@ -209,7 +248,6 @@ void stepLoop(
         ++step;
 
         double const dt = profile.dt();
-        ark.resetDt(dt);
 
         if (config.verbose)
         {
@@ -222,14 +260,19 @@ void stepLoop(
 
         for (dit.begin(); dit.ok(); ++dit)
         {
-            futures.emplace_back(
-                hpx::async(
-                    [&](DataIndex di)
-                    { ark.advance(di, time, data); }
-                    //{ ark.getImExOp().solve(di, time, 0, 1.0, data); }
-                  , dit()
-                )
-            );
+            auto advance =  
+                [&](DataIndex di)
+                {
+                    climate_mini_app::sub_problem_state subdata(data, di);
+
+                    ark_type ark = 
+                        make_ark<ark_type>(di, phi, denseCoefs, kE, kI
+                                         , imexop(profile), dt, false); 
+
+                    ark.advance(time, subdata);
+                };
+
+            futures.emplace_back(hpx::async(advance, dit()));
         }
 
         hpx::lcos::when_all(futures).get();
@@ -242,8 +285,8 @@ void stepLoop(
                 Real s_time = time + ark_type::s_c[stage]*dt;
                 std::size_t s_step = ark_type::s_nStages*(step-1) + stage;
 
-                auto& FY = ark.m_phi[stage].FY;
-                auto& FZ = ark.m_phi[stage].FZ;
+                auto& FY = phi[stage].FY;
+                auto& FZ = phi[stage].FZ;
 
                 output(profile, FY, "phi", s_time, "FY.%06u.hdf5", s_step); 
                 output(profile, FZ, "phi", s_time, "FZ.%06u.hdf5", s_step); 
@@ -281,7 +324,7 @@ void stepLoop(
         DataIterator dit = data.U.dataIterator();
     
         for (dit.begin(); dit.ok(); ++dit)
-            analytic.increment(dit(), data, -1.0);
+            analytic.U[dit()].plus(data.U[dit()], -1.0);
         output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
     }
 #endif

@@ -32,25 +32,37 @@ template <class X, class IMEXOP>
 class AsyncARK4
 {
 public:
+  /// Runge-Kutta coefficients
+  static const int  s_nStages = 6;
+  static const int  s_nDenseCoefs = 3;
+  static const Real s_aIdiag;
+  static const Real s_c[s_nStages];
+  static const Real s_aE[s_nStages][s_nStages];
+  static const Real s_aI[s_nStages][s_nStages];
+  static const Real s_b[s_nStages];
+  static const Real s_bstar[s_nDenseCoefs][s_nStages];
+
+  template < typename TX0, typename TX1, typename TX2, typename TX3
+           , typename TIMEX>
   AsyncARK4(
-    IMEXOP&& imex
-  , DisjointBoxLayout const& dbl
-  , int comps
-  , IntVect ghost
+    TX0&& phi
+  , TX1&& denseCoefs
+  , TX2&& kE
+  , TX3&& kI
+  , TIMEX&& imex
   , Real dt
   , bool denseOutput = false
     );
 
   // Advance one step.
   void advance(
-    DataIndex di
-  , Real t
+    Real t
   , X& state
     );
 
   // Return current dense output coefs, 0th power first, etc.
   // NOTE: These are probably for <JU> conserved quantities
-  void denseOutputCoefs(DataIndex di, Vector<X*>& interpCoefs);
+  void denseOutputCoefs(Vector<X*>& interpCoefs);
 
   // Reset the timestep.
   void resetDt(Real dt);
@@ -60,62 +72,39 @@ public:
   // (for example, like have resetDt() called, etc.
   IMEXOP& getImExOp();
 
-  /// Runge-Kutta coefficients
-  static const int  s_nStages = 6;
-  static const Real s_aIdiag;
-  static const Real s_c[s_nStages];
-  static const Real s_aE[s_nStages][s_nStages];
-  static const Real s_aI[s_nStages][s_nStages];
-  static const Real s_b[s_nStages];
-  static const int  s_nDenseCoefs = 3;
-  static const Real s_bstar[s_nDenseCoefs][s_nStages];
-
 private:
-  bool m_denseOutput;               ///< True if dense output is enabled.
-  Real m_dt;                        ///< Timestep size.
-
-public:
-  X m_phi[s_nStages];
-  X m_denseCoefs[s_nDenseCoefs];
+  std::array<X, s_nStages> m_phi;
+  std::array<X, s_nDenseCoefs> m_denseCoefs;
   X m_kE;
   X m_kI;
 
-private:
   IMEXOP m_opImEx;
+  Real m_dt;                        ///< Timestep size.
+  bool m_denseOutput;               ///< True if dense output is enabled.
 };
 
 //==============================================
 
 template <class X, class IMEXOP>
+template < typename TX0, typename TX1, typename TX2, typename TX3
+         , typename TIMEX>
 AsyncARK4<X, IMEXOP>::AsyncARK4(
-    IMEXOP&& imex
-  , DisjointBoxLayout const& dbl
-  , int comps
-  , IntVect ghost
+    TX0&& phi
+  , TX1&& denseCoefs
+  , TX2&& kE
+  , TX3&& kI
+  , TIMEX&& imex
   , Real dt
   , bool denseOutput
     )
-  : m_opImEx(imex)
-{
-  m_dt = dt;
-  m_denseOutput = denseOutput;
-
-  // define X
-  for (int stage = 0; stage < s_nStages; stage++)
-  {
-    m_phi[stage].define(dbl, comps, ghost);
-  }
-
-  // define dX
-  m_kE.define(dbl, comps, ghost); // never exchanged.
-  m_kI.define(dbl, comps, ghost); // never exchanged.
-
-  // if dense output is requested, need more storage
-  for (int coef = 0; m_denseOutput && (coef < s_nDenseCoefs); coef++)
-  {
-    m_denseCoefs[coef].define(dbl, comps, ghost); // never exchanged.
-  }
-}
+  : m_phi(std::forward<TX0>(phi))
+  , m_denseCoefs(std::forward<TX1>(denseCoefs))
+  , m_kE(std::forward<TX2>(kE))
+  , m_kI(std::forward<TX3>(kI))
+  , m_opImEx(std::forward<TIMEX>(imex))
+  , m_dt(dt)
+  , m_denseOutput(denseOutput)
+{}
 
 /*
   Get a reference to the implicit-explicit operator
@@ -147,8 +136,7 @@ void AsyncARK4<X, IMEXOP>::resetDt(Real dt)
  */
 template <class X, class IMEXOP>
 void AsyncARK4<X, IMEXOP>::advance(
-    DataIndex di
-  , Real t
+    Real t
   , X& state
     )
 {
@@ -156,13 +144,13 @@ void AsyncARK4<X, IMEXOP>::advance(
   if (m_denseOutput)
   {
     for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
-      m_denseCoefs[icoef].zero(di);
+      m_denseCoefs[icoef].zero();
   }
 
   // Set m_phi[0] := state, all others 0
-  m_phi[0].copy(di, state);
+  m_phi[0].copy(state);
   for (std::size_t stage = 1; stage < s_nStages; stage++)
-    m_phi[stage].zero(di);
+    m_phi[stage].zero();
 
   // For each stage
   for (std::size_t stage = 0; stage < s_nStages; stage++)
@@ -171,34 +159,34 @@ void AsyncARK4<X, IMEXOP>::advance(
       if (stage > 0)
       {
         // Do the solve - copy rhs from phi[stage]
-        m_phi[stage].increment(di, m_phi[0]);
+        m_phi[stage].increment(m_phi[0]);
 
         // Solve in-place for m_phi[stage] in
         // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(di, next_t, stage, s_aIdiag, m_phi[stage]);
+        m_opImEx.solve(next_t, stage, s_aIdiag, m_phi[stage]);
       }
 
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(di, next_t, stage, m_kE, m_phi[stage]);
-      m_opImEx.implicitOp(di, next_t, stage, m_kI, m_phi[stage]);
+      m_opImEx.explicitOp(next_t, stage, m_kE, m_phi[stage]);
+      m_opImEx.implicitOp(next_t, stage, m_kI, m_phi[stage]);
 
       // Add the known stage operator values to future solves 
       for (std::size_t k=stage+1; k < s_nStages; ++k)
       {
-        m_phi[k].increment(di, m_kE, m_dt*s_aE[k][stage]);
-        m_phi[k].increment(di, m_kI, m_dt*s_aI[k][stage]);
+        m_phi[k].increment(m_kE, m_dt*s_aE[k][stage]);
+        m_phi[k].increment(m_kI, m_dt*s_aI[k][stage]);
       }
 
       // Accumulate the final solution and accum registers
-      state.increment(di, m_kE, m_dt*s_b[stage]);
-      state.increment(di, m_kI, m_dt*s_b[stage]);
+      state.increment(m_kE, m_dt*s_b[stage]);
+      state.increment(m_kI, m_dt*s_b[stage]);
 
       if (m_denseOutput)
       {
         for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
         {
-          m_denseCoefs[icoef].increment(di, m_kE, m_dt*s_bstar[icoef][stage]);
-          m_denseCoefs[icoef].increment(di, m_kI, m_dt*s_bstar[icoef][stage]);
+          m_denseCoefs[icoef].increment(m_kE, m_dt*s_bstar[icoef][stage]);
+          m_denseCoefs[icoef].increment(m_kI, m_dt*s_bstar[icoef][stage]);
         }
       }
     }
@@ -209,7 +197,7 @@ void AsyncARK4<X, IMEXOP>::advance(
   of time between t_old and t_new.
  */
 template <class X, class IMEXOP>
-void AsyncARK4<X, IMEXOP>::denseOutputCoefs(DataIndex di, Vector<X*>& interpCoefs)
+void AsyncARK4<X, IMEXOP>::denseOutputCoefs(Vector<X*>& interpCoefs)
 {
   const int nCoef = s_nDenseCoefs+1;
   CH_assert(interpCoefs.size() == nCoef); 
@@ -220,12 +208,12 @@ void AsyncARK4<X, IMEXOP>::denseOutputCoefs(DataIndex di, Vector<X*>& interpCoef
   // Copy over the dense coef values
 
   // First coefficient is just the old state
-  interpCoefs[0]->copy(di, m_phi[0]);
+  interpCoefs[0]->copy(m_phi[0]);
   
   // Next coefs are our dense output
   for (int icoef = 1; icoef < nCoef ; ++icoef)
   {
-    interpCoefs[icoef]->copy(di, m_denseCoefs[icoef-1]);
+    interpCoefs[icoef]->copy(m_denseCoefs[icoef-1]);
   }
 }
 
