@@ -46,7 +46,7 @@ void LocalCopyImpl(
     ) 
 {
     CH_assert(
-        to_ld[asi.toIndex].nComp() == from_ld[asi.fromIndex].nComp()
+        to_ld.nComp() == from_ld.nComp()
     );
 
     to_ld[asi.toIndex].copy(
