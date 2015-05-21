@@ -525,15 +525,17 @@ struct profile_base
         {
             // Vertical
             case LOWER_X:
+                return (l <= -1);
             case UPPER_X:
-                return (l <= -1) || (l >= config.nv);
+                return (l >= config.nv);
 
             // Horizontal
             case LOWER_Y:
-            case UPPER_Y:
             case LOWER_Z:
+                return (l <= -1); 
+            case UPPER_Y:
             case UPPER_Z:
-                return (l <= -1) || (l >= config.nh);
+                return (l >= config.nh);
         };
 
         assert(false);
@@ -544,14 +546,20 @@ struct profile_base
     { // {{{
         return is_outside_domain(LOWER_X, here[0])
             || is_outside_domain(LOWER_Y, here[1])
-            || is_outside_domain(LOWER_Z, here[2]);
+            || is_outside_domain(LOWER_Z, here[2])
+            || is_outside_domain(UPPER_X, here[0])
+            || is_outside_domain(UPPER_Y, here[1])
+            || is_outside_domain(UPPER_Z, here[2]);
     } // }}}
 
     bool is_outside_domain(Real x, Real y, Real z) const
     { // {{{
         return is_outside_domain(LOWER_X, x)
             || is_outside_domain(LOWER_Y, y)
-            || is_outside_domain(LOWER_Z, z);
+            || is_outside_domain(LOWER_Z, z)
+            || is_outside_domain(UPPER_X, x)
+            || is_outside_domain(UPPER_Y, y)
+            || is_outside_domain(UPPER_Z, z);
     } // }}}
 
     bool is_boundary(boundary_type bdry, int l) const
@@ -560,15 +568,17 @@ struct profile_base
         {
             // Vertical
             case LOWER_X:
+                return (l == 0);
             case UPPER_X:
-                return (l == 0) || (l == config.nv-1);
+                return (l == config.nv-1);
 
             // Horizontal
             case LOWER_Y:
-            case UPPER_Y:
             case LOWER_Z:
+                return (l == 0);
+            case UPPER_Y:
             case UPPER_Z:
-                return (l == 0) || (l == config.nh-1);
+                return (l == config.nh-1);
         };
 
         assert(false);
@@ -579,14 +589,20 @@ struct profile_base
     { // {{{
         return is_boundary(LOWER_X, here[0])
             || is_boundary(LOWER_Y, here[1])
-            || is_boundary(LOWER_Z, here[2]);
+            || is_boundary(LOWER_Z, here[2])
+            || is_boundary(UPPER_X, here[0])
+            || is_boundary(UPPER_Y, here[1])
+            || is_boundary(UPPER_Z, here[2]);
     } // }}}
 
     bool is_boundary(Real x, Real y, Real z) const
     { // {{{
         return is_boundary(LOWER_X, x)
             || is_boundary(LOWER_Y, y)
-            || is_boundary(LOWER_Z, z);
+            || is_boundary(LOWER_Z, z)
+            || is_boundary(UPPER_X, x)
+            || is_boundary(UPPER_Y, y)
+            || is_boundary(UPPER_Z, z);
     } // }}}
 
     configuration const config;
@@ -685,27 +701,23 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         Real v = 0.0;
         IntVect left;
 
-
         if      (1 == dir)
         { 
             v = vy;
             left = IntVect(here[0], here[1]-1, here[2]);
-
-            if (is_outside_domain(LOWER_Y, here[1]))
-                return 0.0;
         }
 
         else if (2 == dir)
         {
             v = vz;
             left = IntVect(here[0], here[1], here[2]-1);
-
-            if (is_outside_domain(LOWER_Z, here[2]))
-                return 0.0;
         }
 
         else
             assert(false);
+
+        if (!phi.box().contains(left))
+            return 0.0;
 
         return v * 0.5 * (phi(left) + phi(here));
     } // }}}

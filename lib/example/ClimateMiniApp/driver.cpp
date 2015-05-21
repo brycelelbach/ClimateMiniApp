@@ -378,7 +378,11 @@ int chombo_main(variables_map& vm)
         /*nh: y and z (horizontal) extent per core =*/vm["nh"].as<std::uint64_t>(),
         /*nv: x (vertical) extent per core         =*/vm["nv"].as<std::uint64_t>(),
         /*max_box_size                             =*/vm["mbs"].as<std::uint64_t>(),
+#if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
+        /*ghost_vector                             =*/IntVect::Unit,
+#else
         /*ghost_vector                             =*/IntVect::Unit*3,
+#endif
         /*header: print header for CSV timing data =*/vm.count("header"),
         /*verbose: print status updates            =*/vm.count("verbose"), 
 #if defined(CH_USE_HDF5)
