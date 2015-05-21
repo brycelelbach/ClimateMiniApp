@@ -396,7 +396,7 @@ struct imex_operators
                     for (auto i = lower[0]; i <= upper[0]; ++i)
                     {
                         IntVect here(i, j, k);
-    
+
                         FZ(here) = profile.horizontal_flux_stencil(here, 2, phi);
                     };
         };
@@ -526,14 +526,14 @@ struct profile_base
             // Vertical
             case LOWER_X:
             case UPPER_X:
-                return (l == -1) || (l == config.nv);
+                return (l <= -1) || (l >= config.nv);
 
             // Horizontal
             case LOWER_Y:
             case UPPER_Y:
             case LOWER_Z:
             case UPPER_Z:
-                return (l == -1) || (l == config.nh);
+                return (l <= -1) || (l >= config.nh);
         };
 
         assert(false);
@@ -685,16 +685,23 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         Real v = 0.0;
         IntVect left;
 
+
         if      (1 == dir)
         { 
             v = vy;
             left = IntVect(here[0], here[1]-1, here[2]);
+
+            if (is_outside_domain(LOWER_Y, here[1]))
+                return 0.0;
         }
 
         else if (2 == dir)
         {
             v = vz;
             left = IntVect(here[0], here[1], here[2]-1);
+
+            if (is_outside_domain(LOWER_Z, here[2]))
+                return 0.0;
         }
 
         else
