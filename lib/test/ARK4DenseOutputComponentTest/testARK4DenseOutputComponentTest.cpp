@@ -131,8 +131,13 @@ testARK4 ()
   //   implicit op = cI * phi;
   Real coef = TestImExOp::s_cE + TestImExOp::s_cI;
 
-  bool denseOutput = true;
-  ARK4<TestOpData, TestImExOp> ark(TestImExOp(0.0), soln, basedt, denseOutput); 
+  ARK4Scratch<TestOpData, true> scratch;
+
+  ARK4<TestOpData, ARK4Scratch<TestOpData, true>, TestImExOp, true>
+    ark(TestImExOp(0.0), basedt);
+
+  ark.define(dbl, 1, IntVect::Unit);
+ 
   LevelDataOps<FArrayBox> ops;
   for (int res=0; res < Nres; ++res)
   {
@@ -174,7 +179,7 @@ testARK4 ()
     for (int icoef = 1; icoef < nDenseCoefs; ++icoef)
     {
       Real factor = pow(theta, icoef);
-      soln.increment(*denseCoefs[icoef],factor);
+      soln.plus(*denseCoefs[icoef],factor);
     }
     data.exchange();
     val = ldfabVal(data);

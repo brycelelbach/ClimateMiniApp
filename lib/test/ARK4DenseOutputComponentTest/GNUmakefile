@@ -4,8 +4,8 @@
 ###  variable using the libraries named in the `LibNames' variable.
 
 # included makefiles need an absolute path
-# CHOMBO_HOME := $(shell pwd)/../..
-CHOMBO_HOME := $(CHOMBO_LIBDIR)
+CHOMBO_HOME := $(shell pwd)/../..
+#CHOMBO_HOME := $(CHOMBO_LIBDIR)
 
 makefiles+=lib_test_ARK4DenseOutputComponentTest
 

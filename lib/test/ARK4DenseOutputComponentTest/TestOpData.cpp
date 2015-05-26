@@ -77,19 +77,18 @@ TestOpData::copy(const TestOpData& a_state)
 }
   
 void
-TestOpData::zero()
+TestOpData::setVal(Real val)
 {
   DataIterator dit = m_data.dataIterator();
   for (dit.begin(); dit.ok(); ++dit)
     {
       FArrayBox& dataFab = m_data[dit];
-      dataFab.setVal(0);
+      dataFab.setVal(val);
     }
 }
 
 void
-TestOpData::increment(const TestOpData& a_rhs,
-                           Real a_factor)
+TestOpData::plus(const TestOpData& a_rhs, Real a_factor)
 {
   CH_assert(m_isDefined);
   const LevelData<FArrayBox>& rhsData = a_rhs.data();

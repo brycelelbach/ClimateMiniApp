@@ -20,7 +20,7 @@
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
 
-#include "AsyncARK4.H"
+#include "ARK4.H"
 #include "HPXDriver.H"
 
 #include <fenv.h>
@@ -217,7 +217,7 @@ void stepLoop(
     );
 
     typedef climate_mini_app::imex_operators<Profile> imexop;
-    typedef AsyncARK4<
+    typedef ARK4<
         climate_mini_app::sub_problem_state
       , problem_state_scratch<false>
       , imexop

@@ -47,10 +47,9 @@ public:
 
   void copy(const TestOpData& a_state);
 
-  void zero();
+  void setVal(Real val);
 
-  void increment(const TestOpData& a_increment,
-                 Real a_factor = 1.);
+  void plus(const TestOpData& a_increment, Real a_factor = 1.);
 
   const LevelData<FArrayBox>& data() const
   { return m_data; }
