@@ -122,33 +122,62 @@ void output(
 }
 #endif
 
-template <typename T, typename IMEX, std::size_t N, std::size_t M>
-T make_ark(
-    DataIndex di
-  , std::array<climate_mini_app::problem_state, N>& phi 
-  , std::array<climate_mini_app::problem_state, M>& denseCoefs 
-  , climate_mini_app::problem_state& kE
-  , climate_mini_app::problem_state& kI
-  , IMEX&& imex
-  , Real dt
-  , bool denseOutput
-    )
+template <bool DenseOutput>
+struct problem_state_scratch;
+
+template <>
+struct problem_state_scratch<true> 
 {
-    std::array<climate_mini_app::sub_problem_state, N> sub_phi;
-    std::array<climate_mini_app::sub_problem_state, M> sub_denseCoefs;
+  std::array<climate_mini_app::sub_problem_state, ARK4Sizes::s_nStages>
+    phi;
+  std::array<climate_mini_app::sub_problem_state, ARK4Sizes::s_nDenseCoefs>
+    denseCoefs;
 
-    for (std::size_t i = 0; i < phi.size(); ++i)
-        sub_phi[i] = climate_mini_app::sub_problem_state(phi[i], di);
+  climate_mini_app::sub_problem_state kE;
+  climate_mini_app::sub_problem_state kI;
 
-    for (std::size_t i = 0; i < denseCoefs.size(); ++i)
-        sub_denseCoefs[i] = climate_mini_app::sub_problem_state(denseCoefs[i], di);
+    void define(
+        DataIndex di
+      , std::array<climate_mini_app::problem_state, ARK4Sizes::s_nStages>& phi_ 
+      , std::array<climate_mini_app::problem_state, ARK4Sizes::s_nDenseCoefs>& denseCoefs_
+      , climate_mini_app::problem_state& kE_
+      , climate_mini_app::problem_state& kI_
+        )
+    {  
+        for (std::size_t i = 0; i < phi.size(); ++i)
+            phi[i] = climate_mini_app::sub_problem_state(phi_[i], di);
 
-    climate_mini_app::sub_problem_state sub_kE(kE, di);
-    climate_mini_app::sub_problem_state sub_kI(kI, di);
+        for (std::size_t i = 0; i < denseCoefs.size(); ++i)
+            denseCoefs[i] = climate_mini_app::sub_problem_state(denseCoefs_[i], di);
 
-    return T(sub_phi, sub_denseCoefs, sub_kE, sub_kI
-           , std::forward<IMEX>(imex), dt, denseOutput);
-} 
+        kE = climate_mini_app::sub_problem_state(kE_, di);
+        kI = climate_mini_app::sub_problem_state(kI_, di);
+    }
+};
+
+template <>
+struct problem_state_scratch<false> 
+{
+    std::array<climate_mini_app::sub_problem_state, ARK4Sizes::s_nStages>
+        phi;
+
+    climate_mini_app::sub_problem_state kE;
+    climate_mini_app::sub_problem_state kI;
+
+    void define(
+        DataIndex di
+      , std::array<climate_mini_app::problem_state, ARK4Sizes::s_nStages>& phi_ 
+      , climate_mini_app::problem_state& kE_
+      , climate_mini_app::problem_state& kI_
+        )
+    {  
+        for (std::size_t i = 0; i < phi.size(); ++i)
+            phi[i] = climate_mini_app::sub_problem_state(phi_[i], di);
+
+        kE = climate_mini_app::sub_problem_state(kE_, di);
+        kI = climate_mini_app::sub_problem_state(kI_, di);
+    }
+};
 
 template <typename Profile>
 void stepLoop(
@@ -188,17 +217,18 @@ void stepLoop(
     );
 
     typedef climate_mini_app::imex_operators<Profile> imexop;
-    typedef AsyncARK4<climate_mini_app::sub_problem_state, imexop> ark_type;
+    typedef AsyncARK4<
+        climate_mini_app::sub_problem_state
+      , problem_state_scratch<false>
+      , imexop
+      , false
+    > ark_type;
 
     std::array<climate_mini_app::problem_state, ark_type::s_nStages> phi;
-    std::array<climate_mini_app::problem_state, ark_type::s_nDenseCoefs> denseCoefs;
 
     for (climate_mini_app::problem_state& ps : phi)
         ps.define(dbl, 1, config.ghost_vector);
 
-    for (climate_mini_app::problem_state& ps : denseCoefs)
-        ps.define(dbl, 1, config.ghost_vector);
- 
     // FIXME: Can we remove flux, ghost zones?
     climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
     climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
@@ -265,9 +295,8 @@ void stepLoop(
                 {
                     climate_mini_app::sub_problem_state subdata(data, di);
 
-                    ark_type ark = 
-                        make_ark<ark_type>(di, phi, denseCoefs, kE, kI
-                                         , imexop(profile), dt, false); 
+                    ark_type ark(imexop(profile), dt); 
+                    ark.define(di, phi, kE, kI);
 
                     ark.advance(time, subdata);
                 };

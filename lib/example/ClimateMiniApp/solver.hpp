@@ -288,14 +288,14 @@ struct sub_problem_state
         FZ().copy(A.FZ());
     } // }}}
 
-    void zero()
+    void setVal(Real val)
     { // {{{
-        U().setVal(0.0);
-        FY().setVal(0.0);
-        FZ().setVal(0.0);
+        U().setVal(val);
+        FY().setVal(val);
+        FZ().setVal(val);
     } // }}}
 
-    void increment(sub_problem_state const& A, Real factor = 1.0)
+    void plus(sub_problem_state const& A, Real factor = 1.0)
     { // {{{
         U().plus(A.U(), factor);
     } // }}}
@@ -447,7 +447,7 @@ struct imex_operators
       , sub_problem_state& phi_
         )
     { // {{{
-        kI_.zero();
+        kI_.setVal(0.0);
     } // }}}
 
     void solve(

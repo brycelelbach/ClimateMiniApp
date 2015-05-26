@@ -11,8 +11,7 @@
 #ifndef CHOMBO_DCFC5EBE_DAAF_4F45_837E_C17A8A94C5EA
 #define CHOMBO_DCFC5EBE_DAAF_4F45_837E_C17A8A94C5EA
 
-#include "AsyncLevelData.H"
-#include "AsyncExchange.H"
+#include <cstddef>
 
 #include "NamespaceHeader.H"
 
@@ -28,38 +27,46 @@
    SIAM J. Sci. Comput. 34, pp. B179-B201.
 */
 
-template <class X, class IMEXOP>
+enum ARK4Sizes : std::size_t
+{
+  s_nStages = 6,
+  s_nDenseCoefs = 3
+};
+
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+class AsyncARK4;
+
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
 class AsyncARK4
 {
 public:
   /// Runge-Kutta coefficients
-  static const int  s_nStages = 6;
-  static const int  s_nDenseCoefs = 3;
-  static const Real s_aIdiag;
-  static const Real s_c[s_nStages];
-  static const Real s_aE[s_nStages][s_nStages];
-  static const Real s_aI[s_nStages][s_nStages];
-  static const Real s_b[s_nStages];
-  static const Real s_bstar[s_nDenseCoefs][s_nStages];
+  static const std::size_t  s_nStages = std::size_t(ARK4Sizes::s_nStages);
+  static const std::size_t  s_nDenseCoefs = std::size_t(ARK4Sizes::s_nDenseCoefs);
+  static const Real         s_aIdiag;
+  static const Real         s_c[s_nStages];
+  static const Real         s_aE[s_nStages][s_nStages];
+  static const Real         s_aI[s_nStages][s_nStages];
+  static const Real         s_b[s_nStages];
+  static const Real         s_bstar[s_nDenseCoefs][s_nStages];
 
-  template < typename TX0, typename TX1, typename TX2, typename TX3
-           , typename TIMEX>
-  AsyncARK4(
-    TX0&& phi
-  , TX1&& denseCoefs
-  , TX2&& kE
-  , TX3&& kI
-  , TIMEX&& imex
-  , Real dt
-  , bool denseOutput = false
-    );
+  template <typename TImEx>
+  AsyncARK4(TImEx&& imex, Real dt);
+
+  template <typename... Args>
+  void define(Args&&... args);
 
   // Advance one step.
-  void advance(
-    Real t
-  , X& state
-    );
+  void advance(Real t, X& state);
 
+private:
+  void zeroDenseCoefs(std::true_type);
+  void zeroDenseCoefs(std::false_type);
+
+  void accumulateDenseCoefs(std::size_t stage, std::true_type);
+  void accumulateDenseCoefs(std::size_t stage, std::false_type);
+
+public:
   // Return current dense output coefs, 0th power first, etc.
   // NOTE: These are probably for <JU> conserved quantities
   void denseOutputCoefs(Vector<X*>& interpCoefs);
@@ -67,90 +74,46 @@ public:
   // Reset the timestep.
   void resetDt(Real dt);
 
-  // Access to the operators if we're defined already
-  // Caller is responsible for making sure they're in a good state 
-  // (for example, like have resetDt() called, etc.
-  IMEXOP& getImExOp();
-
 private:
-  std::array<X, s_nStages> m_phi;
-  std::array<X, s_nDenseCoefs> m_denseCoefs;
-  X m_kE;
-  X m_kI;
-
-  IMEXOP m_opImEx;
-  Real m_dt;                        ///< Timestep size.
-  bool m_denseOutput;               ///< True if dense output is enabled.
+  Scratch m_scratch;
+  ImExOp m_opImEx;
+  Real m_dt;         ///< Timestep size.
 };
 
 //==============================================
 
-template <class X, class IMEXOP>
-template < typename TX0, typename TX1, typename TX2, typename TX3
-         , typename TIMEX>
-AsyncARK4<X, IMEXOP>::AsyncARK4(
-    TX0&& phi
-  , TX1&& denseCoefs
-  , TX2&& kE
-  , TX3&& kI
-  , TIMEX&& imex
-  , Real dt
-  , bool denseOutput
-    )
-  : m_phi(std::forward<TX0>(phi))
-  , m_denseCoefs(std::forward<TX1>(denseCoefs))
-  , m_kE(std::forward<TX2>(kE))
-  , m_kI(std::forward<TX3>(kI))
-  , m_opImEx(std::forward<TIMEX>(imex))
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <typename TImEx>
+AsyncARK4<X, Scratch, ImExOp, DenseOutput>::AsyncARK4(TImEx&& imex, Real dt)
+  : m_scratch() 
+  , m_opImEx(std::forward<TImEx>(imex))
   , m_dt(dt)
-  , m_denseOutput(denseOutput)
 {}
 
-/*
-  Get a reference to the implicit-explicit operator
- */
-template <class X, class IMEXOP>
-IMEXOP& 
-AsyncARK4<X, IMEXOP>::getImExOp()
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <typename... Args>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::define(Args&&... args)
 {
-  return m_opImEx;
-}
-
-/*
-  Reset the timestep.
- */
-template <class X, class IMEXOP>
-void AsyncARK4<X, IMEXOP>::resetDt(Real dt)
-{
-  // Only update everything if dt has changed
-  Real reltol = 1e-14;
-  if (fabs(m_dt - dt) > m_dt*reltol)
-  {
-    m_dt = dt;
-    m_opImEx.resetDt(m_dt);
-  }
+  m_scratch.define(std::forward<Args>(args)...);  
 }
 
 /*
   Advance solution state in time, t to t + dt.
  */
-template <class X, class IMEXOP>
-void AsyncARK4<X, IMEXOP>::advance(
-    Real t
-  , X& state
-    )
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::advance(Real t, X& state)
 {
-  // Reset the dense output coefs
-  if (m_denseOutput)
-  {
-    for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
-      m_denseCoefs[icoef].zero();
-  }
+  auto& phi = m_scratch.phi;
+  auto& kE = m_scratch.kE;
+  auto& kI = m_scratch.kI;
 
-  // Set m_phi[0] := state, all others 0
-  m_phi[0].copy(state);
+  // Reset the dense output coefs
+  zeroDenseCoefs(std::integral_constant<bool, DenseOutput>());
+
+  // Set phi[0] := state, all others 0
+  phi[0].copy(state);
   for (std::size_t stage = 1; stage < s_nStages; stage++)
-    m_phi[stage].zero();
+    phi[stage].setVal(0.0);
 
   // For each stage
   for (std::size_t stage = 0; stage < s_nStages; stage++)
@@ -159,45 +122,71 @@ void AsyncARK4<X, IMEXOP>::advance(
       if (stage > 0)
       {
         // Do the solve - copy rhs from phi[stage]
-        m_phi[stage].increment(m_phi[0]);
+        phi[stage].plus(phi[0]);
 
-        // Solve in-place for m_phi[stage] in
-        // (I - s_aIdiag * m_dt * FI) (m_phi[stage]) = m_phi[stage].
-        m_opImEx.solve(next_t, stage, s_aIdiag, m_phi[stage]);
+        // Solve in-place for phi[stage] in
+        // (I - s_aIdiag * m_dt * FI) (phi[stage]) = phi[stage].
+        m_opImEx.solve(next_t, stage, s_aIdiag, phi[stage]);
       }
 
       // Calculate the operators for this stage
-      m_opImEx.explicitOp(next_t, stage, m_kE, m_phi[stage]);
-      m_opImEx.implicitOp(next_t, stage, m_kI, m_phi[stage]);
+      m_opImEx.explicitOp(next_t, stage, kE, phi[stage]);
+      m_opImEx.implicitOp(next_t, stage, kI, phi[stage]);
 
       // Add the known stage operator values to future solves 
       for (std::size_t k=stage+1; k < s_nStages; ++k)
       {
-        m_phi[k].increment(m_kE, m_dt*s_aE[k][stage]);
-        m_phi[k].increment(m_kI, m_dt*s_aI[k][stage]);
+        phi[k].plus(kE, m_dt*s_aE[k][stage]);
+        phi[k].plus(kI, m_dt*s_aI[k][stage]);
       }
 
       // Accumulate the final solution and accum registers
-      state.increment(m_kE, m_dt*s_b[stage]);
-      state.increment(m_kI, m_dt*s_b[stage]);
+      state.plus(kE, m_dt*s_b[stage]);
+      state.plus(kI, m_dt*s_b[stage]);
 
-      if (m_denseOutput)
-      {
-        for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
-        {
-          m_denseCoefs[icoef].increment(m_kE, m_dt*s_bstar[icoef][stage]);
-          m_denseCoefs[icoef].increment(m_kI, m_dt*s_bstar[icoef][stage]);
-        }
-      }
+      accumulateDenseCoefs(stage, std::integral_constant<bool, DenseOutput>());
     }
 }
+
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::zeroDenseCoefs(std::true_type)
+{
+  for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
+    m_scratch.denseCoefs[icoef].setVal(0.0);
+}
+
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::zeroDenseCoefs(std::false_type)
+{}
+
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
+    std::size_t stage
+  , std::true_type
+    )
+{
+  for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
+  {
+    m_scratch.denseCoefs[icoef].plus(m_scratch.kE, m_dt*s_bstar[icoef][stage]);
+    m_scratch.denseCoefs[icoef].plus(m_scratch.kI, m_dt*s_bstar[icoef][stage]);
+  }
+} 
+
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
+    std::size_t stage
+  , std::false_type
+    )
+{}
 
 /*
   Return the coefs to interpolate solution, in terms of power of the fraction
   of time between t_old and t_new.
  */
-template <class X, class IMEXOP>
-void AsyncARK4<X, IMEXOP>::denseOutputCoefs(Vector<X*>& interpCoefs)
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::denseOutputCoefs(
+    Vector<X*>& interpCoefs
+    )
 {
   const int nCoef = s_nDenseCoefs+1;
   CH_assert(interpCoefs.size() == nCoef); 
@@ -208,30 +197,45 @@ void AsyncARK4<X, IMEXOP>::denseOutputCoefs(Vector<X*>& interpCoefs)
   // Copy over the dense coef values
 
   // First coefficient is just the old state
-  interpCoefs[0]->copy(m_phi[0]);
+  interpCoefs[0]->copy(m_scratch.phi[0]);
   
   // Next coefs are our dense output
   for (int icoef = 1; icoef < nCoef ; ++icoef)
   {
-    interpCoefs[icoef]->copy(m_denseCoefs[icoef-1]);
+    interpCoefs[icoef]->copy(m_scratch.denseCoefs[icoef-1]);
   }
 }
 
+/*
+  Reset the timestep.
+ */
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+void AsyncARK4<X, Scratch, ImExOp, DenseOutput>::resetDt(Real dt)
+{
+  // Only update everything if dt has changed
+  Real reltol = 1e-14;
+  if (std::fabs(m_dt - dt) > m_dt*reltol)
+  {
+    m_dt = dt;
+    m_opImEx.resetDt(m_dt);
+  }
+}
 
 /*
   Static constants for AsyncARK4
  */
-
-template <class X, class IMEXOP>
-const Real AsyncARK4<X, IMEXOP>::s_aIdiag = 0.25;
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+const Real AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_aIdiag = 0.25;
 
 // Time coefficients for each stage
-template <class X, class IMEXOP>
-const Real AsyncARK4<X, IMEXOP>::s_c[] = { 0.0, 0.5, 0.332, 0.62, 0.85, 1.0 };
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+const Real
+AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_c[] = { 0.0, 0.5, 0.332, 0.62, 0.85, 1.0 };
   
 // Stage coefficients - each row is for that stage 
-template <class X, class IMEXOP>
-const Real AsyncARK4<X, IMEXOP>::s_aE[][AsyncARK4<X, IMEXOP>::s_nStages] = {
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+const Real
+AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_aE[][AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_nStages] = {
   {0., 0., 0., 0., 0., 0.},
   {0.5, 0., 0., 0., 0., 0.},
   {0.221776, 0.110224, 0., 0., 0., 0.},
@@ -241,8 +245,9 @@ const Real AsyncARK4<X, IMEXOP>::s_aE[][AsyncARK4<X, IMEXOP>::s_nStages] = {
 };
 
 // Implicit stage coefficients
-template <class X, class IMEXOP>
-const Real AsyncARK4<X, IMEXOP>::s_aI[][AsyncARK4<X, IMEXOP>::s_nStages] = {
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+const Real
+AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_aI[][AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_nStages] = {
   {0., 0., 0., 0., 0., 0.},
   {0.25, 0.25, 0., 0., 0., 0.},
   {0.137776, -0.055776, 0.25, 0., 0., 0.},
@@ -252,16 +257,76 @@ const Real AsyncARK4<X, IMEXOP>::s_aI[][AsyncARK4<X, IMEXOP>::s_nStages] = {
 };
 
 // Final stage coefficients
-template <class X, class IMEXOP>
-const Real AsyncARK4<X, IMEXOP>::s_b[] =
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+const Real
+AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_b[] =
   {0.15791629516167136, 0., 0.18675894052400077, 0.6805652953093346, -0.27524053099500667, 0.25};
 
 // Coefficients for dense output, 4th-order interpolation
-template <class X, class IMEXOP>
-const Real AsyncARK4<X, IMEXOP>::s_bstar[][AsyncARK4<X, IMEXOP>::s_nStages] = {
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+const Real
+AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_bstar[][AsyncARK4<X, Scratch, ImExOp, DenseOutput>::s_nStages] = {
   {0.961753400252887, 0., 0.787405595186356, -2.74544192086633, 3.70351728061223, -1.70723435518514},
   {-1.76418754019038, 0., -0.774504669155511, 9.64023584441292, -12.544886411271, 5.44334277620397},
   {0.960350435099165, 0., 0.173858014493155, -6.21422862823726, 8.56612859966376, -3.48610842101883}
+};
+
+template <class X, bool DenseOutput>
+struct ARK4Scratch;
+
+template <class X>
+struct ARK4Scratch<X, true>
+{
+  std::array<X, ARK4Sizes::s_nStages> phi;
+  std::array<X, ARK4Sizes::s_nDenseCoefs> denseCoefs;
+  X kE;
+  X kI;
+
+  void define(
+    DisjointBoxLayout const& dbl
+  , std::size_t comps
+  , IntVect ghost
+    )
+  {  
+    // define X
+    for (std::size_t stage = 0; stage < phi.size(); ++stage)
+    {
+      phi[stage].define(dbl, comps, ghost);
+    }
+  
+    // define dX
+    kE.define(dbl, comps, ghost); // never exchanged.
+    kI.define(dbl, comps, ghost); // never exchanged.
+  
+    for (std::size_t coef = 0; coef < denseCoefs.size(); ++coef)
+    {
+      denseCoefs[coef].define(dbl, comps, ghost); // never exchanged.
+    }
+  }
+};
+template <class X>
+struct ARK4Scratch<X, false>
+{
+  std::array<X, ARK4Sizes::s_nStages> phi;
+  X kE;
+  X kI;
+
+  void define(
+    DisjointBoxLayout const& dbl
+  , std::size_t comps
+  , IntVect ghost
+    )
+  {  
+    // define X
+    for (std::size_t stage = 0; stage < phi.size(); ++stage)
+    {
+      phi[stage].define(dbl, comps, ghost);
+    }
+  
+    // define dX
+    kE.define(dbl, comps, ghost); // never exchanged.
+    kI.define(dbl, comps, ghost); // never exchanged.
+  }
 };
 
 #include "NamespaceFooter.H"
