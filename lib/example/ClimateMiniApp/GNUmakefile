@@ -8,7 +8,7 @@ CHOMBO_HOME := $(shell pwd)/../..
 
 makefiles+=lib_example_ClimateMiniApp
 
-ebase = driver 
+ebase = ClimateMiniApp 
 
 src_dirs = $(base_dir)/../../src/AMRTimeDependent
 

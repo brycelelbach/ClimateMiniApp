@@ -7,7 +7,7 @@
  */
 
 ////////////////////////////////////////////////////////////////////////////////
-//  Copyright (c) 2014 Bryce Adelstein-Lelbach
+//  Copyright (c) 2014-2015 Bryce Adelstein-Lelbach
 //
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -16,6 +16,10 @@
 #include <hpx/config.hpp>
 #include <hpx/util/high_resolution_timer.hpp>
 
+#include <boost/format.hpp>
+
+#include <fenv.h>
+
 #include "AMRIO.H"
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
@@ -23,9 +27,7 @@
 #include "ARK4.H"
 #include "HPXDriver.H"
 
-#include <fenv.h>
-
-#include "solver.hpp"
+#include "CMAAdvectionDiffusionProfile.H"
 
 // FIXME: Move this to ALD
 template <typename F>
@@ -251,7 +253,7 @@ void stepLoop(
 
     Real time = 0.0;
 
-    while (time < nt)
+    while ((time < nt) && (std::fabs(nt-time) > 1e-14))
     {
         DataIterator dit = data.U.dataIterator();
 
@@ -306,7 +308,7 @@ void stepLoop(
 
         hpx::lcos::when_all(futures).get();
 
-#if defined(CH_USE_HDF5)
+#if defined(CH_USE_HDF5) && defined(CH_DUMP_FLUXES)
         if (config.output)
         { 
             for (std::size_t stage = 0; stage < ark_type::s_nStages; ++stage) 
