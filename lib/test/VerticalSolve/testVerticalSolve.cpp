@@ -74,9 +74,16 @@ testVerticalSolveConvergence()
       // TestOperator::build2ndOrderOperator(L, coef, dx, N);
  
       // Build the Helmholtz matrix and solve
-      band_matrix H;
-      TestOperator::build4thOrderSolver(H, coef, dx, N);
-      TestOperator::implicitSolve(soln, rhs, H);
+      // int KL=1;
+      // int KU=1;
+      // LapackFactorization A(N, KL, KU);
+      LapackFactorization A;
+      TestOperator::build4thOrderBanded(A, coef, dx, N);
+      // A.printBandedMatrix();
+      TestOperator::implicitSolveBanded(soln, rhs, A);
+      // band_matrix H;
+      // TestOperator::build2ndOrderSolvek(H, coef, dx, N);
+      // TestOperator::implicitSolve(soln, rhs, H);
 
       // Just make sure the residual is zero
       /*

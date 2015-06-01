@@ -85,16 +85,18 @@ class LapackFactorization
       return m_ncols;
     }
 
-    // Assignment operator, copies pointer
-    LapackFactorization& operator=(const LapackFactorization& a_in)
+    // Assignment operator, copies data
+    void define(const LapackFactorization& a_in)
     {
-      m_ncols = a_in.m_ncols;
-      m_kl = a_in.m_kl;
-      m_ku = a_in.m_ku;
-      m_nrows = a_in.m_nrows;
-      m_LU = a_in.m_LU;
-      m_pivot = a_in.m_pivot;
-      return *this;
+      // Resize to match the input 
+      define(a_in.m_ncols, a_in.m_kl, a_in.m_ku);
+      setZero();
+
+      // Copy the data
+      for (int ix=0; ix < m_nrows*m_ncols; ix++)
+        m_LU[ix] = a_in.m_LU[ix];
+      for (int ix=0; ix < m_ncols; ix++)
+        m_pivot[ix] = a_in.m_pivot[ix];
     }
 
     // Getting pointer access for Lapack factorization matrix
@@ -145,6 +147,9 @@ class LapackFactorization
     }
 
   protected:
+    LapackFactorization(const LapackFactorization&);
+    void operator=(const LapackFactorization&);
+
 
   private:
     int m_ncols;

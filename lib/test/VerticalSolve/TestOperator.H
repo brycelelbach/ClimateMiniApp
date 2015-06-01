@@ -12,6 +12,7 @@
 #define _TESTOPERATOR_H_
 
 #include "FArrayBox.H"
+#include "LapackFactorization.H"
 
 #include "NamespaceHeader.H"
 /// A struct to hold the diagonals of a banded matrix
@@ -37,7 +38,7 @@ public:
   static void build2ndOrderSolver(band_matrix& a_A, 
       Real& a_coef, Real& a_dx, int a_N);
 
-  static void build4thOrderSolver(band_matrix& a_A, 
+  static void build4thOrderBanded(LapackFactorization& a_AB,
       Real& a_coef, Real& a_dx, int a_N);
 
   static void applyBandedMatrix(FArrayBox& a_state, 
@@ -46,6 +47,9 @@ public:
   static void implicitSolve(FArrayBox& a_state,
                             FArrayBox& a_rhs,
                             const band_matrix& a_A);
+
+  static void implicitSolveBanded(FArrayBox& a_state, 
+      FArrayBox& a_rhs, LapackFactorization& a_AB);
 
   static void setExact(FArrayBox& a_exact,
                        int a_kx,

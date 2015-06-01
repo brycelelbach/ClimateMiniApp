@@ -13,6 +13,8 @@
 
 #include <assert.h>
 #include "Lapack.H"
+#include "LapackFactorization.H"
+#include "LapackWrapper.H"
 // #include <lapacke.h>
 
 #include "NamespaceHeader.H"
@@ -124,35 +126,55 @@ build4thOrderOperator(band_matrix& a_A, Real& a_coef, Real& a_dx, int a_N)
 /// heat equation step: (I - coef * D_xx) with homogeneous Neumann bc's
 void 
 TestOperator::
-build4thOrderSolver(band_matrix& a_A, Real& a_coef, Real& a_dx, int a_N)
+build4thOrderBanded(LapackFactorization& a_A,
+    Real& a_coef, Real& a_dx, int a_N)
 {
-  // Stencil for D_xx
-  const int nbands = 7;
-  // const Real s[]={0.0, -1.0, 16.0, -30.0, 16.0, -1.0, 0.0};
-  const Real s[]={0.0, 0.0, 1.0, -2.0, 1.0, 0.0, 0.0};
-  a_A.nbands = nbands;
+  Real coef = a_coef/(12.0*a_dx*a_dx); // for 4th-order
+  const Real s[]={0.0, -1.0, 16.0, -30.0, 16.0, -1.0, 0.0};
+  // Real coef = a_coef/(1.0*a_dx*a_dx); // for 2nd-order
+  // const Real s[]={0.0, 0.0, 1.0, -2.0, 1.0, 0.0, 0.0};
+  // Define it
+  int KU = 3;
+  int KL = 3;
+  a_A.define(a_N, KL, KU);
+  a_A.setZero();
 
-  // FIXME Real coef = a_coef/(12.0*a_dx*a_dx);
-  Real coef = a_coef/(1.0*a_dx*a_dx);
-  // 3rd Sub-diagonal of the matrix.
-  a_A.d[0].resize(a_N-3, -s[0]*coef);
-  // 2nd Sub-diagonal of the matrix.
-  a_A.d[1].resize(a_N-2, -s[1]*coef);
-  // 1st Sub-diagonal of the matrix.
-  a_A.d[2].resize(a_N-1, -s[2]*coef);
-  // Diagonal of the matrix.
-  a_A.d[3].resize(a_N, 1.0 - s[3]*coef);
-  // 1st Super-diagonal of the matrix.
-  a_A.d[4].resize(a_N-1, -s[4]*coef);
-  // 2nd Super-diagonal of the matrix.
-  a_A.d[5].resize(a_N-2, -s[5]*coef);
-  // 3rd Super-diagonal of the matrix.
-  a_A.d[6].resize(a_N-3, -s[6]*coef);
+  int ncol = a_A.numCols();
+  for (int col=0; col < ncol; col++) 
+    for (int ix=-KU; ix <= KL; ix++)
+    {
+      int row = col + ix;
+      if ((row >= 0) && (row < ncol))
+        a_A(row, col) = ((row == col) ? 1 : 0) -s[ix+KU]*coef;
+        // a_A(row, col) = s[ix+KU]*coef;
+    }
 
   // Fix the diagonal ends for the homogeneous Neumann bc's
-  const Real bc = -1.0;
-  a_A.d[3][0] = 1.0 - bc*coef;
-  a_A.d[3][a_N-1] = 1.0 - bc*coef;
+  // For 2nd-order operator
+  // const Real bc = -1.0;
+  // a_A(0,0) = 1.0 - bc*coef;
+  // a_A(ncol-1,ncol-1) = 1.0 - bc*coef;
+
+  // Fix the diagonal ends for the homogeneous Neumann bc's
+  // For 4th-order operator
+  // The gradient flux for the first interior face
+  const int lenG = 4;
+  const Real sG1[] = {-145.0, 159.0, -15.0, 1.0};
+  const Real coefG1 = a_coef/(120*a_dx*a_dx);
+  // The gradient flux for the second interior (regular) face
+  const Real sG2[] = {1.0, -15.0, 15.0, -1.0};
+  const Real coefG2 = a_coef/(12*a_dx*a_dx);
+  for (int ix=0; ix < lenG; ix++)
+  {
+    a_A(0,ix) = ((ix == 0) ? 1 : 0) -sG1[ix] * coefG1;
+    a_A(1,ix) = ((ix == 1) ? 1 : 0) -sG2[ix] * coefG2 + sG1[ix] * coefG1;
+    int ixflip = ncol-ix-1;
+    a_A(ncol-1,ixflip) = ((ix == 0) ? 1 : 0) - sG1[ix] * coefG1;
+    a_A(ncol-2,ixflip) = 
+      ((ix == 1) ? 1 : 0) - sG2[ix] * coefG2 + sG1[ix] * coefG1;
+  }
+
+  // a_A.printBandedMatrix();
 }
 
 
@@ -244,9 +266,6 @@ implicitSolve(FArrayBox& a_state,
   int size0 = size[0]; // x direction stencil
   assert(size0 == a_rhs.box().size(0));
 
-  int* ipiv = new int[size0];
-  Real* Atmp = new Real[size0];
-
   IntVect lower = a_rhs.box().smallEnd();
   for (int j = lower[1]; j < size[1]; j++)
     for (int k = lower[2]; k < size[2]; k++)
@@ -272,30 +291,46 @@ implicitSolve(FArrayBox& a_state,
           &LDB, // leading dimension of RHS
           &info
           );
-      /*
-SUBROUTINE DGBSV( N, KL, KU, NRHS, AB, LDAB, IPIV, B, LDB, INFO )
-
-      int KU = 1;
-      int KL = 1;
-      dgtsv_(
-          &size0, // matrix order
-          &KU, // # of upper diagonals 
-          &KL, // # of lower diagonals 
-          &NRHS, // # of right hand sides 
-
-          Atmp.d[2].data(), // 1st subdiagonal part
-          Atmp.d[3].data(), // diagonal part
-          Atmp.d[4].data(), // 1st superdiagonal part
-
-          rhs, // column to solve 
-          &LDB, // leading dimension of RHS
-          &info
-          );
-      */
 
       if (info != 0)
         pout() << "Lapack info=" << info << endl;
       assert(info == 0);
+
+      Real* state = &a_state(IntVect(lower[0], j, k)); 
+      for (int i=0; i < size0; i++)
+        state[i] = rhs[i];
+    }
+}
+
+
+/// Does a banded solve for a backward Euler
+/// heat equation step: (I - coef * D_xx) state = rhs
+void 
+TestOperator::
+implicitSolveBanded(
+    FArrayBox& a_state,
+    FArrayBox& a_rhs,
+    LapackFactorization& a_AB)
+{
+  CH_TIME("TestOperator::implicitSolveBanded");
+
+  IntVect size = a_state.box().size();
+  int size0 = size[0]; // x direction stencil
+  assert(size0 == a_rhs.box().size(0));
+
+  IntVect lower = a_rhs.box().smallEnd();
+  for (int j = lower[1]; j < size[1]; j++)
+    for (int k = lower[2]; k < size[2]; k++)
+    {
+      Real* rhs = &a_rhs(IntVect(lower[0], j, k)); 
+
+      LapackFactorization AB;
+      AB.define(a_AB);
+      // LapackFactorization AB = a_AB;
+      // AB.printBandedMatrix();
+
+      LapackWrapper::factorBandMatrix(AB);
+      LapackWrapper::solveBandMatrix(AB, rhs);
 
       Real* state = &a_state(IntVect(lower[0], j, k)); 
       for (int i=0; i < size0; i++)

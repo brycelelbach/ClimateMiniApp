@@ -26,10 +26,6 @@ class LapackWrapper
 {
 public:
 
-  static void solveBandMatrix(FArrayBox& A, FArrayBox& B);
-
-  static void solveBandMatrix(CHMatrix& A, CHMatrix& B);
-
   static void factorBandMatrix(LapackFactorization& A);
 
   static void solveBandMatrix(LapackFactorization& A, Real* const inout);
