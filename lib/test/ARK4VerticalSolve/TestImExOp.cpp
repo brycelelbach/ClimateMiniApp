@@ -15,18 +15,38 @@
 const Real TestImExOp::s_cI = -2;
 const Real TestImExOp::s_cE = .1;
 
+TestImExOp::TestImExOp()
+{
+  m_isDefined = false;
+}
+
+TestImExOp::~TestImExOp()
+{
+}
+
+void
+TestImExOp::define(const TestOpData&   a_state,
+                    Real a_dt,
+                    Real a_dtscale)
+{
+  m_dt = a_dt;
+  m_dtscale = a_dtscale;
+  m_isDefined = true;
+}
+
 void
 TestImExOp::resetDt(Real a_dt)
 {
+  CH_assert(isDefined());
   m_dt = a_dt;
 }
 
 void
-TestImExOp::explicitOp(Real               a_time,
-                       std::size_t        a_stage,
-                       TestOpData&        a_result,
-                       const TestOpData&  a_state)
+TestImExOp::explicitOp(TestOpData& a_result, Real a_time, 
+    const TestOpData&  a_state)
 {
+  CH_assert(isDefined());
+
   const LevelData<FArrayBox>& stateData = a_state.data();
 
   const DisjointBoxLayout& layout = stateData.disjointBoxLayout();
@@ -46,11 +66,12 @@ TestImExOp::explicitOp(Real               a_time,
 }
 
 void
-TestImExOp::implicitOp(Real               a_time,
-                       std::size_t        a_stage,
-                       TestOpData&        a_result,
-                       const TestOpData&  a_state)
+TestImExOp::implicitOp(TestOpData&             a_result,
+                        Real                    a_time,
+                        const TestOpData&  a_state)
 {
+  CH_assert(isDefined());
+
   const LevelData<FArrayBox>& stateData = a_state.data();
   const DisjointBoxLayout& grids = stateData.disjointBoxLayout();
 
@@ -71,21 +92,25 @@ TestImExOp::implicitOp(Real               a_time,
 }
 
 void
-TestImExOp::solve(Real          a_time,
-                  std::size_t   a_stage,
-                  Real          a_dtscale,
-                  TestOpData&   a_soln)
+TestImExOp::solve(TestOpData&   a_soln,
+                   const TestOpData&  a_rhs,
+                   Real               a_time)
 {
+  CH_assert(isDefined());
+
   LevelData<FArrayBox>& solnData = a_soln.data();
   const DisjointBoxLayout& grids = solnData.disjointBoxLayout();
+  const LevelData<FArrayBox>& rhsData = a_rhs.data();
 
   DataIterator dit = grids.dataIterator();
   for (dit.begin(); dit.ok(); ++dit)
     {
       FArrayBox& solnDataFab = solnData[dit];
+      const FArrayBox& rhsDataFab = rhsData[dit];
 
       // Just a simple test op solve for the time integration
-      Real coef = 1.0 / (1.0 - a_dtscale*s_cI*m_dt);
+      Real coef = 1.0 / (1.0 - m_dtscale*s_cI*m_dt);
+      solnDataFab.copy(rhsDataFab);
       solnDataFab.mult(coef);
     }
 }

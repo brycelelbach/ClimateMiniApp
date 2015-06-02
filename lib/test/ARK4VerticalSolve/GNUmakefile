@@ -7,14 +7,14 @@
 # CHOMBO_HOME := $(shell pwd)/../..
 CHOMBO_HOME := $(CHOMBO_LIBDIR)
 
-makefiles+=lib_test_ARK4DenseOutputComponentTest
+makefiles+=lib_test_ARK4
 
-ebase := testARK4DenseOutputComponentTest
+ebase := testARK4
 
 LibNames := AMRElliptic AMRTools BoxTools 
 
 #base_dir = .
-src_dirs = $(base_dir)/../../src/AMRTimeDependent
+# src_dirs = $(base_dir)/../../src/AMRTimeDependent
 
 include $(CHOMBO_HOME)/mk/Make.test
 

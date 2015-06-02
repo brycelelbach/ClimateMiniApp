@@ -29,29 +29,43 @@ public:
   static const Real s_cI;
 
   /// Default constructor
-  TestImExOp(Real a_dt)
-    : m_dt(a_dt)
-  {}
+  TestImExOp();
 
-  void resetDt(Real a_dt);
+  /// Destructor
+  virtual ~TestImExOp();
 
-  void explicitOp(Real               a_time,
-                  std::size_t        a_stage,
-                  TestOpData&        a_result,
-                  const TestOpData&  a_state);
+  virtual void define(const TestOpData&   a_state,
+                      Real a_dt,
+                      Real a_dtscale);
 
-  void implicitOp(Real               a_time,
-                  std::size_t        a_stage,
-                  TestOpData&        a_result,
-                  const TestOpData&  a_state);
+  virtual bool isDefined() const { return m_isDefined; }
 
-  void solve(Real          a_time,
-             std::size_t   a_stage,
-             Real          a_dtscale,
-             TestOpData&   a_soln);
+  virtual void resetDt(Real a_dt);
+
+  virtual void explicitOp(TestOpData&             a_result,
+                          Real                    a_time,
+                          const TestOpData&  a_state);
+
+  virtual void implicitOp(TestOpData&             a_result,
+                          Real                    a_time,
+                          const TestOpData&  a_state);
+
+  virtual void solve(TestOpData&   a_soln,
+                     const TestOpData&   a_rhs,
+                     Real               a_time);
 
 protected:
+
+  bool m_isDefined;
+
   Real m_dt;
+
+  Real m_dtscale;
+
+private:
+  // Disallowed for all the usual reasons
+  void operator=(const TestImExOp&);
+  TestImExOp(const TestImExOp&);
 };
 
 #include "NamespaceFooter.H"

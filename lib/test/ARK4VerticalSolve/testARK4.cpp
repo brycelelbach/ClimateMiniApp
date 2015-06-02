@@ -9,20 +9,17 @@
 #endif
 
 
-#include <algorithm>
-
 #include "parstream.H"
+using std::endl;
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "LevelDataOps.H"
-#include "LoadBalance.H"
-#include "BRMeshRefine.H"
 #include "LayoutIterator.H"
 #include "FABView.H"
 #include "AMRIO.H"
 
 // ARK4 test classes
-#include "ARK4.H"
+#include "ARK4v3.H"
 #include "TestOpData.H"
 #include "TestImExOp.H"
 
@@ -47,14 +44,14 @@ main(int argc ,char* argv[])
 #ifdef CH_MPI
   MPI_Init (&argc, &argv);
 #endif
-  pout () << indent2 << "Beginning " << pgmname << " ..." << std::endl ;
+  pout () << indent2 << "Beginning " << pgmname << " ..." << endl ;
 
   int status = testARK4();
 
   if ( status == 0 )
-    pout() << indent << pgmname << " passed." << std::endl ;
+    pout() << indent << pgmname << " passed." << endl ;
   else
-    pout() << indent << pgmname << " failed with return code " << status << std::endl ;
+    pout() << indent << pgmname << " failed with return code " << status << endl ;
 
 #ifdef CH_MPI
   MPI_Finalize ();
@@ -84,29 +81,13 @@ Real ldfabVal(LevelData<FArrayBox>& a_data)
 int
 testARK4 ()
 {
-  int numCellMult = 32;
-  int numCells    = numCellMult * numProc();
-  int maxBoxSize  = numCellMult / 8;
-
-  IntVect loVect = IntVect::Zero;
-  IntVect hiVect = (numCells-1)*IntVect::Unit;
-  Box domainBox(loVect, hiVect);
-  bool periodic [CH_SPACEDIM];
-  for (unsigned i = 0; i < CH_SPACEDIM; ++i)
-    periodic[i] = true;
-  ProblemDomain baseDomain(domainBox, periodic);
-
-  Vector<Box> vectBoxes;
-  domainSplit(baseDomain, vectBoxes, maxBoxSize, 1);
-
-  Vector<int> procAssign(vectBoxes.size(), 0);
-  LoadBalance(procAssign, vectBoxes);
-
-  DisjointBoxLayout dbl(vectBoxes, procAssign, baseDomain);
-
   // Set up the data classes
-  LevelData<FArrayBox> data(dbl,1,IntVect::Unit);
-  LevelData<FArrayBox> accum(dbl,1,IntVect::Unit);
+  int size = 1;
+  Vector<Box> boxes(1,Box(IntVect::Zero, (size-1)*IntVect::Unit));
+  Vector<int> procs(1,1);
+  DisjointBoxLayout dbl(boxes,procs);
+  LevelData<FArrayBox> data(dbl,1,IntVect::Zero);
+  LevelData<FArrayBox> accum(dbl,1,IntVect::Zero);
   TestOpData soln;
   // soln.define(dbl,1,IntVect::Zero);
   soln.aliasData(data, &accum);
@@ -115,7 +96,7 @@ testARK4 ()
   Vector<TestOpData*> denseCoefs(nDenseCoefs);
   for (int icoef = 0; icoef < nDenseCoefs; ++icoef)
   {
-    denseCoefs[icoef] = new TestOpData(); // FIXME: Who frees this?
+    denseCoefs[icoef] = new TestOpData();
     denseCoefs[icoef]->define(dbl,1,IntVect::Zero);
   }
 
@@ -132,14 +113,15 @@ testARK4 ()
   Real coef = TestImExOp::s_cE + TestImExOp::s_cI;
 
   bool denseOutput = true;
-  ARK4<TestOpData, TestImExOp> ark(TestImExOp(0.0), soln, basedt, denseOutput); 
+  ARK4v3<TestOpData, TestImExOp> ark;
+  ark.define(soln,basedt, denseOutput); 
   LevelDataOps<FArrayBox> ops;
   for (int res=0; res < Nres; ++res)
   {
     Real time = 0;
     int Nstep = pow(2,res+2);
     Real dt = basedt / (Real) Nstep;
-    pout() << "Time step: " << dt << std::endl;
+    pout() << "Time step: " << dt << endl;
     ark.resetDt(dt);
     // Set the initial condition
     Real phi0 = 1.0;
@@ -152,17 +134,15 @@ testARK4 ()
       time += dt;
     }
     Real exact = exp(coef*time)*(1 + time);
-    data.exchange();
     Real val = ldfabVal(data);
     Real error = (exact - val);
     pout() << "Soln at time " << time << " = " << 
-      val << ", error = " << error << std::endl;
+      val << ", error = " << error << endl;
     errors[res] = error;
 
-    accum.exchange();
     Real accumDiff = ldfabVal(accum);
     pout() << "Accumulated RHS = " << accumDiff <<
-      " , vs. soln change = " << (accumDiff - (val - phi0)) << std::endl;
+      " , vs. soln change = " << (accumDiff - (val - phi0)) << endl;
 
     // Test dense output for the last time step
     Real theta = 1 - 1/sqrt(2);
@@ -176,25 +156,24 @@ testARK4 ()
       Real factor = pow(theta, icoef);
       soln.increment(*denseCoefs[icoef],factor);
     }
-    data.exchange();
     val = ldfabVal(data);
     error = exact - val;
     denseErrs[res] = error;
     pout() << "Dense output at time " << tint << " = " << 
-      val << ", error = " << error << std::endl;
+      val << ", error = " << error << endl;
   }
 
-  pout() << "Orders of convergence: " << std::endl;
+  pout() << "Orders of convergence: " << endl;
   Real rate = 4;
   for (int res=1; res < Nres; ++res)
   {
     Real ratio = errors[res] / errors[res-1];
     Real solnrate = (-log(ratio) / log(2));
-    pout() << "  soln: " << solnrate << std::endl;
+    pout() << "  soln: " << solnrate << endl;
     ratio = denseErrs[res] / denseErrs[res-1];
     Real denserate = (-log(ratio) / log(2));
-    pout() << "  dense output: " << denserate << std::endl;
-    rate = std::min(solnrate, denserate);
+    pout() << "  dense output: " << denserate << endl;
+    rate = min(solnrate, denserate);
   }
 
   return (rate > 3.8) ? 0 : 1;
