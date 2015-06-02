@@ -21,7 +21,7 @@
 #include "CMAImExOperators.H"
 #include "CMAProfileBase.H"
 
-#if defined(HPX_INTEL_VERSION)
+#if defined(__INTEL_COMPILER)
     #include <mkl_lapacke.h>
 #else
     #include <lapacke.h>
@@ -79,9 +79,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         IntVect lower_bound(IntVect::Zero);
         IntVect upper_bound(
-            (config.nv*numProc()-1),
-            (config.nh*numProc()-1),
-            (config.nh*numProc()-1)
+            (config.nv-1),
+            (config.nh-1),
+            (config.nh-1)
         );
 
         bool is_periodic[] = { true, true, true };
@@ -89,23 +89,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
         return domain;
     } // }}} 
-
-    std::tuple<IntVect, IntVect> boundary_conditions(
-        Real t
-      , sub_problem_state& O_
-      , sub_problem_state const& phi_
-        ) const
-    { // {{{
-        auto const& phi = phi_.U();
-
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd();
-
-        lower.shift(ghostVect());
-        upper.shift(-1*ghostVect());
-
-        return std::make_pair(lower, upper);
-    } // }}}
     
     Real horizontal_flux_stencil(
         IntVect here
@@ -158,46 +141,45 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         assert((dir == 1) || (dir == 2));
 
-#if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
-        IntVect right1(here); right1.setVal(dir, here[dir]+1);
-
-        Real const dh = std::get<1>(dp()); 
-        return (-1.0/dh) * (F(right1) - F(here)); 
-#else
-        IntVect left3(here); left3.setVal(dir, here[dir]-3);
-        IntVect left2(here); left2.setVal(dir, here[dir]-2);
-        IntVect left1(here); left1.setVal(dir, here[dir]-1);
-
-        IntVect right1(here); right1.setVal(dir, here[dir]+1);
-        IntVect right2(here); right2.setVal(dir, here[dir]+2);
-        IntVect right3(here); right3.setVal(dir, here[dir]+3);
-
-        Real constexpr alpha = -12.0;
-
-        Real constexpr a        = 0.0 - (5.0*alpha)/3.0;   // a_{i}
-
-        Real constexpr a_left1  = -45.0 + (5.0*alpha)/4.0; // a_{i-1}
-        Real constexpr a_right1 = +45.0 + (5.0*alpha)/4.0; // a_{i+1}
-
-        Real constexpr a_left2  = +9.0 - alpha/2.0;        // a_{i-2}
-        Real constexpr a_right2 = -9.0 - alpha/2.0;        // a_{i+2}
-
-        Real constexpr a_left3  = -1.0 + alpha/12.0;       // a_{i-3}
-        Real constexpr a_right3 = +1.0 + alpha/12.0;       // a_{i+3}
-
-        Real const dh = std::get<1>(dp()); 
-        return (-1.0/(60.0*dh))
-             * ( -a_right3*F(left3) + -a_right2*F(left2) + -a_right1*F(left1)
-               + -a*F(here)
-               + -a_left1*F(right1) + -a_left2*F(right2) + -a_left3*F(right3)
-               ); 
-#endif
+        #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
+            IntVect right1(here); right1.setVal(dir, here[dir]+1);
+    
+            Real const dh = std::get<1>(dp()); 
+            return (-1.0/dh) * (F(right1) - F(here)); 
+        #else
+            IntVect left3(here); left3.setVal(dir, here[dir]-3);
+            IntVect left2(here); left2.setVal(dir, here[dir]-2);
+            IntVect left1(here); left1.setVal(dir, here[dir]-1);
+    
+            IntVect right1(here); right1.setVal(dir, here[dir]+1);
+            IntVect right2(here); right2.setVal(dir, here[dir]+2);
+            IntVect right3(here); right3.setVal(dir, here[dir]+3);
+    
+            Real constexpr alpha = -12.0;
+    
+            Real constexpr a        = 0.0 - (5.0*alpha)/3.0;   // a_{i}
+    
+            Real constexpr a_left1  = -45.0 + (5.0*alpha)/4.0; // a_{i-1}
+            Real constexpr a_right1 = +45.0 + (5.0*alpha)/4.0; // a_{i+1}
+    
+            Real constexpr a_left2  = +9.0 - alpha/2.0;        // a_{i-2}
+            Real constexpr a_right2 = -9.0 - alpha/2.0;        // a_{i+2}
+    
+            Real constexpr a_left3  = -1.0 + alpha/12.0;       // a_{i-3}
+            Real constexpr a_right3 = +1.0 + alpha/12.0;       // a_{i+3}
+    
+            Real const dh = std::get<1>(dp()); 
+            return (-1.0/(60.0*dh))
+                 * ( -a_right3*F(left3) + -a_right2*F(left2) + -a_right1*F(left1)
+                   + -a*F(here)
+                   + -a_left1*F(right1) + -a_left2*F(right2) + -a_left3*F(right3)
+                   ); 
+        #endif
     } // }}}
 
     typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
         crs_matrix;
     
-    // TODO: Could be cached.
     crs_matrix vertical_operator(
         int j
       , int k
@@ -238,15 +220,13 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         IntVect lower = b.smallEnd();
         IntVect upper = b.bigEnd();
 
-        // This is why we've picked 'x' as our vertical dimension; x columns
-        // are contiguous in memory.
-
-        assert((&phi(IntVect(lower[0]+1, j, k)) - &phi(IntVect(lower[0], j, k))) == 1);
+        // We've picked 'x' as our vertical dimension so x columns are
+        // contiguous in memory; this check tests that.
+        auto p0 = &phi(IntVect(lower[0], j, k));
+        auto p1 = &phi(IntVect(lower[0]+1, j, k));
+        assert((p1 - p0) == 1);
 
         Real* rhs = &phi(IntVect(lower[0], j, k)); 
-
-//        for (int i = lower[0]; i <= upper[0]; ++i)
-//            std::cout << "phi[" << i << "] == " << rhs[i] << "\n";
 
         int info = LAPACKE_dgtsv(
             LAPACK_ROW_MAJOR, // matrix format
@@ -258,9 +238,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
             rhs, // column to solve 
             1 // leading dimension of RHS
             );
-
-//        for (int i = lower[0]; i <= upper[0]; ++i)
-//            std::cout << "rhs[" << i << "] == " << rhs[i] << "\n";
  
         assert(info == 0);
     } // }}}

@@ -22,9 +22,9 @@ namespace climate_mini_app
 {
 
 template <typename Profile>
-struct imex_operators
+struct imex_per_box_operators
 {
-    imex_operators(Profile const& profile_)
+    imex_per_box_operators(Profile const& profile_)
     // {{{
       : profile(profile_)
     {} // }}}
@@ -72,16 +72,22 @@ struct imex_operators
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
 
-        using std::ref;
-        using std::cref;
-
-        auto fut_y = hpx::async(&imex_operators::horizontalFluxDirectional
-                              , this, ref(FY), cref(phi), 1, lower, upper);
-        auto fut_z = hpx::async(&imex_operators::horizontalFluxDirectional
-                              , this, ref(FZ), cref(phi), 2, lower, upper);
-
-        fut_y.get();
-        fut_z.get();
+        // Compute the two horizontal fluxes in parallel if using HPX.
+        #if defined(CH_HPX)
+            using std::ref;
+            using std::cref;
+   
+            auto F = &imex_per_box_operators::horizontalFluxDirectional;
+ 
+            auto futY = hpx::async(F, this, ref(FY), cref(phi), 1, lower, upper);
+            auto futZ = hpx::async(F, this, ref(FZ), cref(phi), 2, lower, upper);
+    
+            futY.get();
+            futZ.get();
+        #else
+            horizontalFluxDirectional(FY, phi, 1, lower, upper);
+            horizontalFluxDirectional(FZ, phi, 2, lower, upper);
+        #endif
     } // }}}
 
     void explicitOp(
@@ -91,7 +97,13 @@ struct imex_operators
       , sub_problem_state& phi_
         ) const
     { // {{{
-        phi_.exchangeSync();
+        // For HPX, we operate on sub_problem_states (e.g. FArrayBox
+        // granularity). For MPI, these exchanges are done on problem_states
+        // (e.g. LevelData granularity). 
+        #if defined(CH_HPX)
+            phi_.exchangeSync();
+        #endif
+
         horizontalFlux(phi_);
 
         auto&       kE  = kE_.U();
@@ -101,8 +113,9 @@ struct imex_operators
  
         IntVect lower, upper;
 
-        std::tie(lower, upper) = profile.boundary_conditions(t, kE_, phi_); 
-    
+        lower.shift(profile.config.ghost_vector);
+        upper.shift(-1*profile.config.ghost_vector);
+
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
         for (auto i = lower[0]; i <= upper[0]; ++i)
@@ -133,7 +146,112 @@ struct imex_operators
       , sub_problem_state& phi_
         ) const
     { // {{{
-        phi_.exchangeSync();
+        // For HPX, we operate on sub_problem_states (e.g. FArrayBox
+        // granularity). For MPI, these exchanges are done on problem_states
+        // (e.g. LevelData granularity). 
+        #if defined(CH_HPX)
+            phi_.exchangeSync();
+        #endif
+    } // }}}
+
+  private:
+    Profile const profile;
+};
+
+template <typename Profile>
+struct imex_per_ld_operators
+{
+    imex_per_ld_operators(Profile const& profile_)
+    // {{{
+      : profile(profile_)
+    {} // }}}
+
+    // TODO: Implement caching in profile.
+    void resetDt(Real)
+    { // {{{
+    } // }}}
+
+    void horizontalFlux(problem_state& phi_) const
+    { // {{{
+        DataIterator dit = phi_.U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            sub_problem_state sub_phi(phi_, dit());
+
+            imex_per_box_operators<Profile> sub_imex(profile);
+
+            sub_imex.horizontal_flux(sub_phi);
+        }
+    } // }}}
+
+    void explicitOp(
+        Real t
+      , std::size_t stage
+      , problem_state& kE_
+      , problem_state& phi_
+        ) const
+    { // {{{
+        // If we're using MPI, we do the exchange at problem_state (e.g.
+        // LevelData) granularity, and the exchange at the sub_problem_state
+        // level (e.g. FArrayBox granularity) is #ifdef'd out. 
+        #if !defined(CH_HPX)
+            phi_.exchangeSync();
+        #endif
+
+        DataIterator dit = phi_.U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            sub_problem_state sub_phi(phi_, dit());
+            sub_problem_state sub_kE(kE_, dit());
+
+            imex_per_box_operators<Profile> sub_imex(profile);
+
+            sub_imex.explicitOp(t, stage, sub_kE, sub_phi);
+        }
+    } // }}}
+
+    void implicitOp(
+        Real t
+      , std::size_t stage
+      , problem_state& kI_
+      , problem_state& phi_
+        ) const
+    { // {{{
+        DataIterator dit = phi_.U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            sub_problem_state sub_phi(phi_, dit());
+            sub_problem_state sub_kI(kI_, dit());
+
+            imex_per_box_operators<Profile> sub_imex(profile);
+
+            sub_imex.implicitOp(t, stage, sub_kI, sub_phi);
+        }
+    } // }}}
+
+    void solve(
+        Real t
+      , std::size_t stage
+      , Real dtscale
+      , problem_state& phi_
+        ) const
+    { // {{{
+        // If we're using MPI, we do the exchange at problem_state (e.g.
+        // LevelData) granularity, and the exchange at the sub_problem_state
+        // level (FArrayBox granularity) is #ifdef'd out. 
+        #if !defined(CH_HPX)
+            phi_.exchangeSync();
+        #endif
+
+        DataIterator dit = phi_.U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            sub_problem_state sub_phi(phi_, dit());
+
+            imex_per_box_operators<Profile> sub_imex(profile);
+
+            sub_imex.solve(t, stage, dtscale, sub_phi);
+        }
     } // }}}
 
   private:

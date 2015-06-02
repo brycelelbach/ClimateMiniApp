@@ -16,11 +16,11 @@
 #if !defined(CHOMBO_9DCB4096_49BC_4F61_AC62_5CF9F66DB6D5)
 #define CHOMBO_9DCB4096_49BC_4F61_AC62_5CF9F66DB6D5
 
+#include <cstdint>
+#include <iostream>
+
 #include "IntVect.H"
 #include "StreamCSV.H"
-
-#include <iostream>
-#include <cstdint>
 
 namespace climate_mini_app
 {
@@ -91,9 +91,9 @@ struct configuration
       , IntVect ghost_vector_
       , bool header_
       , bool verbose_
-#if defined(CH_USE_HDF5)
+      #if defined(CH_USE_HDF5)
       , bool output_
-#endif
+      #endif
         )
       : problem(problem_)
       , nh(nh_)
@@ -102,9 +102,9 @@ struct configuration
       , ghost_vector(ghost_vector_)
       , header(header_)
       , verbose(verbose_)
-#if defined(CH_USE_HDF5)
+      #if defined(CH_USE_HDF5)
       , output(output_)
-#endif
+      #endif
     {}
 
     std::string print_csv_header() const

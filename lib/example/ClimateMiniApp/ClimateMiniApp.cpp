@@ -71,7 +71,7 @@ void output(
     Profile const& profile
   , AsyncLevelData<FArrayBox>& data
   , std::string const& name
-  , Real nt  
+  , Real time  
   , std::string const& fmt
   , Args&&... fmt_args
     )
@@ -113,14 +113,43 @@ void output(
       , level
       , names
       , level_dbl[0].physDomain().domainBox()
-      , dp // dx
+      , dp           // dx
       , profile.dt() // dt
-      , nt // time
+      , time 
       , ref_ratios
       , 1 // levels
         );
 
     for (LevelData<FArrayBox>* ld : level) delete ld;
+}
+
+template <typename Profile>
+void compareAndOutput(
+    Profile const& profile
+  , climate_mini_app::problem_state& data
+  , Real time
+  , std::size_t step
+    )
+{ 
+    DisjointBoxLayout const& dbl = data.U.disjointBoxLayout();
+
+    data.exchangeSync();
+
+    output(profile, data.U, "phi", time, "phi.%06u.hdf5", step); 
+
+    climate_mini_app::problem_state analytic(dbl, 1, data.U.ghostVect());
+    visit(analytic.U,
+        [&profile, time](Real& val, IntVect here)
+        { val = profile.analytic_solution(here, time); }
+    );
+
+    output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
+
+    DataIterator dit = data.U.dataIterator();
+
+    for (dit.begin(); dit.ok(); ++dit)
+        analytic.U[dit()].plus(data.U[dit()], -1.0);
+    output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
 }
 #endif
 
@@ -218,7 +247,7 @@ void stepLoop(
         { val = profile.initial_state(here); }
     );
 
-    typedef climate_mini_app::imex_operators<Profile> imexop;
+    typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
     typedef ARK4<
         climate_mini_app::sub_problem_state
       , problem_state_scratch<false>
@@ -235,17 +264,17 @@ void stepLoop(
     climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
     climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
 
-#if defined(CH_USE_HDF5)
-    if (config.output)
-    {
-        climate_mini_app::problem_state src(dbl, 1, config.ghost_vector);
-        visit(src.U,
-            [&profile](Real& val, IntVect here)
-            { val = profile.source_term(here, 0.0); }
-        );
-        output(profile, src.U, "phi", 0.0, "source.hdf5"); 
-    }
-#endif 
+    #if defined(CH_USE_HDF5) && defined(CH_DUMP_SOURCE_TERM)
+        if (config.output)
+        {
+            climate_mini_app::problem_state src(dbl, 1, config.ghost_vector);
+            visit(src.U,
+                [&profile](Real& val, IntVect here)
+                { val = profile.source_term(here, 0.0); }
+            );
+            output(profile, src.U, "phi", 0.0, "source.hdf5"); 
+        }
+    #endif 
 
     std::size_t step = 0;
 
@@ -257,25 +286,10 @@ void stepLoop(
     {
         DataIterator dit = data.U.dataIterator();
 
-#if defined(CH_USE_HDF5)
-        if (config.output)
-        { 
-            data.exchangeAllSync();
- 
-            output(profile, data.U, "phi", time, "phi.%06u.hdf5", step); 
-
-            climate_mini_app::problem_state analytic(dbl, 1, config.ghost_vector);
-            visit(analytic.U,
-                [&profile, time](Real& val, IntVect here)
-                { val = profile.analytic_solution(here, time); }
-            );
-            output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
-    
-            for (dit.begin(); dit.ok(); ++dit)
-                analytic.U[dit()].plus(data.U[dit()], -1.0);
-            output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
-        }
-#endif 
+        #if defined(CH_USE_HDF5)
+            if (config.output)
+                compareAndOutput(profile, data, time, step);
+        #endif 
 
         ++step;
 
@@ -308,22 +322,22 @@ void stepLoop(
 
         hpx::lcos::when_all(futures).get();
 
-#if defined(CH_USE_HDF5) && defined(CH_DUMP_FLUXES)
-        if (config.output)
-        { 
-            for (std::size_t stage = 0; stage < ark_type::s_nStages; ++stage) 
-            {
-                Real s_time = time + ark_type::s_c[stage]*dt;
-                std::size_t s_step = ark_type::s_nStages*(step-1) + stage;
-
-                auto& FY = phi[stage].FY;
-                auto& FZ = phi[stage].FZ;
-
-                output(profile, FY, "phi", s_time, "FY.%06u.hdf5", s_step); 
-                output(profile, FZ, "phi", s_time, "FZ.%06u.hdf5", s_step); 
+        #if defined(CH_USE_HDF5) && defined(CH_DUMP_FLUXES)
+            if (config.output)
+            { 
+                for (std::size_t stage = 0; stage < ark_type::s_nStages; ++stage) 
+                {
+                    Real s_time = time + ark_type::s_c[stage]*dt;
+                    std::size_t s_step = ark_type::s_nStages*(step-1) + stage;
+    
+                    auto& FY = phi[stage].FY;
+                    auto& FZ = phi[stage].FZ;
+    
+                    output(profile, FY, "phi", s_time, "FY.%06u.hdf5", s_step); 
+                    output(profile, FZ, "phi", s_time, "FZ.%06u.hdf5", s_step); 
+                }
             }
-        }
-#endif
+        #endif
 
         time += dt;
     } 
@@ -337,28 +351,10 @@ void stepLoop(
               << clock.elapsed() << "\n"
               << std::flush;
 
-#if defined(CH_USE_HDF5)
-    if (config.output)
-    { 
-        data.exchangeAllSync();
-
-        output(profile, data.U, "phi", time, "phi.%06u.hdf5", step); 
-
-        climate_mini_app::problem_state analytic(dbl, 1, config.ghost_vector);
-        visit(analytic.U,
-            [&profile, time](Real& val, IntVect here)
-            { val = profile.analytic_solution(here, time); }
-        );
-
-        output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
-
-        DataIterator dit = data.U.dataIterator();
-    
-        for (dit.begin(); dit.ok(); ++dit)
-            analytic.U[dit()].plus(data.U[dit()], -1.0);
-        output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
-    }
-#endif
+    #if defined(CH_USE_HDF5)
+        if (config.output)
+            compareAndOutput(profile, data, time, step);
+    #endif
 }
 
 using boost::program_options::variables_map;
@@ -409,16 +405,16 @@ int chombo_main(variables_map& vm)
         /*nh: y and z (horizontal) extent per core =*/vm["nh"].as<std::uint64_t>(),
         /*nv: x (vertical) extent per core         =*/vm["nv"].as<std::uint64_t>(),
         /*max_box_size                             =*/vm["mbs"].as<std::uint64_t>(),
-#if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
+        #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
         /*ghost_vector                             =*/IntVect::Unit,
-#else
+        #else
         /*ghost_vector                             =*/IntVect::Unit*3,
-#endif
+        #endif
         /*header: print header for CSV timing data =*/vm.count("header"),
         /*verbose: print status updates            =*/vm.count("verbose"), 
-#if defined(CH_USE_HDF5)
+        #if defined(CH_USE_HDF5)
         /*output: generate HDF5 output             =*/vm["output"].as<bool>()
-#endif
+        #endif
     );
 
     if (climate_mini_app::Problem_AdvectionDiffusion == config.problem)
@@ -520,12 +516,13 @@ int main(int argc, char** argv)
 
         ( "header", "print header for the CSV timing data")
         ( "verbose", "display status updates")
-#if defined(CH_USE_HDF5)
+
+        #if defined(CH_USE_HDF5)
         ( "output"
         , boost::program_options::value<bool>()->
             default_value(true, "true")
         , "generate HDF5 output every timestep") 
-#endif
+        #endif
         ; 
 
     return init(chombo_main, cmdline, argc, argv); // Doesn't return

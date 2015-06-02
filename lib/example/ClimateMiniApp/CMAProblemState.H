@@ -16,7 +16,9 @@
 #if !defined(CHOMBO_B7CAA48C_980E_4465_A464_5762F6DD5B09)
 #define CHOMBO_B7CAA48C_980E_4465_A464_5762F6DD5B09
 
-#include <hpx/lcos/when_all.hpp>
+#if defined(CH_HPX)
+    #include <hpx/lcos/when_all.hpp>
+#endif
 
 #include <cstdint>
 
@@ -26,11 +28,35 @@
 #include "IntVect.H"
 #include "FArrayBox.H"
 
-#include "AsyncLevelData.H"
-#include "AsyncExchange.H"
+#if defined(CH_HPX)
+    #include "AsyncLevelData.H"
+    #include "AsyncExchange.H"
+#else
+    #include "LevelData.H"
+#endif
 
 namespace climate_mini_app
 {
+
+#if !defined(CH_HPX)
+/// Creates FArrayBoxes suitable for storing fluxes for the given direction.
+struct FluxFABDataFactory : DataFactory<FArrayBox>
+{
+    FluxFABDataFactory(std::size_t dir)
+    // {{{
+      : dir_(dir)
+    {} // }}} 
+
+    FArrayBox* create(Box const& b, int ncomps, DataIndex const& a_datInd) const
+    { // {{{
+        Box tmp = surroundingNodes(b, dir_);
+        return new FArrayBox(tmp, ncomps);
+    } // }}}
+
+  private:
+    std::size_t dir_;
+};
+#endif
 
 struct problem_state
 {
@@ -39,7 +65,9 @@ struct problem_state
       : U()
       , FY()
       , FZ()
+      #if defined(CH_HPX)
       , epoch_()
+      #endif
     {} // }}}
 
     problem_state(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
@@ -47,7 +75,9 @@ struct problem_state
       : U()
       , FY()
       , FZ()
+      #if defined(CH_HPX)
       , epoch_()
+      #endif
     { 
         define(dbl, comps, ghost);
     } // }}}
@@ -56,38 +86,77 @@ struct problem_state
     { // {{{
         U.define(dbl, comps, ghost);
 
-        auto defineFY =
-            [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
+        #if defined(CH_HPX)
+            auto defineFY =
+                [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
+                {
+                    Box b = ld.disjointBoxLayout()[di];
+                    b.grow(ld.ghostVect());
+                    b = surroundingNodes(b, 1);
+                    ld[di].define(b, ld.nComp());
+                }; 
+    
+            auto defineFZ =
+                [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
+                {
+                    Box b = ld.disjointBoxLayout()[di];
+                    b.grow(ld.ghostVect());
+                    b = surroundingNodes(b, 2);
+                    ld[di].define(b, ld.nComp());
+                }; 
+     
+            FY.define(dbl, comps, ghost, defineFY);
+            FZ.define(dbl, comps, ghost, defineFZ);
+    
+            epoch_.define(dbl);
+    
+            DataIterator dit(U.dataIterator());
+    
+            for (dit.begin(); dit.ok(); ++dit)
             {
-                Box b = ld.disjointBoxLayout()[di];
-                b.grow(ld.ghostVect());
-                b = surroundingNodes(b, 1);
-                ld[di].define(b, ld.nComp());
-            }; 
+                epoch_[dit()] = 0;
+            }
+        #else
+            FluxFABDataFactory factY(1), factZ(2);
+    
+            FY.define(dbl, comps, ghost, factY);
+            FZ.define(dbl, comps, ghost, factZ);
+        #endif
+    } // }}}
 
-        auto defineFZ =
-            [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
-            {
-                Box b = ld.disjointBoxLayout()[di];
-                b.grow(ld.ghostVect());
-                b = surroundingNodes(b, 2);
-                ld[di].define(b, ld.nComp());
-            }; 
- 
-        FY.define(dbl, comps, ghost, defineFY);
-        FZ.define(dbl, comps, ghost, defineFZ);
-
-        epoch_.define(dbl);
-
-        DataIterator dit(U.dataIterator());
-
+    void copy(problem_state const& A)
+    { // {{{
+        DataIterator dit = U.dataIterator();
         for (dit.begin(); dit.ok(); ++dit)
         {
-            epoch_[dit()] = 0;
+            U[dit()].copy(A.U[dit()]);
+            FY[dit()].copy(A.FY[dit()]);
+            FZ[dit()].copy(A.FZ[dit()]);
         }
     } // }}}
 
-    hpx::future<void> exchangeAllAsync()
+    void setVal(Real val)
+    { // {{{
+        DataIterator dit = U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            U[dit()].setVal(val);
+            FY[dit()].setVal(val);
+            FZ[dit()].setVal(val);
+        }
+    } // }}}
+
+    void plus(problem_state const& A, Real factor = 1.0)
+    { // {{{
+        DataIterator dit = U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            U[dit()].plus(A.U[dit()], factor);
+        }
+    } // }}}
+
+#if defined(CH_HPX)
+    hpx::future<void> exchangeAsync()
     { // {{{
         DataIterator dit = U.dataIterator();
 
@@ -98,21 +167,31 @@ struct problem_state
 
         return hpx::lcos::when_all(exchanges);
     } // }}}
+#endif
 
-    void exchangeAllSync()
+    void exchangeSync()
     { // {{{
-        exchangeAllAsync().get();
+        #if defined(CH_HPX)
+            exchangeAsync().get();
+        #else
+            U.exchange();
+        #endif
     } // }}}
 
+    friend struct sub_problem_state;
+
+#if defined(CH_HPX)
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FY;
     AsyncLevelData<FArrayBox> FZ;
 
   private:
     LayoutData<std::size_t> epoch_;
-
-  public:
-    friend struct sub_problem_state;
+#else
+    LevelData<FArrayBox> U;
+    LevelData<FArrayBox> FY;
+    LevelData<FArrayBox> FZ;
+#endif
 };
 
 struct sub_problem_state
@@ -161,6 +240,7 @@ struct sub_problem_state
         U().plus(A.U(), factor);
     } // }}}
 
+#if defined(CH_HPX)
     hpx::future<void> exchangeAsync()
     { // {{{
         assert(ps_);
@@ -172,6 +252,7 @@ struct sub_problem_state
         assert(ps_);
         LocalExchangeSync(ps_->epoch_[di_]++, di_, ps_->U);
     } // }}}
+#endif
 
     FArrayBox& U()
     { // {{{
