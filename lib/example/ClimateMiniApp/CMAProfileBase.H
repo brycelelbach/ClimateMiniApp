@@ -16,7 +16,7 @@
 #if !defined(CHOMBO_834AE853_D8B6_487B_8B2C_6C97EE5E7151)
 #define CHOMBO_834AE853_D8B6_487B_8B2C_6C97EE5E7151
 
-#include <tuple>
+#include <array>
 
 #include "CMAConfiguration.H"
 
@@ -39,26 +39,26 @@ struct profile_base
     } // }}}
 
     // FIXME: This should stop being a tuple
-    std::tuple<Real, Real, Real> face_coords(IntVect here) const
+    std::array<Real, 3> face_coords(IntVect here) const
     { // {{{
-        return std::tuple<Real, Real, Real>(
+        return std::array<Real, 3>{
             Real(here[0])/(Real(config.nv))
           , Real(here[1])/(Real(config.nh))
           , Real(here[2])/(Real(config.nh))
-        );
+        };
     } // }}}
 
-    std::tuple<Real, Real, Real> center_coords(IntVect here) const
+    std::array<Real, 3> center_coords(IntVect here) const
     { // {{{
-        return std::tuple<Real, Real, Real>(
-            std::get<0>(face_coords(here))+0.5*std::get<0>(dp()) 
-          , std::get<1>(face_coords(here))+0.5*std::get<1>(dp()) 
-          , std::get<2>(face_coords(here))+0.5*std::get<2>(dp()) 
-        );
+        return std::array<Real, 3>{
+            face_coords(here)[0]+0.5*dp()[0] 
+          , face_coords(here)[1]+0.5*dp()[1] 
+          , face_coords(here)[2]+0.5*dp()[2] 
+        };
     } // }}}
 
     // Spatial step size
-    std::tuple<Real, Real, Real> dp() const
+    std::array<Real, 3> dp() const
     { // {{{
         return face_coords(IntVect(1, 1, 1));
     } // }}}

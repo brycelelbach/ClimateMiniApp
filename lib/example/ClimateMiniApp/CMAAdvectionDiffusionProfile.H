@@ -59,7 +59,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
             //      with CFL < 1.0 
             // 
             Real constexpr CFL = 0.8;
-            Real const dh = std::get<1>(dp()); 
+            Real const dh = dp()[1]; 
 
             return CFL*dh/(std::abs(vy)+std::abs(vz));
         }
@@ -69,7 +69,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         {
             // We want something with the same magnitude as dv.
             Real constexpr A = 0.8;
-            Real const dv = std::get<0>(dp());
+            Real const dv = dp()[0];
 
             return A*dv;
         }
@@ -96,7 +96,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox const& phi
         ) const
     { // {{{
-        Real const dh = std::get<1>(dp()); 
+        Real const dh = dp()[1]; 
 
         Real v = 0.0;
         IntVect left;
@@ -141,10 +141,11 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         assert((dir == 1) || (dir == 2));
 
+        Real const dh = dp()[1]; 
+
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
             IntVect right1(here); right1.setVal(dir, here[dir]+1);
     
-            Real const dh = std::get<1>(dp()); 
             return (-1.0/dh) * (F(right1) - F(here)); 
         #else
             IntVect left3(here); left3.setVal(dir, here[dir]-3);
@@ -168,7 +169,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
             Real constexpr a_left3  = -1.0 + alpha/12.0;       // a_{i-3}
             Real constexpr a_right3 = +1.0 + alpha/12.0;       // a_{i+3}
     
-            Real const dh = std::get<1>(dp()); 
             return (-1.0/(60.0*dh))
                  * ( -a_right3*F(left3) + -a_right2*F(left2) + -a_right1*F(left1)
                    + -a*F(here)
@@ -189,7 +189,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         ) const
     { // {{{
         std::uint64_t const size = b.size()[0];
-        Real const dv = std::get<0>(dp()); 
+        Real const dv = dp()[0]; 
         Real const beta = (kx*(dt()*dtscale))/(dv*dv);
 
         // Sub-diagonal part of the matrix.
@@ -250,9 +250,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     Real analytic_solution(IntVect here, Real t) const
     { // {{{
         Real x, y, z;
-        x = std::get<0>(center_coords(here));
-        y = std::get<1>(center_coords(here));
-        z = std::get<2>(center_coords(here));
+        x = center_coords(here)[0];
+        y = center_coords(here)[1];
+        z = center_coords(here)[2];
 
         Real const cx_pi = cx*M_PI;
         Real const cy_pi = cy*M_PI;
