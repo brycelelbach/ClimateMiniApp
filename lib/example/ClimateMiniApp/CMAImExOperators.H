@@ -111,7 +111,8 @@ struct imex_per_box_operators
         auto const& FY  = phi_.FY();
         auto const& FZ  = phi_.FZ();
  
-        IntVect lower, upper;
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd(); 
 
         lower.shift(profile.config.ghost_vector);
         upper.shift(-1*profile.config.ghost_vector);
