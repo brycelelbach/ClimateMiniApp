@@ -50,14 +50,16 @@ testVerticalSolveConvergence()
 
     // store errors to calculate convergence rates
     Vector<RealVect> errorNorm(nRes);
+    Vector<RealVect> truncErrNorm(nRes);
 
     // loop over resolutions to test
-    for (int res=0;res<nRes;res++){
-
+    for (int res=0;res<nRes;res++)
+    {
       int N = minN*pow(2,res);
       Box b(IntVect::Zero, (N-1)*IntVect::Unit);
       FArrayBox soln(b,1);
       FArrayBox rhs(b,1);
+      FArrayBox exact(b,1);
 
       Real dx = 1.0/(Real) N;
       // Real dt = minDt * dx; // temporal error for 1 step is O(dt^2)
@@ -65,62 +67,74 @@ testVerticalSolveConvergence()
       Real coef = dt;
       int kx = 2;
 
-      // Initialize the rhs to exact soln
+      // Initialize the soln to exact soln
       Real initCoef = 1;
-      TestOperator::setExact(rhs, kx, dx, initCoef);
+      TestOperator::setExact(soln, kx, dx, initCoef);
+      // Apply the operator Dxx, check the truncation error
+      LapackFactorization Dxx;
+      Real c1 = 0;
+      Real c2 = 1;
+      TestOperator::build4thOrderBanded(Dxx, c1, c2, dx, N);
+      // Dxx.printBandedMatrix();
+      // Just make sure the residual is zero
+      // apply coef D_{xx} to it
+      TestOperator::applyBandedMatrix(soln, rhs, Dxx);
+      Real rhsCoef = -coef * pow(M_PI*(Real) kx,2); // +Dxx
+      // Real rhsCoef = 1.0;
+      TestOperator::setExact(exact, kx, dx, rhsCoef);
+      exact.minus(rhs);
+      
+      // Output truncation error norms
+      truncErrNorm[res][0] = exact.norm(1) / pow((Real) N, 3); // L1 norm
+      truncErrNorm[res][1] = exact.norm(2) / pow((Real) N, 1.5); // L2 norm
+      truncErrNorm[res][2] = exact.norm(0); // max norm
+      pout()<<"N: "<<N<<" trunction error = "<<truncErrNorm[res]<<endl;
 
-      // Build the Laplacian
-      // band_matrix L;
-      // TestOperator::build2ndOrderOperator(L, coef, dx, N);
- 
       // Build the Helmholtz matrix and solve
-      // int KL=1;
-      // int KU=1;
-      // LapackFactorization A(N, KL, KU);
-      LapackFactorization A;
-      TestOperator::build4thOrderBanded(A, coef, dx, N);
       // A.printBandedMatrix();
+      LapackFactorization A;
+      c1 = 1;
+      c2 = -coef;
+      TestOperator::build4thOrderBanded(A, c1, c2, dx, N);
+      // A.printBandedMatrix();
+      TestOperator::setExact(rhs, kx, dx, initCoef);
       TestOperator::implicitSolveBanded(soln, rhs, A);
       // band_matrix H;
       // TestOperator::build2ndOrderSolvek(H, coef, dx, N);
       // TestOperator::implicitSolve(soln, rhs, H);
-
-      // Just make sure the residual is zero
-      /*
-      // Soln is initial soln value
-      TestOperator::setExact(soln, kx, dx, initCoef); 
-      // apply coef D_{xx} to it
-      Real alpha = coef;
-      Real beta = 0.0;
-      TestOperator::applyBandedMatrix(soln, rhs, L, alpha, beta);
-      // pout() << "N: " << N <<" residual = "<< rhs.norm(0) << endl;
-      */
  
       // Calculate the error versus exact solution
       Real exactcoef = 1.0 / (1.0 + coef * pow(M_PI*(Real) kx,2));
       // Real exactcoef = -coef * pow(M_PI*(Real) kx,2);
-      TestOperator::setExact(rhs, kx, dx, exactcoef);
-      rhs.minus(soln);
+      TestOperator::setExact(exact, kx, dx, exactcoef);
+      exact.minus(soln);
 
       // Output soln error norms
-      errorNorm[res][0] = rhs.norm(1) / pow((Real) N, 3); // L1 norm
-      errorNorm[res][1] = rhs.norm(2) / pow((Real) N, 1.5); // L2 norm
-      errorNorm[res][2] = rhs.norm(0); // max norm
+      errorNorm[res][0] = exact.norm(1) / pow((Real) N, 3); // L1 norm
+      errorNorm[res][1] = exact.norm(2) / pow((Real) N, 1.5); // L2 norm
+      errorNorm[res][2] = exact.norm(0); // max norm
       pout()<<"N: "<<N<<" soln error = "<<errorNorm[res]<<endl;
-
     } // loop over resolutions
 
     // calculate convergence rates
     Real ratio;
     RealVect rate;
-    pout()<<    "                        L1     L2     Linf" <<endl;
+    pout()<< "Error norms rates     L1     L2     Linf" <<endl;
     for (int res=1; res < nRes; ++res)
     {
       for (int errType=0; errType<3; ++errType){
         ratio = errorNorm[res][errType] / errorNorm[res-1][errType];
         rate[errType] = (-log(ratio) / log(2));
       }
-      pout() << "Convergence rate: " << rate[0]<<" "<<rate[1]<<" "<<rate[2]<< endl;
+      pout() << "            solution: " << 
+        rate[0]<<" "<<rate[1]<<" "<<rate[2]<< endl;
+
+      for (int errType=0; errType<3; ++errType){
+        ratio = truncErrNorm[res][errType] / truncErrNorm[res-1][errType];
+        rate[errType] = (-log(ratio) / log(2));
+      }
+      pout() << "          truncation: " << 
+        rate[0]<<" "<<rate[1]<<" "<<rate[2]<< endl;
     }
   
     // is this error / convergence rate acceptable?

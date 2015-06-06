@@ -8,8 +8,8 @@
  */
 #endif
 
-#ifndef _TESTIMEXOP_H_
-#define _TESTIMEXOP_H_
+#ifndef _TestImExDxxOp_H_
+#define _TestImExDxxOp_H_
 
 #include "FArrayBox.H"
 #include "LevelData.H"
@@ -17,22 +17,23 @@
 
 #include "NamespaceHeader.H"
 
-// Exact solution is exp((cE + cI)*t)*(1+t)
-// So that:
-//   explicit op = (1/(1+t) + cE) * phi;
-//   implicit op = cI * phi;
+// See README for the math
 
-class TestImExOp
+class TestImExDxxOp
 {
 public:
-  static const Real s_cE;
-  static const Real s_cI;
+  static Real s_alpha;
+  static Real s_beta;
+  static Real s_cE;
+  static Real s_cI;
+  static Real s_kx;
+  static Real s_C;
 
   /// Default constructor
-  TestImExOp();
+  TestImExDxxOp();
 
   /// Destructor
-  virtual ~TestImExOp();
+  virtual ~TestImExDxxOp();
 
   virtual void define(const TestOpData&   a_state,
                       Real a_dt,
@@ -54,6 +55,10 @@ public:
                      const TestOpData&   a_rhs,
                      Real               a_time);
 
+  static void setCoefs(Real a_alpha, Real a_beta, int a_kx, Real a_C);
+
+  static void setExact(LevelData<FArrayBox>& a_exact, Real a_time);
+
 protected:
 
   bool m_isDefined;
@@ -64,8 +69,8 @@ protected:
 
 private:
   // Disallowed for all the usual reasons
-  void operator=(const TestImExOp&);
-  TestImExOp(const TestImExOp&);
+  void operator=(const TestImExDxxOp&);
+  TestImExDxxOp(const TestImExDxxOp&);
 };
 
 #include "NamespaceFooter.H"

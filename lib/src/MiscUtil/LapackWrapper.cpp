@@ -16,9 +16,30 @@
 
 #include "NamespaceHeader.H"
 
+
+void LapackWrapper::applyBandMatrix(Real* const in, Real* const out, 
+    LapackFactorization& A)
+{
+    // Sorry, need these for the fortran version of LAPACK
+    char TRANS = 'N';
+    int INCX = 1;
+    int INCY = 1;
+    int M = A.numCols(); // it's actually a square matrix
+    int N = A.numCols(); // in compact band format
+    int KL = A.numLower();
+    int KU = 2*A.numUpper(); // FIXME - 2x seems to be necessary?
+    int LDA = A.numRows();
+    int INFO;
+
+    // Call the banded matrix multiply routine
+    Real alpha = 1;
+    Real beta = 0;
+    dgbmv_(&TRANS, &M, &N, &KL, &KU, &alpha, A.luPtr(), &LDA, in, 
+        &INCX, &beta, out, &INCY);
+}
+
 void LapackWrapper::factorBandMatrix(LapackFactorization& A)
 {
-    // - check that the sizes of A, B are compatible
     int LDAB = A.numRows();
     int M = A.numCols(); // it's actually a square matrix
     int N = A.numCols(); // in compact band format

@@ -1,0 +1,15 @@
+We're solving the 1D Helmholtz using ARK4.
+
+The exact solution we want is:
+
+\phi(x,y,z,t) = C * exp(-(\pi*k_x)^2 * \alpha * t) * cos(\pi*k_x*x)
+
+One PDE this satisfies is:
+\phi_t = c_I \phi_{xx} + c_E * \phi
+
+where for any \beta in [0,1]
+  c_I = \alpha \beta
+  c_E  = - \alpha (pi*k_x)^2 * (1 - \beta)
+
+Boundary conditions in x direction are homogeneous Neumann
+

@@ -9,12 +9,17 @@ CHOMBO_HOME := $(CHOMBO_LIBDIR)
 
 makefiles+=lib_test_ARK4
 
-ebase := testARK4
+ebase := testARK4VerticalSolve
 
 LibNames := AMRElliptic AMRTools BoxTools 
 
-#base_dir = .
-# src_dirs = $(base_dir)/../../src/AMRTimeDependent
+base_dir = .
+src_dirs = $(base_dir)/../../src/MiscUtil
 
 include $(CHOMBO_HOME)/mk/Make.test
+
+# additional libraries
+LAPACKLIBS = -llapack -lblas
+LIBFLAGS += $(LAPACKLIBS)
+
 
