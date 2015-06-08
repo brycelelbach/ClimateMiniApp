@@ -13,10 +13,16 @@
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ////////////////////////////////////////////////////////////////////////////////
 
-#include <hpx/config.hpp>
-#include <hpx/util/high_resolution_timer.hpp>
+#if defined(CH_HPX)
+    #include <hpx/config.hpp>
+    #include <hpx/util/high_resolution_timer.hpp>
+#endif
 
 #include <boost/format.hpp>
+
+#if !defined(CH_HPX)
+    #include <boost/program_options.hpp>
+#endif
 
 #include <fenv.h>
 
@@ -25,13 +31,18 @@
 #include "LoadBalance.H"
 
 #include "ARK4.H"
-#include "HPXDriver.H"
 
+#if defined(CH_HPX)
+    #include "HPXDriver.H"
+#endif
+
+#include "CMAProblemStateScratch.H"
 #include "CMAAdvectionDiffusionProfile.H"
+#include "CMAHighResolutionTimer.H"
 
 // FIXME: Move this to ALD
-template <typename F>
-void visit(AsyncLevelData<FArrayBox>& soln, F f)
+template <typename LD, typename F>
+void visit(LD& soln, F f)
 {
     DataIterator dit = soln.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
@@ -102,9 +113,9 @@ void output(
     ref_ratios.push_back(IntVect(2, 2, 2));
 
     RealVect dp(
-        std::get<0>(profile.dp())
-      , std::get<1>(profile.dp())
-      , std::get<2>(profile.dp())
+        profile.dp()[0]
+      , profile.dp()[1]
+      , profile.dp()[2]
     );
 
     WriteAnisotropicAMRHierarchyHDF5(
@@ -121,6 +132,47 @@ void output(
         );
 
     for (LevelData<FArrayBox>* ld : level) delete ld;
+}
+
+template <typename Profile, typename... Args>
+void output(
+    Profile const& profile
+  , LevelData<FArrayBox>& data
+  , std::string const& name
+  , Real time  
+  , std::string const& fmt
+  , Args&&... fmt_args
+    )
+{
+    std::string file = format_filename(fmt, fmt_args...);
+
+    Vector<DisjointBoxLayout> level_dbl;
+    level_dbl.push_back(data.disjointBoxLayout());
+
+    Vector<std::string> names;
+    names.push_back(name);
+
+    Vector<IntVect> ref_ratios;
+    ref_ratios.push_back(IntVect(2, 2, 2));
+
+    RealVect dp(
+        profile.dp()[0]
+      , profile.dp()[1]
+      , profile.dp()[2]
+    );
+
+    WriteAnisotropicAMRHierarchyHDF5(
+        file 
+      , level_dbl 
+      , data
+      , names
+      , level_dbl[0].physDomain().domainBox()
+      , dp           // dx
+      , profile.dt() // dt
+      , time 
+      , ref_ratios
+      , 1 // levels
+        );
 }
 
 template <typename Profile>
@@ -152,63 +204,6 @@ void compareAndOutput(
     output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
 }
 #endif
-
-template <bool DenseOutput>
-struct problem_state_scratch;
-
-template <>
-struct problem_state_scratch<true> 
-{
-  std::array<climate_mini_app::sub_problem_state, ARK4Sizes::s_nStages>
-    phi;
-  std::array<climate_mini_app::sub_problem_state, ARK4Sizes::s_nDenseCoefs>
-    denseCoefs;
-
-  climate_mini_app::sub_problem_state kE;
-  climate_mini_app::sub_problem_state kI;
-
-    void define(
-        DataIndex di
-      , std::array<climate_mini_app::problem_state, ARK4Sizes::s_nStages>& phi_ 
-      , std::array<climate_mini_app::problem_state, ARK4Sizes::s_nDenseCoefs>& denseCoefs_
-      , climate_mini_app::problem_state& kE_
-      , climate_mini_app::problem_state& kI_
-        )
-    {  
-        for (std::size_t i = 0; i < phi.size(); ++i)
-            phi[i] = climate_mini_app::sub_problem_state(phi_[i], di);
-
-        for (std::size_t i = 0; i < denseCoefs.size(); ++i)
-            denseCoefs[i] = climate_mini_app::sub_problem_state(denseCoefs_[i], di);
-
-        kE = climate_mini_app::sub_problem_state(kE_, di);
-        kI = climate_mini_app::sub_problem_state(kI_, di);
-    }
-};
-
-template <>
-struct problem_state_scratch<false> 
-{
-    std::array<climate_mini_app::sub_problem_state, ARK4Sizes::s_nStages>
-        phi;
-
-    climate_mini_app::sub_problem_state kE;
-    climate_mini_app::sub_problem_state kI;
-
-    void define(
-        DataIndex di
-      , std::array<climate_mini_app::problem_state, ARK4Sizes::s_nStages>& phi_ 
-      , climate_mini_app::problem_state& kE_
-      , climate_mini_app::problem_state& kI_
-        )
-    {  
-        for (std::size_t i = 0; i < phi.size(); ++i)
-            phi[i] = climate_mini_app::sub_problem_state(phi_[i], di);
-
-        kE = climate_mini_app::sub_problem_state(kE_, di);
-        kI = climate_mini_app::sub_problem_state(kI_, di);
-    }
-};
 
 template <typename Profile>
 void stepLoop(
@@ -247,22 +242,35 @@ void stepLoop(
         { val = profile.initial_state(here); }
     );
 
-    typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
-    typedef ARK4<
-        climate_mini_app::sub_problem_state
-      , problem_state_scratch<false>
-      , imexop
-      , false
-    > ark_type;
-
-    std::array<climate_mini_app::problem_state, ark_type::s_nStages> phi;
-
-    for (climate_mini_app::problem_state& ps : phi)
-        ps.define(dbl, 1, config.ghost_vector);
-
-    // FIXME: Can we remove flux, ghost zones?
-    climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
-    climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
+    #if defined(CH_HPX)
+        typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
+        typedef ARK4<
+            climate_mini_app::sub_problem_state
+          , climate_mini_app::sub_problem_state_scratch<false>
+          , imexop
+          , false
+        > ark_type;
+    
+        std::array<climate_mini_app::problem_state, ark_type::s_nStages> phi;
+    
+        for (climate_mini_app::problem_state& ps : phi)
+            ps.define(dbl, 1, config.ghost_vector);
+    
+        // FIXME: Can we remove flux, ghost zones?
+        climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
+        climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
+    #else
+        typedef climate_mini_app::imex_per_ld_operators<Profile> imexop;
+        typedef ARK4<
+            climate_mini_app::problem_state
+          , climate_mini_app::problem_state_scratch<false>
+          , imexop
+          , false
+        > ark_type;
+  
+        ark_type ark; 
+        ark.define(dbl, 1, config.ghost_vector);
+    #endif
 
     #if defined(CH_USE_HDF5) && defined(CH_DUMP_SOURCE_TERM)
         if (config.output)
@@ -278,7 +286,7 @@ void stepLoop(
 
     std::size_t step = 0;
 
-    hpx::util::high_resolution_timer clock;
+    climate_mini_app::high_resolution_timer clock;
 
     Real time = 0.0;
 
@@ -302,25 +310,29 @@ void stepLoop(
                       << std::flush;
         }
 
-        std::vector<hpx::future<void> > futures;
-
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            auto advance =  
-                [&](DataIndex di)
-                {
-                    climate_mini_app::sub_problem_state subdata(data, di);
-
-                    ark_type ark(imexop(profile), dt); 
-                    ark.define(di, phi, kE, kI);
-
-                    ark.advance(time, subdata);
-                };
-
-            futures.emplace_back(hpx::async(advance, dit()));
-        }
-
-        hpx::lcos::when_all(futures).get();
+        #if defined(CH_HPX)
+            std::vector<hpx::future<void> > futures;
+    
+            for (dit.begin(); dit.ok(); ++dit)
+            {
+                auto advance =  
+                    [&](DataIndex di)
+                    {
+                        climate_mini_app::sub_problem_state subdata(data, di);
+    
+                        ark_type ark(imexop(profile), dt); 
+                        ark.define(di, phi, kE, kI);
+    
+                        ark.advance(time, subdata);
+                    };
+    
+                futures.emplace_back(hpx::async(advance, dit()));
+            }
+    
+            hpx::lcos::when_all(futures).get();
+        #else
+            ark.advance(time, data);
+        #endif
 
         #if defined(CH_USE_HDF5) && defined(CH_DUMP_FLUXES)
             if (config.output)
@@ -525,6 +537,25 @@ int main(int argc, char** argv)
         #endif
         ; 
 
-    return init(chombo_main, cmdline, argc, argv); // Doesn't return
+    #if defined(CH_HPX)
+        return init(chombo_main, cmdline, argc, argv); // Doesn't return
+    #else
+        boost::program_options::variables_map vm;
+    
+        boost::program_options::store(
+            boost::program_options::command_line_parser
+                (argc, argv).options(cmdline).run(), vm);
+    
+        boost::program_options::notify(vm);
+    
+        // Print help screen.
+        if (vm.count("help"))
+        {
+            std::cout << cmdline;
+            std::exit(0);
+        }
+
+        return chombo_main(vm);
+    #endif
 }
 
