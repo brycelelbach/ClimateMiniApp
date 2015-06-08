@@ -22,6 +22,8 @@
 
 #if !defined(CH_HPX)
     #include <boost/program_options.hpp>
+
+    #include <omp.h>
 #endif
 
 #include <fenv.h>
@@ -77,6 +79,7 @@ std::string format_filename(std::string const& fmt, Args&&... args)
     return format_filename(fmter, args...); 
 }
 
+#if defined(CH_HPX)
 template <typename Profile, typename... Args>
 void output(
     Profile const& profile
@@ -133,6 +136,7 @@ void output(
 
     for (LevelData<FArrayBox>* ld : level) delete ld;
 }
+#endif
 
 template <typename Profile, typename... Args>
 void output(
@@ -154,6 +158,9 @@ void output(
 
     Vector<IntVect> ref_ratios;
     ref_ratios.push_back(IntVect(2, 2, 2));
+    
+    Vector<LevelData<FArrayBox>*> level;
+    level.push_back(&data); 
 
     RealVect dp(
         profile.dp()[0]
@@ -164,7 +171,7 @@ void output(
     WriteAnisotropicAMRHierarchyHDF5(
         file 
       , level_dbl 
-      , data
+      , level
       , names
       , level_dbl[0].physDomain().domainBox()
       , dp           // dx
@@ -220,7 +227,7 @@ void stepLoop(
     if (config.header)
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
-                  << "Boxes,PUs,Steps,Simulation Time,Wall Time [s]\n"
+                  << "Boxes,Localities,PUs,Steps,Simulation Time,Wall Time [s]\n"
                   << std::flush;
 
     ProblemDomain base_domain = profile.problem_domain(); 
@@ -268,7 +275,7 @@ void stepLoop(
           , false
         > ark_type;
   
-        ark_type ark; 
+        ark_type ark(imexop(profile), profile.dt()); 
         ark.define(dbl, 1, config.ghost_vector);
     #endif
 
@@ -302,6 +309,10 @@ void stepLoop(
         ++step;
 
         double const dt = profile.dt();
+
+        #if !defined(CH_HPX)
+            ark.resetDt(dt);
+        #endif
 
         if (config.verbose)
         {
@@ -354,10 +365,19 @@ void stepLoop(
         time += dt;
     } 
 
+    #if defined(CH_HPX)
+        std::uint64_t localities = numProc(); 
+        std::uint64_t pus = hpx::get_num_worker_threads() * localities; 
+    #else
+        std::uint64_t localities = numProc();
+        std::uint64_t pus = omp_get_num_threads();
+    #endif
+    
     std::cout << config.print_csv() << "," 
               << profile.print_csv() << ","
               << boxes.size() << ","
-              << hpx::get_num_worker_threads() << ","
+              << localities << ","
+              << pus << ","
               << step << ","
               << nt << ","
               << clock.elapsed() << "\n"
@@ -413,19 +433,19 @@ int chombo_main(variables_map& vm)
     // Configuration
 
     climate_mini_app::configuration config(
-        /*problem: type of problem                 =*/problem, 
-        /*nh: y and z (horizontal) extent per core =*/vm["nh"].as<std::uint64_t>(),
-        /*nv: x (vertical) extent per core         =*/vm["nv"].as<std::uint64_t>(),
-        /*max_box_size                             =*/vm["mbs"].as<std::uint64_t>(),
+        /*problem: type of problem                 =*/problem
+        /*nh: y and z (horizontal) extent per core =*/,vm["nh"].as<std::uint64_t>()
+        /*nv: x (vertical) extent per core         =*/,vm["nv"].as<std::uint64_t>()
+        /*max_box_size                             =*/,vm["mbs"].as<std::uint64_t>()
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
-        /*ghost_vector                             =*/IntVect::Unit,
+        /*ghost_vector                             =*/,IntVect::Unit
         #else
-        /*ghost_vector                             =*/IntVect::Unit*3,
+        /*ghost_vector                             =*/,IntVect::Unit*3
         #endif
-        /*header: print header for CSV timing data =*/vm.count("header"),
-        /*verbose: print status updates            =*/vm.count("verbose"), 
+        /*header: print header for CSV timing data =*/,vm.count("header")
+        /*verbose: print status updates            =*/,vm.count("verbose") 
         #if defined(CH_USE_HDF5)
-        /*output: generate HDF5 output             =*/vm["output"].as<bool>()
+        /*output: generate HDF5 output             =*/,vm["output"].as<bool>()
         #endif
     );
 

@@ -14,6 +14,10 @@ src_dirs = $(base_dir)/../../src/AMRTimeDependent
 
 # note that BaseTools library should be included by default, even 
 # if we don't specify it here
-LibNames = BoxTools AMRTools AsyncTools
+ifeq ($(RUNTIME),HPX)
+	LibNames = BoxTools AMRTools AsyncTools
+else
+	LibNames = BoxTools AMRTools
+endif
 
 include $(CHOMBO_HOME)/mk/Make.example
