@@ -560,6 +560,15 @@ int main(int argc, char** argv)
     #if defined(CH_HPX)
         return init(chombo_main, cmdline, argc, argv); // Doesn't return
     #else
+        MPI_Init(&argc, &argv);
+
+        cmdline.add_options()
+            ( "threads,t"
+            , boost::program_options::value<std::uint64_t>()->
+                default_value(1)
+            , "number of OS-threads")
+            ;
+ 
         boost::program_options::variables_map vm;
     
         boost::program_options::store(
@@ -575,7 +584,15 @@ int main(int argc, char** argv)
             std::exit(0);
         }
 
-        return chombo_main(vm);
+        std::uint64_t num_threads = vm["threads"].as<std::uint64_t>();
+
+        omp_set_num_threads(num_threads);
+
+        int r = chombo_main(vm);
+
+        MPI_Finalize();
+
+        return r;
     #endif
 }
 
