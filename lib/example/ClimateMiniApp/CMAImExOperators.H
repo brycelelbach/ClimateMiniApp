@@ -18,6 +18,10 @@
 
 #include "CMAProblemState.H"
 
+#include "Lapack.H"
+#include "LapackFactorization.H"
+#include "LapackWrapper.H"
+
 namespace climate_mini_app
 {
 
@@ -138,6 +142,26 @@ struct imex_per_box_operators
         ) const
     { // {{{
         kI_.setVal(0.0);
+
+        auto& kI  = kI_.U();
+        auto& phi = phi_.U();
+ 
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd(); 
+
+        lower.shift(profile.config.ghost_vector);
+        upper.shift(-1*profile.config.ghost_vector);
+
+        Box b(lower, upper);
+
+        for (auto j = lower[1]; j <= upper[1]; ++j)
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+            {
+                LapackFactorization A;
+
+                profile.build_vertical_operator_for_apply(A, b);
+                profile.apply_vertical_operator(j, k, A, b, kI, phi);
+            }
     } // }}}
 
     void solve(
@@ -153,6 +177,25 @@ struct imex_per_box_operators
         #if defined(CH_HPX)
             phi_.exchangeSync();
         #endif
+
+        auto& phi = phi_.U();
+ 
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd(); 
+
+        lower.shift(profile.config.ghost_vector);
+        upper.shift(-1*profile.config.ghost_vector);
+
+        Box b(lower, upper);
+
+        for (auto j = lower[1]; j <= upper[1]; ++j)
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+            {
+                LapackFactorization A;
+
+                profile.build_vertical_operator_for_solve(A, b, dtscale);
+                profile.vertical_solve(j, k, A, b, phi);
+            }
     } // }}}
 
   private:

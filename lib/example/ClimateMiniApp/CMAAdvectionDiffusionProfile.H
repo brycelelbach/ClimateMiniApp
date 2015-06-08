@@ -21,11 +21,13 @@
 #include "CMAImExOperators.H"
 #include "CMAProfileBase.H"
 
+/*
 #if defined(__INTEL_COMPILER)
     #include <mkl_lapacke.h>
 #else
     #include <lapacke.h>
 #endif
+*/
 
 namespace climate_mini_app
 {
@@ -177,41 +179,112 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         #endif
     } // }}}
 
-    typedef std::tuple<std::vector<Real>, std::vector<Real>, std::vector<Real> >
-        crs_matrix;
-    
-    crs_matrix vertical_operator(
-        int j
-      , int k
-      , FArrayBox const& phi
-      , Real dtscale
+    void build_vertical_operator_for_solve(
+        LapackFactorization& A
       , Box b
+      , Real dtscale
+        ) const
+    { // {{{
+        Real const c1 = 1.0;
+        Real const c2 = -(kx*dt()*dtscale);
+        build_vertical_operator(A, b, c1, c2);
+    } // }}}
+
+    void build_vertical_operator_for_apply(
+        LapackFactorization& A
+      , Box b
+        ) const
+    { // {{{
+        Real const c1 = 0.0;
+        Real const c2 = kx;
+        build_vertical_operator(A, b, c1, c2);
+    } // }}}
+
+    void build_vertical_operator(
+        LapackFactorization& A
+      , Box b
+      , Real c1
+      , Real c2 
         ) const
     { // {{{
         std::uint64_t const size = b.size()[0];
         Real const dv = dp()[0]; 
-        Real const beta = (kx*(dt()*dtscale))/(dv*dv);
 
-        // Sub-diagonal part of the matrix.
-        std::vector<Real> dl(size-1, -beta);
-        // Diagonal part of the matrix.
-        std::vector<Real> d(size, 1.0+2.0*beta);
-        // Super-diagonal part of the matrix.
-        std::vector<Real> du(size-1, -beta);
+        Real const coef = c2/(12.0*dv*dv); // for 4th-order
+        Real const s[]={0.0, -1.0, 16.0, -30.0, 16.0, -1.0, 0.0};
 
-        // No-flux boundaries.
-        du.front() = -2.0*beta;
-        dl.back()  = -2.0*beta;
+        int const KU = 3;
+        int const KL = 3;
 
-        return crs_matrix(dl, d, du); 
+        A.define(size, KL, KU);
+        A.setZero();
+        
+        int ncol = A.numCols();
+        for (int col=0; col < ncol; col++) 
+            for (int ix=-KU; ix <= KL; ix++)
+            {
+                int row = col + ix;
+                if ((row >= 0) && (row < ncol))
+                    A(row, col) = ((row == col) ? c1 : 0) + s[ix+KU]*coef;
+            }
+        
+        // Fix the diagonal ends for the homogeneous Neumann bc's
+        // For 4th-order operator
+
+        // The gradient flux for the first interior face
+        int const lenG = 4;
+        Real const sG1[] = {-145.0, 159.0, -15.0, 1.0};
+        Real const coefG1 = c2/(120*dv*dv);
+
+        // The gradient flux for the second interior (regular) face
+        Real const sG2[] = {1.0, -15.0, 15.0, -1.0};
+        Real const coefG2 = c2/(12*dv*dv);
+
+        for (int ix=0; ix < lenG; ix++)
+        {
+            A(0,ix) = ((ix == 0) ? c1 : 0) + sG1[ix] * coefG1;
+            A(1,ix) = ((ix == 1) ? c1 : 0) + sG2[ix] * coefG2 - sG1[ix] * coefG1;
+
+            int ixflip = ncol-ix-1;
+            A(ncol-1,ixflip) = ((ix == 0) ? c1 : 0) + sG1[ix] * coefG1;
+            A(ncol-2,ixflip) =
+                ((ix == 1) ? c1 : 0) + sG2[ix] * coefG2 - sG1[ix] * coefG1;
+        }
+    } // }}}
+
+    void apply_vertical_operator(
+        int j
+      , int k
+      , LapackFactorization& A
+      , Box b
+      , FArrayBox& kI
+      , FArrayBox& phi
+        ) const
+    { // {{{
+        if (std::fabs(kx-0.0) < 1e-16)
+            return;
+
+        IntVect lower = b.smallEnd();
+        IntVect upper = b.bigEnd();
+
+        // We've picked 'x' as our vertical dimension so x columns are
+        // contiguous in memory; this check tests that.
+        auto p0 = &phi(IntVect(lower[0], j, k));
+        auto p1 = &phi(IntVect(lower[0]+1, j, k));
+        assert((p1 - p0) == 1);
+
+        Real* state = &phi(IntVect(lower[0], j, k)); 
+        Real* rhs   = &kI(IntVect(lower[0], j, k)); 
+
+        LapackWrapper::applyBandMatrix(state, rhs, A);
     } // }}}
 
     void vertical_solve(
         int j
       , int k
-      , crs_matrix& A
-      , FArrayBox& phi
+      , LapackFactorization& A
       , Box b
+      , FArrayBox& phi
         ) const
     { // {{{
         if (std::fabs(kx-0.0) < 1e-16)
@@ -228,18 +301,11 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
         Real* rhs = &phi(IntVect(lower[0], j, k)); 
 
-        int info = LAPACKE_dgtsv(
-            LAPACK_ROW_MAJOR, // matrix format
-            std::get<1>(A).size(), // matrix order
-            1, // # of right hand sides 
-            std::get<0>(A).data(), // subdiagonal part
-            std::get<1>(A).data(), // diagonal part
-            std::get<2>(A).data(), // superdiagonal part
-            rhs, // column to solve 
-            1 // leading dimension of RHS
-            );
- 
-        assert(info == 0);
+        LapackFactorization AB;
+        AB.define(A);
+
+        LapackWrapper::factorBandMatrix(AB);
+        LapackWrapper::solveBandMatrix(AB, rhs);
     } // }}}
 
     Real initial_state(IntVect here) const
