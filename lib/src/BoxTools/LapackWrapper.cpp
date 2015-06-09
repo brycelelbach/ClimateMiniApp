@@ -9,7 +9,6 @@
 #endif
 
 #include "MayDay.H"
-#include "AMRIO.H"
 
 #include "LapackWrapper.H"
 #include "Lapack.H"

@@ -11,7 +11,6 @@
 #ifndef _LAPACKWRAPPER_H_
 #define _LAPACKWRAPPER_H_
 
-#include "CHArray.H"
 #include "FArrayBox.H"
 #include "LapackFactorization.H"
 #include "MayDay.H"

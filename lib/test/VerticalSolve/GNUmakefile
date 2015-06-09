@@ -1,10 +1,10 @@
 # -*- Mode: Makefile -*- 
 
 MPI=FALSE
-DEBUG=TRUE
-OPT=FALSE
+#DEBUG=TRUE
+#OPT=FALSE
 DIM=3
-CH_TIMER=TRUE
+#CH_TIMER=TRUE
 
 ## Define the variables needed by Make.example
 
@@ -15,17 +15,17 @@ makefiles += verticalSolvetest
 ebase = testVerticalSolve
 
 # the location of Chombo lib dir
-CHOMBO_HOME = $(CHOMBO_LIBDIR)
+CHOMBO_HOME = ../../
 
 # names of Chombo libraries needed by this program, in order of search.
 # MOLAMRTimeDependent has dups with HOMappedConservation, so put MOL last
-LibNames := AMRElliptic AMRTools BoxTools BaseTools AMRTimeDependent
+LibNames := AMRElliptic AMRTools BoxTools BaseTools #AMRTimeDependent
 
 # relative paths to source code directories
 base_dir = .
 
 src_dirs = \
-$(base_dir)/../../src/MiscUtil
+$(base_dir)/../../src/AMRTimeDependent
 # $(base_dir)/../util \
 # $(base_dir)/../../src/advect \
 # $(base_dir)/../../src/AMRTimeDependent \
@@ -45,11 +45,11 @@ INPUT = inputs
 include $(CHOMBO_HOME)/mk/Make.example
 
 # additional libraries
-LAPACKLIBS = -llapack -lblas
-LIBFLAGS += $(LAPACKLIBS)
+#LAPACKLIBS = -llapack -lblas
+#LIBFLAGS += $(LAPACKLIBS)
 
 # application-specific variables
 # This is needed for multi-block AMR.
-XTRACXXFLAGS = -DDISABLE_TEMPORARY_FLUX_REGISTER_OPTIMIZATION
+#XTRACXXFLAGS = -DDISABLE_TEMPORARY_FLUX_REGISTER_OPTIMIZATION
 
 # application-specific targets

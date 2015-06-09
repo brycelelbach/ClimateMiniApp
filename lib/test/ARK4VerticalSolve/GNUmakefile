@@ -14,7 +14,7 @@ ebase := testARK4VerticalSolve
 LibNames := AMRElliptic AMRTools BoxTools 
 
 base_dir = .
-src_dirs = $(base_dir)/../../src/MiscUtil
+#src_dirs = $(base_dir)/../../src/MiscUtil
 
 include $(CHOMBO_HOME)/mk/Make.test
 
