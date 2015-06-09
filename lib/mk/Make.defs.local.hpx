@@ -15,9 +15,13 @@ ifeq ($(DEBUG),TRUE)
 endif
 ifeq ($(DEBUG),FALSE)
     HPX_LIB_POSTFIX=
-    XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application) -O3
+    XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application) -O3 
     XTRAPOSTFLAGS += $(shell pkg-config --cflags --libs hpx_application)
 endif
+
+HDF5_DIR=/global/homes/w/wash/development/hdf5-1.8.7/HPX_INSTALL
+HDFINCFLAGS=-I$(HDF5_DIR)/include
+HDFLIBFLAGS=-Wl,-rpath=$(HDF5_DIR)/lib -L$(HDF5_DIR)/lib -lhdf5 -lz
 
 ## To run on Stampede, then you would do:
 #include $(CHOMBO_HOME)/mk/local/Make.defs.stampede.cpu_only

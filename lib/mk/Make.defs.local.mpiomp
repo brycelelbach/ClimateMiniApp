@@ -1,0 +1,23 @@
+## Assumes that you've set PKG_CONFIG_PATH=$PKG_CONFIG_PATH:$HPX_LOCATION/lib/pkgconfig in your environment
+
+MPI=TRUE
+MPICXX=mpiicpc
+
+USE_64=TRUE
+USE_MT=FALSE
+
+USE_HPX=FALSE
+
+XTRACXXFLAGS += -openmp -std=c++11 -I $(BOOST)/boost
+XTRAPOSTFLAGS += -mt_mpi -Wl,-rpath,$(BOOST)/lib -lboost_program_options
+
+ifeq ($(DEBUG),TRUE)
+    XTRACXXFLAGS += -O0 -ggdb
+endif
+ifeq ($(DEBUG),FALSE)
+    XTRACXXFLAGS += -O3
+endif
+
+HDF5_MPI_DIR=/global/homes/w/wash/development/hdf5-1.8.7/MPI_INSTALL
+HDFMPIINCFLAGS=-I$(HDF5_MPI_DIR)/include
+HDFMPILIBFLAGS=-Wl,-rpath=$(HDF5_MPI_DIR)/lib -L$(HDF5_MPI_DIR)/lib -lhdf5 -lz
