@@ -220,11 +220,11 @@ void stepLoop(
 { 
     climate_mini_app::configuration const& config = profile.config;
 
-    if (config.verbose)
+    if (config.verbose && (procID() == 0))
         std::cout << "Starting HPX/Chombo Climate Mini-App...\n"
                   << std::flush; 
 
-    if (config.header)
+    if (config.header && (procID() == 0))
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
                   << "Boxes,Localities,PUs,Steps,Simulation Time,Wall Time [s]\n"
@@ -314,7 +314,7 @@ void stepLoop(
             ark.resetDt(dt);
         #endif
 
-        if (config.verbose)
+        if (config.verbose && (procID() == 0))
         {
             char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g\n";
             std::cout << (boost::format(fmt) % step % time % dt)
@@ -372,16 +372,17 @@ void stepLoop(
         std::uint64_t localities = numProc();
         std::uint64_t pus = omp_get_num_threads();
     #endif
-    
-    std::cout << config.print_csv() << "," 
-              << profile.print_csv() << ","
-              << boxes.size() << ","
-              << localities << ","
-              << pus << ","
-              << step << ","
-              << nt << ","
-              << clock.elapsed() << "\n"
-              << std::flush;
+
+    if (procID() == 0)
+        std::cout << config.print_csv() << "," 
+                  << profile.print_csv() << ","
+                  << boxes.size() << ","
+                  << localities << ","
+                  << pus << ","
+                  << step << ","
+                  << nt << ","
+                  << clock.elapsed() << "\n"
+                  << std::flush;
 
     #if defined(CH_USE_HDF5)
         if (config.output)
