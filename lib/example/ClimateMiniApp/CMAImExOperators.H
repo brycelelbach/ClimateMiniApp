@@ -215,6 +215,7 @@ struct imex_per_ld_operators
     { // {{{
     } // }}}
 
+/*
     void horizontalFlux(problem_state& phi_) const
     { // {{{
         DataIterator dit = phi_.U.dataIterator();
@@ -227,6 +228,7 @@ struct imex_per_ld_operators
             sub_imex.horizontal_flux(sub_phi);
         }
     } // }}}
+*/
 
     void explicitOp(
         Real t
@@ -243,10 +245,13 @@ struct imex_per_ld_operators
         #endif
 
         DataIterator dit = phi_.U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            sub_problem_state sub_phi(phi_, dit());
-            sub_problem_state sub_kE(kE_, dit());
+            sub_problem_state sub_phi(phi_, dit[ibox]);
+            sub_problem_state sub_kE(kE_, dit[ibox]);
 
             imex_per_box_operators<Profile> sub_imex(profile);
 
@@ -262,10 +267,13 @@ struct imex_per_ld_operators
         ) const
     { // {{{
         DataIterator dit = phi_.U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            sub_problem_state sub_phi(phi_, dit());
-            sub_problem_state sub_kI(kI_, dit());
+            sub_problem_state sub_phi(phi_, dit[ibox]);
+            sub_problem_state sub_kI(kI_, dit[ibox]);
 
             imex_per_box_operators<Profile> sub_imex(profile);
 
@@ -288,9 +296,12 @@ struct imex_per_ld_operators
         #endif
 
         DataIterator dit = phi_.U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            sub_problem_state sub_phi(phi_, dit());
+            sub_problem_state sub_phi(phi_, dit[ibox]);
 
             imex_per_box_operators<Profile> sub_imex(profile);
 

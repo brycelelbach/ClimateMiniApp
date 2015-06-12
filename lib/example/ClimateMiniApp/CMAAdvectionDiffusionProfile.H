@@ -150,7 +150,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     
             return (-1.0/dh) * (F(right1) - F(here)); 
         #else
-            IntVect left3(here); left3.setVal(dir, here[dir]-3);
             IntVect left2(here); left2.setVal(dir, here[dir]-2);
             IntVect left1(here); left1.setVal(dir, here[dir]-1);
     
@@ -158,23 +157,10 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
             IntVect right2(here); right2.setVal(dir, here[dir]+2);
             IntVect right3(here); right3.setVal(dir, here[dir]+3);
     
-            Real constexpr alpha = -12.0;
-    
-            Real constexpr a        = 0.0 - (5.0*alpha)/3.0;   // a_{i}
-    
-            Real constexpr a_left1  = -45.0 + (5.0*alpha)/4.0; // a_{i-1}
-            Real constexpr a_right1 = +45.0 + (5.0*alpha)/4.0; // a_{i+1}
-    
-            Real constexpr a_left2  = +9.0 - alpha/2.0;        // a_{i-2}
-            Real constexpr a_right2 = -9.0 - alpha/2.0;        // a_{i+2}
-    
-            Real constexpr a_left3  = -1.0 + alpha/12.0;       // a_{i-3}
-            Real constexpr a_right3 = +1.0 + alpha/12.0;       // a_{i+3}
-    
             return (-1.0/(60.0*dh))
-                 * ( -a_right3*F(left3) + -a_right2*F(left2) + -a_right1*F(left1)
-                   + -a*F(here)
-                   + -a_left1*F(right1) + -a_left2*F(right2) + -a_left3*F(right3)
+                 * ( 3.0*F(left2) - 30.0*F(left1)
+                   - 20.0*F(here)
+                   + 60.0*F(right1) - 15.0*F(right2) + 2.0*F(right3)
                    ); 
         #endif
     } // }}}
