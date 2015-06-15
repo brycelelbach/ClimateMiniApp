@@ -13,6 +13,8 @@
 
 #include <cstddef>
 
+#include <boost/array.hpp>
+
 #include "NamespaceHeader.H"
 
 /// This is a more flexible, reduced memory version 4th-order additive
@@ -277,8 +279,8 @@ struct ARK4Scratch;
 template <class X>
 struct ARK4Scratch<X, true>
 {
-  std::array<X, ARK4Sizes::s_nStages> phi;
-  std::array<X, ARK4Sizes::s_nDenseCoefs> denseCoefs;
+  boost::array<X, ARK4Sizes::s_nStages> phi;
+  boost::array<X, ARK4Sizes::s_nDenseCoefs> denseCoefs;
   X kE;
   X kI;
 
@@ -307,7 +309,7 @@ struct ARK4Scratch<X, true>
 template <class X>
 struct ARK4Scratch<X, false>
 {
-  std::array<X, ARK4Sizes::s_nStages> phi;
+  boost::array<X, ARK4Sizes::s_nStages> phi;
   X kE;
   X kI;
 

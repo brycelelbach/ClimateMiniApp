@@ -23,6 +23,8 @@
 #include <hpx/lcos/when_all.hpp>
 #include <hpx/util/unwrapped.hpp>
 
+#include <boost/array.hpp>
+
 #include "Box.H"
 
 #include "NamespaceHeader.H"
@@ -47,7 +49,7 @@ struct DataflowBox : T
 
   private:
     // Regions that have external dependencies.
-    std::array<std::map<Box, queue>, Comm_Last> regions; 
+    boost::array<std::map<Box, queue>, Comm_Last> regions; 
 
   public:
     DataflowBox()
