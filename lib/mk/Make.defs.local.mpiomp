@@ -8,8 +8,13 @@ USE_MT=FALSE
 
 USE_HPX=FALSE
 
-XTRACXXFLAGS += -openmp -std=c++11 -I $(BOOST)/boost
-XTRAPOSTFLAGS += -mt_mpi -Wl,-rpath,$(BOOST)/lib -lboost_program_options
+XTRACXXFLAGS += -openmp -std=c++11 -I$(BOOST)
+XTRAPOSTFLAGS += -mt_mpi -Wl,-rpath,$(BOOST)/lib -L$(BOOST)/lib -lboost_program_options
+
+ifeq ($(TARGET),MIC)
+    XTRACXXFLAGS += -mmic
+endif
+
 
 ifeq ($(DEBUG),TRUE)
     XTRACXXFLAGS += -O0 -ggdb
