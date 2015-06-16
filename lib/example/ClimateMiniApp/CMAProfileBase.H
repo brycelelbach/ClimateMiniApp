@@ -38,23 +38,22 @@ struct profile_base
         return config.ghost_vector;
     } // }}}
 
-    // FIXME: This should stop being a tuple
     std::array<Real, 3> face_coords(IntVect here) const
     { // {{{
-        return std::array<Real, 3>{
-            Real(here[0])/(Real(config.nv))
-          , Real(here[1])/(Real(config.nh))
-          , Real(here[2])/(Real(config.nh))
-        };
+        std::array<Real, 3> c;
+        c[0] = Real(here[0])/(Real(config.nv));
+        c[1] = Real(here[1])/(Real(config.nh));
+        c[2] = Real(here[2])/(Real(config.nh));
+        return c;
     } // }}}
 
     std::array<Real, 3> center_coords(IntVect here) const
     { // {{{
-        return std::array<Real, 3>{
-            face_coords(here)[0]+0.5*dp()[0] 
-          , face_coords(here)[1]+0.5*dp()[1] 
-          , face_coords(here)[2]+0.5*dp()[2] 
-        };
+        std::array<Real, 3> c;
+        c[0] = face_coords(here)[0]+0.5*dp()[0];
+        c[1] = face_coords(here)[1]+0.5*dp()[1];
+        c[2] = face_coords(here)[2]+0.5*dp()[2];
+        return c;
     } // }}}
 
     // Spatial step size
