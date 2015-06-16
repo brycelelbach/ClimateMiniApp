@@ -220,11 +220,11 @@ void stepLoop(
 { 
     climate_mini_app::configuration const& config = profile.config;
 
-    if (config.verbose && (procID() == 0))
+    if (config.verbose && (0 == procID()))
         std::cout << "Starting HPX/Chombo Climate Mini-App...\n"
                   << std::flush; 
 
-    if (config.header && (procID() == 0))
+    if (config.header && (0 == procID()))
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
                   << "Boxes,Localities,PUs,Steps,Simulation Time,Wall Time [s]\n"
@@ -314,7 +314,7 @@ void stepLoop(
             ark.resetDt(dt);
         #endif
 
-        if (config.verbose && (procID() == 0))
+        if (config.verbose && (0 == procID()))
         {
             char const* fmt = "STEP %06u : TIME %.7g%|31t| += %.7g\n";
             std::cout << (boost::format(fmt) % step % time % dt)
@@ -370,10 +370,10 @@ void stepLoop(
         std::uint64_t pus = hpx::get_num_worker_threads() * localities; 
     #else
         std::uint64_t localities = numProc();
-        std::uint64_t pus = omp_get_num_threads();
+        std::uint64_t pus = omp_get_max_threads();
     #endif
 
-    if (procID() == 0)
+    if (0 == procID())
         std::cout << config.print_csv() << "," 
                   << profile.print_csv() << ","
                   << boxes.size() << ","
@@ -502,7 +502,7 @@ int main(int argc, char** argv)
 
         ( "nt"
         , boost::program_options::value<Real>()->
-            default_value(5.0e-5, "5.0e-5")  
+            default_value(0.5, "0.5")  
         , "physical time to step to")
         ( "ns"
         , boost::program_options::value<std::uint64_t>()
