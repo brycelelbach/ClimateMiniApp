@@ -123,6 +123,7 @@ struct imex_per_box_operators
 
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
+
         for (auto i = lower[0]; i <= upper[0]; ++i)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto k = lower[2]; k <= upper[2]; ++k)
@@ -214,21 +215,6 @@ struct imex_per_ld_operators
     void resetDt(Real)
     { // {{{
     } // }}}
-
-/*
-    void horizontalFlux(problem_state& phi_) const
-    { // {{{
-        DataIterator dit = phi_.U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
-        {
-            sub_problem_state sub_phi(phi_, dit());
-
-            imex_per_box_operators<Profile> sub_imex(profile);
-
-            sub_imex.horizontal_flux(sub_phi);
-        }
-    } // }}}
-*/
 
     void explicitOp(
         Real t
