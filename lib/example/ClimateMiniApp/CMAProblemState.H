@@ -127,7 +127,10 @@ struct problem_state
     void copy(problem_state const& A)
     { // {{{
         DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit()].copy(A.U[dit()]);
             FY[dit()].copy(A.FY[dit()]);
@@ -138,7 +141,10 @@ struct problem_state
     void setVal(Real val)
     { // {{{
         DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit()].setVal(val);
             FY[dit()].setVal(val);
