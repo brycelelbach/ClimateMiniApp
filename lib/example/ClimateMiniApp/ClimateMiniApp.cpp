@@ -227,7 +227,8 @@ void stepLoop(
     if (config.header && (0 == procID()))
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
-                  << "Boxes,Localities,PUs,Steps,Simulation Time,Wall Time [s]\n"
+                  << "Boxes,Localities,PUs-per-Locality,"
+                     "Steps,Simulation Time,Wall Time [s]\n"
                   << std::flush;
 
     ProblemDomain base_domain = profile.problem_domain(); 
@@ -517,7 +518,7 @@ int main(int argc, char** argv)
         , "vertical (x) extent per locality")
         ( "mbs"
         , boost::program_options::value<std::uint64_t>()->
-            default_value(15)
+            default_value(30)
         , "max box size")
 
         ( "cx"
