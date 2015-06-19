@@ -155,7 +155,10 @@ struct problem_state
     void plus(problem_state const& A, Real factor = 1.0)
     { // {{{
         DataIterator dit = U.dataIterator();
-        for (dit.begin(); dit.ok(); ++dit)
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit()].plus(A.U[dit()], factor);
         }
