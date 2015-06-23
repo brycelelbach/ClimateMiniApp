@@ -15,12 +15,11 @@ ifeq ($(TARGET),MIC)
     XTRACXXFLAGS += -mmic
 endif
 
-
 ifeq ($(DEBUG),TRUE)
     XTRACXXFLAGS += -O0 -ggdb
 endif
 ifeq ($(DEBUG),FALSE)
-    XTRACXXFLAGS += -O3
+    XTRACXXFLAGS += -O3 -DNDEBUG
 endif
 
 HDF5_MPI_DIR=/global/homes/w/wash/development/hdf5-1.8.7/MPI_INSTALL

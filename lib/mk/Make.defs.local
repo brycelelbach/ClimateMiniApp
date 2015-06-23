@@ -7,14 +7,13 @@ DIM=3
 
 CH_CPP=$(CXX) -E -P -C
 
-cxxoptflags += -I$(INTELDIR)/mkl/include 
+XTRACXXFLAGS += -I$(INTELDIR)/mkl/include 
 
 XTRALIBFLAGS += -mkl=sequential -lsvml
 XTRALIBFLAGS += -Wl,-rpath=$(INTELDIR)/compiler/lib/mic -Wl,-rpath=$(INTELDIR)/mkl/lib/mic
 XTRALIBFLAGS += -Wl,-rpath=$(INTELDIR)/compiler/lib/intel64 -Wl,-rpath=$(INTELDIR)/mkl/lib/intel64
 
 LAPACKLIBS = -lmkl
-
 
 ifeq ($(RUNTIME),HPX)
     include $(CHOMBO_HOME)/mk/Make.defs.local.hpx
