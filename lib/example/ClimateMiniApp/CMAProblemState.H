@@ -132,9 +132,9 @@ struct problem_state
         #pragma omp parallel for
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            U[dit()].copy(A.U[dit()]);
-            FY[dit()].copy(A.FY[dit()]);
-            FZ[dit()].copy(A.FZ[dit()]);
+            U[dit[ibox]].copy(A.U[dit[ibox]]);
+            FY[dit[ibox]].copy(A.FY[dit[ibox]]);
+            FZ[dit[ibox]].copy(A.FZ[dit[ibox]]);
         }
     } // }}}
 
@@ -146,9 +146,9 @@ struct problem_state
         #pragma omp parallel for
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            U[dit()].setVal(val);
-            FY[dit()].setVal(val);
-            FZ[dit()].setVal(val);
+            U[dit[ibox]].setVal(val);
+            FY[dit[ibox]].setVal(val);
+            FZ[dit[ibox]].setVal(val);
         }
     } // }}}
 
@@ -160,7 +160,7 @@ struct problem_state
         #pragma omp parallel for
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            U[dit()].plus(A.U[dit()], factor);
+            U[dit[ibox]].plus(A.U[dit[ibox]], factor);
         }
     } // }}}
 
