@@ -221,7 +221,9 @@ void stepLoop(
     climate_mini_app::configuration const& config = profile.config;
 
     #if !defined(CH_HPX)
-    auto const procid = procID();
+        auto const procid = procID();
+    #else
+        auto constexpr procid = 0;
     #endif
 
     if (config.verbose && (0 == procid))
