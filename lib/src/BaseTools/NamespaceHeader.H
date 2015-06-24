@@ -33,7 +33,7 @@
 #      define DIM_NAMESPACE D6
 #      define CH_XD Chombo::D6
 #    else
-Fail now: CH_SPACEDIM must be 1, 2, 3. 4, 5, or 6
+#      error CH_SPACEDIM must be 1, 2, 3. 4, 5, or 6
 #    endif
     namespace Chombo
     {
@@ -51,7 +51,7 @@ Fail now: CH_SPACEDIM must be 1, 2, 3. 4, 5, or 6
 #    endif
 #  endif
 #  ifdef INSIDE
-    Fail now: matching NamespaceHeader.H not in this scope.  You probably have a \#include NamespaceHeader.H followed by another \#include NamespaceHeader.H, instead of followed by a \#include NamespaceFooter.H.
+#    error Matching NamespaceHeader.H not in this scope. You probably have a NamespaceHeader.H followed by another NamespaceHeader.H, instead of followed by a NamespaceFooter.H.
 #  endif
 #  define INSIDE
 #endif
