@@ -20,6 +20,8 @@
 #include <hpx/runtime/components/client_base.hpp>
 #include <hpx/runtime/naming/name.hpp>
 
+#include "FArrayBox.H"
+
 #include "AsyncLevelData.H"
 
 #include "NamespaceHeader.H"
@@ -30,7 +32,7 @@ struct AsyncLevelDataServer;
 template <typename T, typename enable = void>
 struct AsyncLevelData_traits;
 
-template <typename T, typename enable = void>
+template <typename T, typename enable>
 struct AsyncLevelData_traits
 {
     typedef typename T::value_type value_type;
@@ -68,8 +70,31 @@ struct AsyncLevelData_signature
 };
 
 template <typename T>
+struct AsyncLevelData_signature<T, void>
+{
+    typedef typename AsyncLevelData_traits<T>::value_type value_type;
+    typedef typename AsyncLevelData_traits<T>::mesh_type mesh_type;
+    typedef AsyncLevelDataServer<T> ald_type;
+
+    typedef hpx::util::function<
+        // grid
+        void(ald_type&)
+    > gridwise;
+
+    typedef hpx::util::function<
+        // grid, mesh-index, mesh
+        void(ald_type&, DataIndex, mesh_type&)
+    > meshwise;
+
+    typedef hpx::util::function<
+        // grid, mesh-index, mesh, element-index, element
+        void(ald_type&, DataIndex, mesh_type&, IntVect, value_type&)
+    > elementwise;
+};
+
+template <typename T>
 struct AsyncLevelDataServer
-  : hpx::components::managed_component_base<AsyncLevelDataServer>
+  : hpx::components::managed_component_base<AsyncLevelDataServer<T> >
 {
     typedef AsyncLevelDataServer this_type;
 
@@ -100,7 +125,7 @@ struct AsyncLevelDataServer
 
     ///////////////////////////////////////////////////////////////////////////
     void applyElements(
-        typename DALD_signature<T, void>::elementwise const& f
+        typename AsyncLevelData_signature<T, void>::elementwise const& f
         )
     { // {{{
         DataIterator dit(local_data.dataIterator());
@@ -117,7 +142,7 @@ struct AsyncLevelDataServer
                     for (auto i = lower[0]; i <= upper[0]; ++i)
                     {
                         IntVect ei(i, j, k); 
-                        value_type& e = m[ei];
+                        value_type& e = m(ei);
                         f(*this, mi, m, ei, e); 
                     }
         }
@@ -259,38 +284,40 @@ struct AsyncLevelDataClient
 
 #include "NamespaceFooter.H"
 
+#include "NamespaceVar.H"
+
 // Add function-style overloading for the registeration macro using a forwarding
 // variadic macro.
-#define HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION(...)                    \
-        HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION_(__VA_ARGS__)           \
+#define HPX_CHOMBO_REGISTER_ALD_DECLARATION(...)                            \
+        HPX_CHOMBO_REGISTER_ALD_DECLARATION_(__VA_ARGS__)                   \
     /**/
 
-#define HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION_(...)                   \
+#define HPX_CHOMBO_REGISTER_ALD_DECLARATION_(...)                           \
     HPX_UTIL_EXPAND_(BOOST_PP_CAT(                                          \
-        HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION_,                       \
+        HPX_CHOMBO_REGISTER_ALD_DECLARATION_,                               \
             HPX_UTIL_PP_NARG(__VA_ARGS__)                                   \
     )(__VA_ARGS__))                                                         \
     /**/
 
 // One argument overload, uses the typename as the registeration name.
-#define HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION_1(T)                    \
-    HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION_2(T, T)                     \
+#define HPX_CHOMBO_REGISTER_ALD_DECLARATION_1(T)                            \
+    HPX_CHOMBO_REGISTER_ALD_DECLARATION_2(T, T)                             \
     /**/
 
 // Two argument overload, uses a user-specified name for registeration. This
 // version must be used if the type T is not alphanumeric (e.g. if it's a
 // template, or namespace qualified). 
-#define HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION_2(T, name)              \
+#define HPX_CHOMBO_REGISTER_ALD_DECLARATION_2(T, name)                      \
     HPX_REGISTER_ACTION_DECLARATION_TEMPLATE(                               \
         (template <typename X>),                                            \
         (CH_XD::AsyncLevelDataServer<T>::apply_action<X>)                   \
     );                                                                      \
     HPX_REGISTER_ACTION_DECLARATION(                                        \
-        CH_XD::AsyncLevelDataServer<T>::applyElements,                      \
-        Chombo_AsyncLevelDataServer_applyElements_ ## name                  \
+        CH_XD::AsyncLevelDataServer<T>::applyElements_action,               \
+        chombo_AsyncLevelDataServer_applyElements_ ## name                  \
     );                                                                      \
     /**/
 
-HPX_CHOMBO_REGISTER_ALD_ACTIONS_DECLARATION(CH_XD::FArrayBox, FArrayBox); 
+HPX_CHOMBO_REGISTER_ALD_DECLARATION(CH_XD::FArrayBox, FArrayBox); 
 
 #endif // CHOMBO_50E1AEAC_4E1D_4F10_8A0B_F08E6FED219C
