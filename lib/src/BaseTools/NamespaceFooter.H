@@ -12,7 +12,7 @@
 #  ifdef INSIDE
 #    undef INSIDE
 #  else
-    Fail now: matching NamespaceHeader.H not in this scope.  You probably have a \#include NamespaceHeader.H followed by another \#include NamespaceHeader.H, instead of followed by a \#include NamespaceFooter.H.
+#    error Matching NamespaceHeader.H not in this scope.  You probably have a NamespaceHeader.H followed by another NamespaceHeader.H, instead of followed by a NamespaceFooter.H.
 #  endif
 
 #  ifdef CH_MULTIDIM

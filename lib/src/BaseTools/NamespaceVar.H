@@ -27,7 +27,7 @@
     #elif CH_SPACEDIM == 6
       #define CH_XDIR Chombo::D6
     #else
-      Fail now: CH_SPACEDIM must be 1, 2, 3, 4, 5 or 6.
+      #error CH_SPACEDIM must be 1, 2, 3, 4, 5 or 6.
     #endif
   #else
     #ifdef CH_NAMESPACE
