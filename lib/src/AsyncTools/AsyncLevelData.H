@@ -17,6 +17,8 @@
 #define CHOMBO_B541E23D_4C47_4C2F_8FDC_2FAEE6E2CE81
 
 #include "LayoutData.H"
+#include "IntVect.H"
+#include "Interval.H"
 
 #include "AsyncCopier.H"
 #include "DataflowBox.H"
