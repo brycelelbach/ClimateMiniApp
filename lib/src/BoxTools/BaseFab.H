@@ -77,6 +77,8 @@ extern Real BaseFabRealSetVal;
 template <class T> class BaseFab
 {
 public:
+  typedef T value_type;
+
   /// {\bf constructors, destructor and defines}
 
   ///for AggStencil and its minions
