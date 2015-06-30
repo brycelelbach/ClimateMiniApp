@@ -1,0 +1,10 @@
+These are code snippets that Sam Williams sent.
+
+exchange_boundary.c 
+- threads across MPI msgs with serial computation
+
+exchange_boundary_overlap.c 
+- puts irecv, isend, wait in thread 0, computes in other threads
+
+gsrb.vl.c
+- stencil loop example that uses a 4th-order var coef like ours
