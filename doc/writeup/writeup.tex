@@ -1,0 +1,123 @@
+\documentclass[11pt]{article}
+%\input epsf
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{multicol}
+\usepackage{color}
+\usepackage{subfigure}
+\oddsidemargin=-.125in
+\evensidemargin=-.125in
+\textwidth=6.5in
+\topmargin=-0.5in
+\textheight=8.5in
+\parskip 3pt
+\nonfrenchspacing
+
+\newcommand{\grad}{\vec{\nabla}}
+\input{abbrev}
+
+\begin{document}
+
+\section*{AMR Subcycled Miniapp Algorithm Description \\
+          Bryce Lelbach and Hans Johansen}
+
+\section{Mini-app: Higher-order ImEx Heat Equation}
+
+\subsection{Domain}
+Define the 3D domain $\Omega$ with the following assumptions:
+\begin{itemize}
+  \item Rectangular domain decomposed into $N_l$ levels, each
+    consisting of a disjoint set of boxes, and $l = 0$ base level covering
+    the entire domain.
+  \item Each box is discretized into cells $h_d$ on a side, indexed
+    on that level with $i$
+  \item Each box has $N_g$ ghost cells (including corners) to communicate, 
+    which must match the stencil size of the operators, and have proper
+    nesting between levels (ghost cells must be filled by stencils on one level).
+\end{itemize}
+
+\subsection{Equations and finite volume discretization}
+Variable-coefficient heat equation:
+\begin{align}
+\label{eqn:heat}
+  \partial_t \phi 
+    & = \grad \cdot \left( \beta \grad \phi \right) + S \\
+    & = \partial_x \left( \beta \partial_x \phi \right) 
+      + \partial_y \left( \beta \partial_y \phi \right) 
+      + \partial_y \left( \beta \partial_y \phi \right) 
+      + S
+\end{align}
+For a finite volume method, we integrate this over a cell $V_i$ and
+  from $t^n$ to $t^{n+1}$ to obtain an
+  equation for the evolution of the cell averages in terms of fluxes:
+\begin{align}
+   \avg{\phi^{n+1}} - \avg{\phi^n} 
+    & = \dt \sum_d \frac{1}{h_d} \left( \avg{F}_\iphed - \avg{F}_\imhed \right) 
+    + \dt \avg{S}_i \, ,
+\end{align}
+  where $F = \beta \grad \phi$.
+Note that quantities on the right hand side are averaged
+  both in space and in time (from ${n \rightarrow {n+1}}$).
+
+\subsection{Calculating fluxes}
+
+Fourth-order face average of a product:
+\begin{equation}
+  \avg{\beta \, \partial_d \phi}_\iphed = \avg{\beta}_\iphed \, \avg{\partial_d \phi}_\iphed + 
+  \frac{1}{12}\sum_{d'\neq d}
+  h_{d'}^2 \, {\partial_{d'} \beta_d} \, {\partial_{d' d} \phi}  +
+  O(h^4) \\
+\end{equation}
+
+In stencil form:
+\begin{gather*}
+\avg{\beta \, \partial_d \phi}_{\iphed} = 
+\avg{\beta}_\iphed
+\frac{1}{12 h_d}
+\left[ 
+  \begin{array}{cccc}
+    1  &  -15  &  15  &  -1  
+  \end{array} 
+\right] 
+\left[ 
+  \begin{array}{c}
+    \phi_{\ibold - \ed} \\
+    \phi_{\ibold } \\
+    \phi_{\ibold + \ed} \\
+    \phi_{\ibold + 2\ed} \\
+  \end{array} 
+\right]
+ + 
+\\
+\frac{1}{12}
+\sum_{d'\neq d}
+\frac{1}{2 h_{d'}} 
+\left( 
+    \avg{\beta}_{\iphed + \ebold^{d'}} - 
+    \avg{\beta}_{\iphed - \ebold^{d'}} 
+\right)
+ \frac{1}{2 h^2} 
+\left[ 
+  \begin{array}{cccc}
+    -1  &  1  &  1  &  -1
+  \end{array} 
+\right] 
+\left[ 
+  \begin{array}{c}
+    \phi_{\ibold       + \ebold^{d'}} \\
+    \phi_{\ibold       - \ebold^{d'}} \\
+    \phi_{\ibold + \ed + \ebold^{d'}} \\
+    \phi_{\ibold + \ed - \ebold^{d'}}
+  \end{array} 
+\right]
+\end{gather*}
+(NOTE: need to fix this last one, it's not correct for $h_d$ different)
+
+\subsection{Time integration}
+
+We can split the spatial operators in \eqref{eqn:heat} into horizontal $(x,y)$ and
+vertical $(z)$ operators that are treated differently depending on the 
+
+\end{document}

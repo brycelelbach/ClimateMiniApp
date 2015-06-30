@@ -1,0 +1,280 @@
+\documentclass[final,letterpaper,10pt]{article}
+
+\usepackage[utf8x]{inputenc}
+
+\usepackage{fixme}
+\fxusetheme{color}
+\fxsetup{
+    status=draft,
+    author=,
+    layout=inline, % also try footnote or pdfnote
+    theme=color
+}
+
+\definecolor{fxnote}{rgb}{0.8000,0.0000,0.0000}
+
+\usepackage{xcolor}
+\definecolor{darkred}{rgb}{0.5,0,0}
+\definecolor{darkgreen}{rgb}{0,0.5,0}
+\definecolor{darkblue}{rgb}{0,0,0.5}
+
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+
+\usepackage[margin=0.5in]{geometry}
+
+\pagestyle{empty}
+
+\input{listings.tex}
+
+\input{bullet.tex} % Intense TeX hackage to make nested list simple to write.
+
+\newcommand{\code}[1]{\texttt{{{#1}}}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+\section{Use Case}
+
+Our aim is to create a proxy application (mini-app) that has an execution
+profile representative of AMR climate codes - the target application is
+CESM's Community Atomsphere Model (?).
+
++ Thin-shell cubed-sphere geometry.
+  + 2D (horizontal) domain decomposition which is adaptively refined.
+  + Fixed resolution in the radial (vertical) direction.
++ Implicit-Explicit solver 
+  + ARK4 time integrator. 
+  + Horizontal explicit operator with ghost zones.
+  + Vertical implicit operator with 1D "local" solve.
++ Adaptive Mesh Refinement 
+  + Adaptive refinement in space. 
+  + Subcycling in time.
+
+\section{Technical Goals}
+
+Our intention is to create a parameter-driven proxy that can be used to explore
+the performance impacts of different approaches to parallelizing AMR climate
+codes on many-core architectures. We want to be able to control the
+\emph{arithmetic intensity} and \emph{parallel grain size (e.g. task size)} of
+the mini-app; additionally, we want to study the performance effects of
+different numeric methods.
+
+The following parameters will be exposed by the mini-app:
+
++ \textbf{Interpolation Methods} - The interpolation methods used when information is exchanged across AMR levels, across time, or in between panels. The computational cost of the interpolation methods will limit how small boxes will be (e.g. it will limit the parallel grain size); The selection of interpolation methods may have a non-trivial affect on arithmetic intensity. 
++ \textbf{Time Integrator} - The time integration method used in the solver. Within the scope of this project, we are only considering higher-order implicit-explicit additive Runge-Kutta methods. The time integration scheme plays a fairly "senior" role in the control flow (e.g. it is called by the stepper) The time integration scheme will have fundamental impacts on the dependency and communication patterns of the mini-app. 
++ \textbf{(Spacial) Stencil Patterns} - The stencil pattern used in the solver. The selection of stencils will dictate the width of ghost zones, and therefore will have an affect on the amount of interpolation and communication that occurs. 
++ \textbf{(Spacial) Computational Kernels} - The implementation of the explicit and implicit operators for a particular stencil pattern. Kernels may exhibit different optimizations and instruction-level parallelism. This will allow us to study the performance of different in-house and 3rd-party kernels. The computational kernel will be a major driver of the arithmetic intensity. 
++ \textbf{Box Size} - The maximum/minimum(?) size of each Box in Chombo. A Box represents a subset of a particular refinement level of the grid. Decreasing the maximum Box size will expose greater parallelism (e.g. decrease the grain size), at the cost of increased communication, interpolation, and storage (due to more ghost zones). Changing the Box size will also affect cache behavior in complex ways which must be studied further, due to the interactions of the grain size tradeoff. 
++ \textbf{Tile Size} - The block size used during parallel evaluation of the implicit and explicit operators. Changing the tile size will have effects similar to changing the Box size. 
+
+Performance of the mini-app will be explained in terms of a theoretical
+performance model. This model must account for both latency and throughput
+limitations of the both arithmetic and memory hardware. 
+
+Two different parallel programming models will be implemented in the mini-app.
+The first will be traditional structured parallelism (e.g. centralized control
+flow with fork/join semantics) with MPI+OpenMP. The second will be unstructured
+parallelism (e.g. decentralized, dependency driven execution) with HPX, an
+implementation of the C++11 standard concurrency library optimized for
+HPC~\cite{iso_iec_14882:2011}.
+
+Our target platform is Intel Knight's Landing, the architecture of NERSC-8/Cori.
+Since KNL hardware is not yet available, performance will be evaluated on
+existing Intel platforms (Knight's Corner and Sandy/Ivy Bridge). Performance will
+be evaluated on:
+
++ Edison (2 petaflops 2*Ivybridge + Cray Aries Dragonfly) - Host
++ Babbage ($<$1 petaflop 2*Ivybridge?+2*KNC + IB?) - Single/Multi KNC, Host+KNC
++ SuperKNC (1 petaflop 2*Ivybridge+2*KNC + IB) - Single KNC, Host+KNC
++ Stampede (10 petaflops 2*Sandybridge+KNC + IB) - Single/Multi KNC?, Host+KNC
++ 4-socket or more system (E5-4xxx, E7-48xx v2 E7-88xx v2), SCS?/NMSU?
+
+The target problem we intend to proxy is a 1km (horizontal?) resolution AMR climate simulation.
+
+\section{Design}
+
+NOTE: "Physical" is generally used to refer to features/properties of the
+simulation that actually occur in nature. "Artificial" refers to
+features/properties that are not physical and are not required for numerical
+reasons (I may be overloading this term). 
+
+NOTE: We need to avoid overloading the terms grain-size/granularity; this clashes
+with fine/coarse in AMR. Hans has suggested "nugget" instead of "grain" (something
+like "atom" could work as well). I'm not sure if the bigger problem is "grain" or
+the use of "fine/coarse" to describe the sizes of grains.
+
+Implementing dependency-driven parallelism in existing codebases is challenging due
+to the inherent paradigm shift from traditional structured parallelism. However,
+switching a codebase to use a new parallel programming model should not "rock the boat".
+The following principles underpin our design choices:
+
++ Reuse existing software components
++ New components should try to:
+    + Naturally build upon existing software 
+    + Follow existing code guidelines
+    + Avoid breaking abstractions
++ When a fundamental change has to be made, it should be:
+    + Be encapsulated to a well-defined portion of the code 
+    + Expose APIs that do not "pollute" existing code
+
+Time-marching schemes for evolving space-time systems using explicit and
+semi-explicit methods can be broken down into four hierarchal "levels of control":
+
+% \begin{lstlisting}
+% // Insert pseudocode here
+% \end{lstlisting}
+
++ \textbf{Timestep level} - parallelizing coarse-grained, necessarily global or near-global operations which occur no more frequently than once per timestep. These operations have dependencies which cannot be localized to a lower level due to application constraints, or localization of control is likely to substantially increase code complexity and decrease code robustness.
+   + CFL-constrained timestep calculation
+   + Global checks/verifications
+   + Regridding
+   + I/O and checkpointing
+   + Timestep control flow (aka time integration) 
++ \textbf{Substep level} - parallelizing medium-grained, regional operations which occur multiple times per timestep. These operations are numerous in quantity, and form complex and often bandwidth intensive communication patterns.
+   + Substep control flow.
+   + Boundary information exchange between neighboring regions.
+      + Coarse/fine and fine/coarse interactions (involving interpolation or averaging/reconstruction, respectively).
+      + Cross-panel ghost zone exchanges.
+      + Panel-local neighbor-to-neighbor ghost zone exchange.
++ \textbf{Stencil level} - parallelizing small-grained, local operations which occur multiple times per substep. These operations drive local memory access and caching patterns.
+   + Stencil control flow.
+   + Loop-level parallelism
+      + Data placement in memory
+      + Loop unrolling/combining (e.g. tiling/blocking)
+      + Indexing/slicing
++ \textbf{Kernel level} - parallelizing computational kernels via vectorization and compiler/hardware techniques.
+
+Dependency-driven parallelism derives performance gains by exploiting ephemeral inefficiencies in hardware utilization (software barriers and hiding CPU front-end/CPU back-end/network latencies). This is essentially predatory arbitrage.
+
+So naturally we want to target the easiest "prey" - software barriers. There
+are two types of software barriers: artificial (implicitly used in structured
+parallelism) and numerical/physical (necessary for correct execution of the
+application).  For example, consider the following pseudocode for upwind
+advection of the interior points of a 1D domain:
+
+\begin{lstlisting}
+std::vector<double> U = // ...
+#pragma omp for schedule(dynamic)
+for (size\_t i : range(1, nx-1))
+    // Dependencies are expressed in the call to the kernel.
+    // OMP compiler will identify the dependencies and make
+    // this information available to the OMP runtime by
+    // building it into the outlined OMP section.
+    U[i] = UpwindAdvection(U[i-1], U[i], U[i+1]); 
+// End of the OMP block implies a join. This is not required
+// by the underlying simulation. This is an /artifical/ and
+// implicit barrier. HPX removes this barrier. 
+\end{lstlisting}
+
+\begin{lstlisting}
+hpx::future<std::vector<double> > U = // ...
+for (size\_t i : range(1, nx-1))
+    // Dependencies are expressed in the call to the kernel.
+    // The dataflow call takes care of dependencies; execution
+    // of UpwindAdvection will not being until all the dependent
+    // values are ready.  
+    U[i] = hpx::dataflow(UpwindAdvection, U[i-1], U[i], U[i+1]); 
+// No implied join at the end of the for loop.
+\end{lstlisting}
+
+In time-marching codes, the best performance gains come from parallelizing at the timestep
+level - however this tends to be the hardest part of the code to parallelize. In the scope
+of this summer project, we will focus on exploiting parallelism at the substep and stencil
+level.
+
+The following outlines the basic approach to an asynchronous implementation with
+HPX.
+
++ \textbf{Timestep level}
+    + \textbf{Non-barrier Global Operations:} For coarse-grained operations that cannot be localized, the best parallelization strategy is to give the coarse-grained operation unique ownership of their dependencies (\emph{data replication}). Any other operations that would have used the same underlying data would need to work with a copy instead; e.g. in-place updates would be replaced with copying. This gives us greater parallelism at the cost of copy overheads and storage space.
+        + Example: In an "output" step, instead of updating the existing state, we update to a new state, and we pass ownership of the old state to the I/O facility, which we invoke asynchronously. 
+    + \textbf{Mathematical/Physical Global Barriers:} Some global operations must be completed before the next timestep can begin, and are inherent to either the mathematical methods in use or the underlying physics. By definition, localizing these global barriers would require a change in the underlying simulation model. The only feasible strategy to deal with these global barriers without changing numerics/physics is to utilize \textbf{speculative computation}. Speculative execution requires a rollback mechanism and heuristics for dynamic This is not always possible, and is only feasible if speculation can be made accurate. The tolerance for incorrect predictions depends on the costs of requires a number of software components.
+        + Example: Heuristically guessing timestep sizes to start speculatively executing the next few timesteps. Later, when global CFL conditions have been satisfied, it is compared to the guessed timestep size. If a CFL violation occurs, computation is rolled back.
+    + These global operations are likely outside of the scope of the summer work. However CFL computations are going to stall execution when we subcycle in time - if this shows up in profiling as a problem, we'll have to tackle this. Hans has indicated that for the mini-app, it may be possible to run with a fixed timestep size (at the least, we know that all waves will travel at subsonic speeds, and the speed of sound in the atmosphere is fixed, right?).
+    + \textbf{Timestep Control Flow:} In the CSP version of the code, substeps are executed sequentially in each timestep (with coarser levels going first, and finer levels subcycling in time) - parallelization only happens much further down, at the stencil level. In the HPX variant, we must make two changes:
+        + \textbf{Decentralization of Control:} We will spawn each substep as a constraint-driven asynchronous calculation. Each substep will also be further parallelized at the substep, stencil and kernel levels, as described below. This is the "root" \textbf{asynchronous fork} point in the application.
+        + \textbf{Localization of Control:} Substeps are far too coarse-grained in the current implementation. advance() must be changed to be implemented in terms of per-Box operations with clearly defined dependencies. This will expose a greater deal of parallelism.
++ \textbf{Substep level}
+    + \textbf{Substep Control Flow:} Naturally, we must perform the same \textbf{decentralization and localization of control} to the substep operations that we applied to the substep itself (e.g. advance()). The implicit operator, the explicit operator, the stage solver, RHS/FluxRegister accumulation and exchanges/copies/refluxing must all be rewritten as per-Box operations.
+    + \textbf{Information Exchange:} Changing to a per-Box control flow will naturally allow us to express exchanges in terms of per-Box dependencies. Different boundaries may be filled in different ways. In addition to intra-panel exchanges, boundaries may be coarse/fine interfaces, cross-panel (multi-block) interfaces, or both coarse/fine and cross-panel. Each Box will expose a \textbf{future} that is agnostic to the boundary type and can be fulfilled by any provider. All exchanges will happen via asynchronous pushes. Each Box will send its local state to the Boxes that share a boundary to it. When a computation that needs a ghost zone must be performed, the relevant ghost zone regions will be specified as dependencies of that operation. 
++ \textbf{Stencil level}
+    + \textbf{Stencil Control Flow:} Again, \textbf{decentralization and localization} will be applied to the operations that are performed within the stencil operations (implicit/explicit), accumulations (RHS, fluxes), final integration (stage solve) and exchanges. These operations include local copies and grid arithmetic. Since these operations are at the lowest level of the parallelism hierarchy that involves task-level parallelism, it will be desirable to have control over their granularity (e.g. the tile size parameter). The upper bound on this granularity is the local Box size; the lower bound is a single cell in the grid. This is also the level at which OpenMP parallelism is performed, so code structure must be carefully preserved.
++ \textbf{Kernel level}
+    + The mini-app will have "pluggable" kernel(s) - this will be a parameter of the simulation. The (possibly tiled) loops at the "Stencil level" will call these kernels, passing the relevant stencil data. This will allow us to control AI and to compare different vectorization approaches.
+
+\subsection{Components}
+
+Existing Software 
+  + Chombo
+    + Grid data structures (LevelData$<>$, FArrayBox, FluxRegister?, FluxBox?)
+    + AMR facilities (regridding?, flux/coarse?, what else?) 
+    + ARK4 time integrator (ARK4DenseOutput)
+    + Data distribution algorithms (Copier, LevelData$<>$, EBEllipticLoadBalance)
+    + Interpolation methods (which?)
+    + Cubed-sphere geometry (necessary for mini-app?)
+    + I/O facilities (AMRIO)
+    + Configuration facilities (which?)
+  + HPX (task-based variant)
+    + C++11 std::future$<>$ + N3721 composability + remote extensions
+
+New Software
+  + Chombo 
+    + New classes/methods which extend existing infrastructure to support dependency-driven parallelism 
+      + Dependency-aware FArrayBox: LazyFArrayBox (API homogeneous to FArrayBox, is-a HPX managed component)
+      + Rewrite operations in terms of LazyFArrayBoxes instead of LevelData$<>$
+        + ARK4DenseOutput::advance() -> ARK4DenseOutput::advance()/advanceAsync()
+        + LevelData$<>$::exchange()/::copy() -> LevelData$<>$::exchange()/exchangeAsync()/copy()/copyAsync() 
+    + Thread-safety modifications
+  + Mini-app (shared portion)
+    + Abstractions to facilitate unified infrastructure for both parallel variants of mini-app
+    + Driver code
+      + Problem initialization
+      + Dynamic application configuration
+    + Pluggable stencil patterns 
+      + 7 point stencil 
+    + Pluggable computational kernels
+      + LAPACK banded solvers
+      + KNC fused-multiply solver
+  + Mini-app (CSP variant) - implements unified parallelism interfaces 
+    + Centralized, LevelData$<>$-granularity imperative time-marching 
+    + Synchronous communication (in space/time and between fine/coarse) at boundaries
+  + Mini-app (task-based variant) - implements unified parallelism interfaces
+    + Decentralized, LazyFArrayBox$<>$-granularity recursive "step-to" time-marching 
+    + Asynchronous communication (in space/time and between fine/coarse) at boundaries
+  + Test problem: 3D heat equation
+    + Initial profiles (?)
+
+OpenMP's pragma-based interface is non-intrusive - it can be trivially disabled
+with no code changes, excluding calls to the OpenMP C interface. HPX's
+futurization technique, while intrusive, retains code structure as long as
+dependencies are expressed functionally (e.g. inputs as arguments, outputs and
+side effects as return values). This will allow us to use shared code for both
+variants of the mini-app. The following pseudocode demonstrates how HPX and
+OpenMP can reuse the same shared infrastructure.
+
+\lstinputlisting{pseudocode/vertical_solve_minimal.cpp}
+
+Unfortunately, it is not typically possible for MPI and HPX to reuse interfaces
+and shared code infrastructure. MPI is intrusive, like HPX; it is not possible
+to disable MPI without code changes (fortunately, it is possible to disable
+MPI support in Chombo; e.g. the code changes are already in place). However,
+Chombo's communication interfaces are largely synchronous, or closed-loop
+asynchronous (e.g. asynchrony is confined to local operations, and globally execution
+is synchronous). It will be necessary to restructure existing control flow inside
+of Chombo (e.g. fooAsync() methods, dependency "aware" FABs) to support dependency-driven execution. 
+These changes will be fundamental, but contained to a handful of interfaces.
+
+Prior experience has demonstrated the success of a shared infrastructure approach.
+HTTS, a threading benchmark in HPX, uses a shared infrastructure which contains the majority
+of the driver code and exposes "hooks" which threading libraries must implement. 
+There are HTTS variants for Intel TBB, Intel Cilk++, OpenMP, ETI SWARM, Sandia Qthreads and
+HPX's threading subsystem. Other benchmark suites, such as Sandia's Mantevo suite, Graph500 and
+UTS also use this approach. 
+
+\bibliographystyle{unsrt}
+\bibliography{design}
+
+\end{document}
