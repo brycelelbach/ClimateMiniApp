@@ -135,6 +135,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
              + horizontal_stencil_1d(here, 2, FZ);
     } // }}}
 
+    // FIXME - should be a tiled stencil loop
     Real horizontal_stencil_1d(
         IntVect here
       , std::size_t dir
