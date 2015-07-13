@@ -274,10 +274,10 @@ ARK4<X, Scratch, ImExOp, DenseOutput>::s_bstar[][ARK4<X, Scratch, ImExOp, DenseO
 };
 
 template <class X, bool DenseOutput>
-struct ARK4Scratch;
+struct ARK4DefaultScratch;
 
 template <class X>
-struct ARK4Scratch<X, true>
+struct ARK4DefaultScratch<X, true>
 {
   boost::array<X, ARK4Sizes::s_nStages> phi;
   boost::array<X, ARK4Sizes::s_nDenseCoefs> denseCoefs;
@@ -307,7 +307,7 @@ struct ARK4Scratch<X, true>
   }
 };
 template <class X>
-struct ARK4Scratch<X, false>
+struct ARK4DefaultScratch<X, false>
 {
   boost::array<X, ARK4Sizes::s_nStages> phi;
   X kE;

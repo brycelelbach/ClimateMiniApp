@@ -131,9 +131,9 @@ testARK4 ()
   //   implicit op = cI * phi;
   Real coef = TestImExOp::s_cE + TestImExOp::s_cI;
 
-  ARK4Scratch<TestOpData, true> scratch;
+  ARK4DefaultScratch<TestOpData, true> scratch;
 
-  ARK4<TestOpData, ARK4Scratch<TestOpData, true>, TestImExOp, true>
+  ARK4<TestOpData, ARK4DefaultScratch<TestOpData, true>, TestImExOp, true>
     ark(TestImExOp(0.0), basedt);
 
   ark.define(dbl, 1, IntVect::Unit);
