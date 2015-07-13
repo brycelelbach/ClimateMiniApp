@@ -92,9 +92,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         return domain;
     } // }}} 
     
+    template <std::size_t Dir>
     Real horizontal_flux_stencil(
         IntVect here
-      , std::size_t dir
       , FArrayBox const& phi
         ) const
     { // {{{
@@ -103,13 +103,13 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         Real v = 0.0;
         IntVect left;
 
-        if      (1 == dir)
+        if      (1 == Dir)
         { 
             v = vy;
             left = IntVect(here[0], here[1]-1, here[2]);
         }
 
-        else if (2 == dir)
+        else if (2 == Dir)
         {
             v = vz;
             left = IntVect(here[0], here[1], here[2]-1);
@@ -124,41 +124,53 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         return v * 0.5 * (phi(left) + phi(here));
     } // }}}
 
+    Real inverse_dh_c() const
+    {
+        Real const dh = dp()[1]; 
+
+        #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
+            return (-1.0/dh);
+        #else
+            Real constexpr c = (-1.0/60.0);
+            return c*(1.0/dh); 
+        #endif
+    }
+
     // FIXME: IntVect indexing may be expensive, compare to Hans' loops
     Real horizontal_stencil(
         IntVect here
       , FArrayBox const& FY
       , FArrayBox const& FZ
+      , Real inv_dh_c
         ) const
     { // {{{ 
-        return horizontal_stencil_1d(here, 1, FY)
-             + horizontal_stencil_1d(here, 2, FZ);
+        return horizontal_stencil_1d<1>(here, FY, inv_dh_c)
+             + horizontal_stencil_1d<2>(here, FZ, inv_dh_c);
     } // }}}
 
     // FIXME - should be a tiled stencil loop
+    template <std::size_t Dir>
     Real horizontal_stencil_1d(
         IntVect here
-      , std::size_t dir
       , FArrayBox const& F
+      , Real inv_dh_c
         ) const
     { // {{{
-        assert((dir == 1) || (dir == 2));
-
-        Real const dh = dp()[1]; 
+        assert((Dir == 1) || (Dir == 2));
 
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
-            IntVect right1(here); right1.setVal(dir, here[dir]+1);
+            IntVect right1(here); right1.setVal(Dir, here[Dir]+1);
     
-            return (-1.0/dh) * (F(right1) - F(here)); 
+            return inv_dh_c * (F(right1) - F(here)); 
         #else
-            IntVect left2(here); left2.setVal(dir, here[dir]-2);
-            IntVect left1(here); left1.setVal(dir, here[dir]-1);
+            IntVect left2(here); left2.setVal(Dir, here[Dir]-2);
+            IntVect left1(here); left1.setVal(Dir, here[Dir]-1);
     
-            IntVect right1(here); right1.setVal(dir, here[dir]+1);
-            IntVect right2(here); right2.setVal(dir, here[dir]+2);
-            IntVect right3(here); right3.setVal(dir, here[dir]+3);
-    
-            return (-1.0/(60.0*dh))
+            IntVect right1(here); right1.setVal(Dir, here[Dir]+1);
+            IntVect right2(here); right2.setVal(Dir, here[Dir]+2);
+            IntVect right3(here); right3.setVal(Dir, here[Dir]+3);
+
+            return inv_dh_c
                  * ( 3.0*F(left2) - 30.0*F(left1)
                    - 20.0*F(here)
                    + 60.0*F(right1) - 15.0*F(right2) + 2.0*F(right3)
@@ -172,6 +184,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Real dtscale
         ) const
     { // {{{
+        if (std::fabs(kx-0.0) < 1e-16)
+            return;
+
         Real const c1 = 1.0;
         Real const c2 = -(kx*dt()*dtscale);
         build_vertical_operator(A, b, c1, c2);
@@ -182,6 +197,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Box b
         ) const
     { // {{{
+        if (std::fabs(kx-0.0) < 1e-16)
+            return;
+
         Real const c1 = 0.0;
         Real const c2 = kx;
         build_vertical_operator(A, b, c1, c2);

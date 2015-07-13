@@ -35,6 +35,8 @@
     #include "LevelData.H"
 #endif
 
+#include "LapackFactorization.H"
+
 namespace climate_mini_app
 {
 
@@ -62,7 +64,8 @@ struct problem_state
 {
     problem_state()
     // {{{
-      : U()
+      : A()
+      , U()
       , FY()
       , FZ()
       #if defined(CH_HPX)
@@ -72,7 +75,8 @@ struct problem_state
 
     problem_state(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     // {{{
-      : U()
+      : A()
+      , U()
       , FY()
       , FZ()
       #if defined(CH_HPX)
@@ -84,6 +88,8 @@ struct problem_state
 
     void define(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     { // {{{
+        A.define(dbl);
+
         U.define(dbl, comps, ghost);
 
         #if defined(CH_HPX)
@@ -188,6 +194,8 @@ struct problem_state
     } // }}}
 
     friend struct sub_problem_state;
+
+    LayoutData<LapackFactorization> A;
 
 #if defined(CH_HPX)
     AsyncLevelData<FArrayBox> U;
@@ -297,6 +305,18 @@ struct sub_problem_state
     { // {{{
         assert(ps_);
         return ps_->FZ[di_]; 
+    } // }}}
+
+    LapackFactorization& A()
+    { // {{{
+        assert(ps_);
+        return ps_->A[di_]; 
+    } // }}}
+
+    LapackFactorization const& A() const
+    { // {{{
+        assert(ps_);
+        return ps_->A[di_]; 
     } // }}}
 
   private:

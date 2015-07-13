@@ -19,7 +19,6 @@
 #include "CMAProblemState.H"
 
 #include "Lapack.H"
-#include "LapackFactorization.H"
 #include "LapackWrapper.H"
 
 namespace climate_mini_app
@@ -39,17 +38,17 @@ struct imex_per_box_operators
     } // }}}
 
   private:
+    template <std::size_t Dir>
     void horizontalFluxDirectional(
         FArrayBox& F
       , FArrayBox const& phi
-      , std::size_t dir
       , IntVect lower
       , IntVect upper
         ) const
     { // {{{
         for (std::size_t d = 0; d < 3; ++d)
         {
-            if (dir == d) continue;
+            if (Dir == d) continue;
 
             lower.shift(d, profile.ghostVect()[d]);
             upper.shift(d, -1*profile.ghostVect()[d]);
@@ -61,7 +60,7 @@ struct imex_per_box_operators
                 {
                     IntVect here(i, j, k);
 
-                    F(here) = profile.horizontal_flux_stencil(here, dir, phi);
+                    F(here) = profile.horizontal_flux_stencil<Dir>(here, phi);
                 };
     } // }}}
 
@@ -81,16 +80,17 @@ struct imex_per_box_operators
             using std::ref;
             using std::cref;
    
-            auto F = &imex_per_box_operators::horizontalFluxDirectional;
+            auto FlY = &imex_per_box_operators::horizontalFluxDirectional<1>;
+            auto FlZ = &imex_per_box_operators::horizontalFluxDirectional<2>;
  
-            auto futY = hpx::async(F, this, ref(FY), cref(phi), 1, lower, upper);
-            auto futZ = hpx::async(F, this, ref(FZ), cref(phi), 2, lower, upper);
+            auto futY = hpx::async(FlY, this, ref(FY), cref(phi), lower, upper);
+            auto futZ = hpx::async(FlZ, this, ref(FZ), cref(phi), lower, upper);
     
             futY.get();
             futZ.get();
         #else
-            horizontalFluxDirectional(FY, phi, 1, lower, upper);
-            horizontalFluxDirectional(FZ, phi, 2, lower, upper);
+            horizontalFluxDirectional<1>(FY, phi, lower, upper);
+            horizontalFluxDirectional<2>(FZ, phi, lower, upper);
         #endif
     } // }}}
 
@@ -130,8 +130,10 @@ struct imex_per_box_operators
                 {
                     IntVect here(i, j, k);
 
-                    kE(here) = profile.horizontal_stencil(here, FY, FZ)
-                             + profile.source_term(here, t); 
+                    Real const inv_dh_c = profile.inverse_dh_c();
+
+                    kE(here) = profile.horizontal_stencil(here, FY, FZ, inv_dh_c);
+//                             + profile.source_term(here, t); 
                 }
     } // }}}
 
@@ -142,10 +144,11 @@ struct imex_per_box_operators
       , sub_problem_state& phi_
         ) const
     { // {{{
-        kI_.setVal(0.0);
+//        kI_.setVal(0.0);
 
         auto& kI  = kI_.U();
         auto& phi = phi_.U();
+        auto& A   = phi_.A();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -155,14 +158,36 @@ struct imex_per_box_operators
 
         Box b(lower, upper);
 
-        for (auto j = lower[1]; j <= upper[1]; ++j)
-            for (auto k = lower[2]; k <= upper[2]; ++k)
-            {
-                LapackFactorization A;
+        #if 0 
+            auto F =
+                [&](int j, IntVect lower, IntVect upper, Box b)
+                {
+                    for (auto k = lower[2]; k <= upper[2]; ++k)
+                    {
+                        LapackFactorization A;
 
-                profile.build_vertical_operator_for_apply(A, b);
-                profile.apply_vertical_operator(j, k, A, b, kI, phi);
-            }
+                        profile.build_vertical_operator_for_apply(A, b);
+                        profile.apply_vertical_operator(j, k, A, b, kI, phi);
+                    }
+                };
+
+            std::vector<hpx::future<void> > cols;
+
+            for (auto j = lower[1]; j <= upper[1]; ++j)
+                cols.push_back(hpx::async(F, j, lower, upper, b));
+
+            for (hpx::future<void>& f : cols)
+                f.get();
+        #else
+            #pragma omp parallel for
+            for (auto j = lower[1]; j <= upper[1]; ++j)
+                for (auto k = lower[2]; k <= upper[2]; ++k)
+                {
+                    if (!A.is_cached()) 
+                        profile.build_vertical_operator_for_apply(A, b);
+                    profile.apply_vertical_operator(j, k, A, b, kI, phi);
+                }
+        #endif
     } // }}}
 
     void solve(
@@ -180,6 +205,7 @@ struct imex_per_box_operators
         #endif
 
         auto& phi = phi_.U();
+        auto& A   = phi_.A();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -189,12 +215,12 @@ struct imex_per_box_operators
 
         Box b(lower, upper);
 
+        #pragma omp parallel for
         for (auto j = lower[1]; j <= upper[1]; ++j)
             for (auto k = lower[2]; k <= upper[2]; ++k)
             {
-                LapackFactorization A;
-
-                profile.build_vertical_operator_for_solve(A, b, dtscale);
+                if (!A.is_cached())
+                    profile.build_vertical_operator_for_solve(A, b, dtscale);
                 profile.vertical_solve(j, k, A, b, phi);
             }
     } // }}}

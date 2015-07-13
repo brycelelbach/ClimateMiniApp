@@ -218,6 +218,8 @@ void stepLoop(
   , Real nt
     )
 { 
+    climate_mini_app::high_resolution_timer clock;
+
     climate_mini_app::configuration const& config = profile.config;
 
     #if !defined(CH_HPX)
@@ -233,8 +235,9 @@ void stepLoop(
     if (config.header && (0 == procid))
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
-                  << "Boxes,Localities,PUs-per-Locality,"
-                     "Steps,Simulation Time,Wall Time [s]\n"
+                  << "Boxes,Steps (ns),Simulation Time (nt),"
+                     "Localities,PUs-per-Locality,"
+                     "Initialization Wall Time [s],Solver Wall Time [s]\n"
                   << std::flush;
 
     ProblemDomain base_domain = profile.problem_domain(); 
@@ -298,9 +301,29 @@ void stepLoop(
         }
     #endif 
 
+#if 0
+    // Ensure that Intel MKL functions have been dynamically loaded.
+    {
+        Box b(IntVect(0, 0, 0), IntVect(4, 0, 0));
+
+        FArrayBox kI(b, 1);  kI.setVal(0.0);
+        FArrayBox phi(b, 1); phi.setVal(0.0);
+
+        LapackFactorization A;
+
+        profile.build_vertical_operator_for_apply(A, b);
+        profile.apply_vertical_operator(0, 0, A, b, kI, phi);
+
+        profile.build_vertical_operator_for_solve(A, b, 1.0);
+        profile.vertical_solve(0, 0, A, b, phi);
+    }
+#endif
+
     std::size_t step = 0;
 
-    climate_mini_app::high_resolution_timer clock;
+    double init_elapsed = clock.elapsed();
+
+    clock.restart();
 
     Real time = 0.0;
 
@@ -384,10 +407,11 @@ void stepLoop(
         std::cout << config.print_csv() << "," 
                   << profile.print_csv() << ","
                   << boxes.size() << ","
-                  << localities << ","
-                  << pus << ","
                   << step << ","
                   << nt << ","
+                  << localities << ","
+                  << pus << ","
+                  << init_elapsed << "," 
                   << clock.elapsed() << "\n"
                   << std::flush;
 
