@@ -702,8 +702,8 @@ IntVect::IntVect (const int *a)
 inline
 IntVect::IntVect (const IntVect &iv)
 {
-  //D_EXPR6(vect[0]=iv.vect[0], vect[1]=iv.vect[1], vect[2]=iv.vect[2]);
-  memcpy(vect, iv.vect, IntVectSize);
+  D_EXPR6(vect[0]=iv.vect[0], vect[1]=iv.vect[1], vect[2]=iv.vect[2],
+          vect[3]=iv.vect[3], vect[4]=iv.vect[4], vect[5]=iv.vect[5]);
 }
 
 inline
