@@ -37,8 +37,8 @@ class LapackFactorization
    
     ~LapackFactorization() 
     {
-      delete [] m_LU;
-      delete [] m_pivot;
+      if (m_LU) delete [] m_LU;
+      if (m_pivot) delete [] m_pivot;
     }
 
     // Allocate memory
@@ -51,8 +51,8 @@ class LapackFactorization
       m_kl = a_kl;
       m_ku = a_ku;
       m_nrows = 2*m_kl + m_ku + 1; // Band storage
-      delete [] m_LU;
-      delete [] m_pivot;
+      if (m_LU) delete [] m_LU;
+      if (m_pivot) delete [] m_pivot;
       m_LU = new Real[m_nrows*m_ncols];
       m_pivot = new int[m_ncols];
 
@@ -131,7 +131,12 @@ class LapackFactorization
   }
   
   Real& operator()(const int i,const int j){
-    CH_assert((i-j)<=m_kl && (j-i)<=m_ku && i>=0 && i<m_ncols && j>=0 && j<m_ncols);
+    CH_assert((i-j)<=m_kl);
+    CH_assert((j-i)<=m_ku);
+    CH_assert(i>=0);
+    CH_assert(i<m_ncols);
+    CH_assert(j>=0);
+    CH_assert(j<m_ncols);
     return m_LU[m_kl+m_ku-j+i+j*m_nrows];}
 
   Real get(const int i,const int j){
@@ -144,6 +149,11 @@ class LapackFactorization
             for(int j=Max(0,i-m_kl);j<=Min(m_ncols-1,i+m_ku);j++)
                 yv+=get(i,j)*x[j];
             y[i]=yv;}
+    }
+
+    bool is_cached()
+    {
+        return m_LU && m_pivot;
     }
 
   protected:
