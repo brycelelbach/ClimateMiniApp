@@ -52,7 +52,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
     { // {{{
         // Check if advection is on. 
         // (vy!=0) || (vz!=0)
-        if ((std::fabs(vy-0.0) > 1e-16) || (std::fabs(vz-0.0) > 1e-16))
+        if ((std::fabs(vy-0.0) > 1e-14) || (std::fabs(vz-0.0) > 1e-14))
         {
             // For advection: 
             //
@@ -184,7 +184,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Real dtscale
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-16)
+        if (std::fabs(kx-0.0) < 1e-14)
             return;
 
         Real const c1 = 1.0;
@@ -197,7 +197,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Box b
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-16)
+        if (std::fabs(kx-0.0) < 1e-14)
             return;
 
         Real const c1 = 0.0;
@@ -266,7 +266,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox& phi
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-16)
+        if (std::fabs(kx-0.0) < 1e-14)
             return;
 
         IntVect lower = b.smallEnd();
@@ -292,7 +292,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox& phi
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-16)
+        if (std::fabs(kx-0.0) < 1e-14)
             return;
 
         IntVect lower = b.smallEnd();
