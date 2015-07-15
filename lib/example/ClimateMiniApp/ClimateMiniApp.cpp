@@ -236,7 +236,7 @@ void stepLoop(
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
                   << "Boxes,Steps (ns),Simulation Time (nt),"
-                     "Localities,PUs-per-Locality,"
+                     "Localities,PUs,"
                      "Initialization Wall Time [s],Solver Wall Time [s]\n"
                   << std::flush;
 
@@ -400,7 +400,7 @@ void stepLoop(
         std::uint64_t pus = hpx::get_num_worker_threads() * localities; 
     #else
         std::uint64_t localities = numProc();
-        std::uint64_t pus = omp_get_max_threads();
+        std::uint64_t pus = omp_get_max_threads() * localities;
     #endif
 
     if (0 == procid)
