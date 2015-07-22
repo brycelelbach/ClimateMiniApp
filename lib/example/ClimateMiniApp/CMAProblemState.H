@@ -64,7 +64,8 @@ struct problem_state
 {
     problem_state()
     // {{{
-      : A()
+      : A0()
+      , A1()
       , U()
       , FY()
       , FZ()
@@ -75,7 +76,8 @@ struct problem_state
 
     problem_state(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     // {{{
-      : A()
+      : A0()
+      , A1()
       , U()
       , FY()
       , FZ()
@@ -88,7 +90,8 @@ struct problem_state
 
     void define(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     { // {{{
-        A.define(dbl);
+        A0.define(dbl);
+        A1.define(dbl);
 
         U.define(dbl, comps, ghost);
 
@@ -130,17 +133,17 @@ struct problem_state
         #endif
     } // }}}
 
-    void copy(problem_state const& A)
+    void copy(problem_state const& X)
     { // {{{
         DataIterator dit = U.dataIterator();
         std::size_t nbox = dit.size();
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            U[dit[ibox]].copy(A.U[dit[ibox]]);
-            FY[dit[ibox]].copy(A.FY[dit[ibox]]);
-            FZ[dit[ibox]].copy(A.FZ[dit[ibox]]);
+            U[dit[ibox]].copy(X.U[dit[ibox]]);
+            FY[dit[ibox]].copy(X.FY[dit[ibox]]);
+            FZ[dit[ibox]].copy(X.FZ[dit[ibox]]);
         }
     } // }}}
 
@@ -149,7 +152,7 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t nbox = dit.size();
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].setVal(val);
@@ -158,15 +161,27 @@ struct problem_state
         }
     } // }}}
 
-    void plus(problem_state const& A, Real factor = 1.0)
+    void plus(problem_state const& X, Real factor)
     { // {{{
         DataIterator dit = U.dataIterator();
         std::size_t nbox = dit.size();
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            U[dit[ibox]].plus(A.U[dit[ibox]], factor);
+            U[dit[ibox]].plus(X.U[dit[ibox]], factor);
+        }
+    } // }}}
+
+    void plus(problem_state const& X)
+    { // {{{
+        DataIterator dit = U.dataIterator();
+        std::size_t nbox = dit.size();
+
+        #pragma omp parallel for schedule(dynamic)
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+        {
+            U[dit[ibox]].plus(X.U[dit[ibox]]);
         }
     } // }}}
 
@@ -195,7 +210,8 @@ struct problem_state
 
     friend struct sub_problem_state;
 
-    LayoutData<LapackFactorization> A;
+    LayoutData<LapackFactorization> A0;
+    LayoutData<LapackFactorization> A1;
 
 #if defined(CH_HPX)
     AsyncLevelData<FArrayBox> U;
@@ -238,11 +254,11 @@ struct sub_problem_state
         return *this;
     } // }}}
 
-    void copy(sub_problem_state const& A)
+    void copy(sub_problem_state const& X)
     { // {{{
-        U().copy(A.U());
-        FY().copy(A.FY());
-        FZ().copy(A.FZ());
+        U().copy(X.U());
+        FY().copy(X.FY());
+        FZ().copy(X.FZ());
     } // }}}
 
     void setVal(Real val)
@@ -252,9 +268,14 @@ struct sub_problem_state
         FZ().setVal(val);
     } // }}}
 
-    void plus(sub_problem_state const& A, Real factor = 1.0)
+    void plus(sub_problem_state const& X, Real factor)
     { // {{{
-        U().plus(A.U(), factor);
+        U().plus(X.U(), factor);
+    } // }}}
+
+    void plus(sub_problem_state const& X)
+    { // {{{
+        U().plus(X.U());
     } // }}}
 
 #if defined(CH_HPX)
@@ -307,16 +328,28 @@ struct sub_problem_state
         return ps_->FZ[di_]; 
     } // }}}
 
-    LapackFactorization& A()
+    LapackFactorization& A0()
     { // {{{
         assert(ps_);
-        return ps_->A[di_]; 
+        return ps_->A0[di_]; 
     } // }}}
 
-    LapackFactorization const& A() const
+    LapackFactorization const& A0() const
     { // {{{
         assert(ps_);
-        return ps_->A[di_]; 
+        return ps_->A0[di_]; 
+    } // }}}
+
+    LapackFactorization& A1()
+    { // {{{
+        assert(ps_);
+        return ps_->A1[di_]; 
+    } // }}}
+
+    LapackFactorization const& A1() const
+    { // {{{
+        assert(ps_);
+        return ps_->A1[di_]; 
     } // }}}
 
   private:
