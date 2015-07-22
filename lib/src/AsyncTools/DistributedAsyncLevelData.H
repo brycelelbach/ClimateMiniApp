@@ -279,7 +279,41 @@ template <typename T>
 struct AsyncLevelDataClient
   : hpx::components::client_base<AsyncLevelDataClient<T>, AsyncLevelDataServer<T> >
 {
-    // TODO
+    ///////////////////////////////////////////////////////////////////////////
+    template <typename X>
+    hpx::future<X> applyAsync(
+        typename AsyncLevelData_signature<T, X>::gridwise const& f
+        )
+    { // {{{
+        typedef typename AsyncLevelDataServer<T>::template apply_action<X>
+            action;
+        return hpx::async<action>(this->get_gid(), f);
+    } // }}}
+
+    template <typename X>
+    X apply(
+        typename AsyncLevelData_signature<T, X>::gridwise const& f
+        )
+    { // {{{
+        return applyAsync(f);
+    } // }}}
+
+    ///////////////////////////////////////////////////////////////////////////
+    void applyElementsAsync(
+        typename AsyncLevelData_signature<T, void>::elementwise const& f
+        )
+    { // {{{
+        typedef typename AsyncLevelDataServer<T>::applyElements
+            action;
+        return hpx::async<action>(this->get_gid(), f);
+    } // }}}
+
+    void applyElements(
+        typename AsyncLevelData_signature<T, void>::elementwise const& f
+        )
+    { // {{{
+        return applyElementsAsync(f);
+    } // }}}
 };
 
 #include "NamespaceFooter.H"
