@@ -19,8 +19,6 @@
 
 #include <hpx/lcos/wait_all.hpp>
 
-#include "UsingBaseNamespace.H"
-
 #include "IntVect.H"
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
@@ -32,6 +30,8 @@
 #include "AsyncLevelData.H"
 #include "AsyncExchange.H"
 #include "HPXDriver.H"
+
+#include "UsingBaseNamespace.H"
 
 #include <boost/format.hpp>
 
