@@ -11,12 +11,12 @@ XTRACXXFLAGS += -DCH_HPX
 ifeq ($(DEBUG),TRUE)
     HPX_LIB_POSTFIX=d
     XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application_debug) -O0 -ggdb
-    XTRAPOSTFLAGS += $(shell pkg-config --cflags --libs hpx_application_debug)
+    XTRAPOSTFLAGS += $(shell pkg-config --libs hpx_application_debug)
 endif
 ifeq ($(DEBUG),FALSE)
     HPX_LIB_POSTFIX=
     XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application) -O3 
-    XTRAPOSTFLAGS += $(shell pkg-config --cflags --libs hpx_application)
+    XTRAPOSTFLAGS += $(shell pkg-config --libs hpx_application)
 endif
 
 HDF5_DIR=/global/homes/w/wash/development/hdf5-1.8.7/HPX_INSTALL
