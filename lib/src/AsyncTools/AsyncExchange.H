@@ -124,7 +124,7 @@ hpx::future<void> LocalSendCopyAsync(
     )
 {
     unsigned const num_comp = from_ld.nComp();
-    return LocalSendCopyAsync(ct, epoch, asi, from_ld, 0, to_ld, 0, num_comp);
+    return LocalSendCopyAsync(ct, epoch, di, from_ld, 0, to_ld, 0, num_comp, ac);
 }
 
 template <typename T>
