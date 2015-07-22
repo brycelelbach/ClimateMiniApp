@@ -54,6 +54,7 @@ struct imex_per_box_operators
             upper.shift(d, -1*profile.ghostVect()[d]);
         }
 
+        #pragma omp parallel for schedule(dynamic)
         for (auto k = lower[2]; k <= upper[2]; ++k)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto i = lower[0]; i <= upper[0]; ++i)
@@ -83,11 +84,14 @@ struct imex_per_box_operators
             auto FlY = &imex_per_box_operators::horizontalFluxDirectional<1>;
             auto FlZ = &imex_per_box_operators::horizontalFluxDirectional<2>;
  
-            auto futY = hpx::async(FlY, this, ref(FY), cref(phi), lower, upper);
-            auto futZ = hpx::async(FlZ, this, ref(FZ), cref(phi), lower, upper);
+//            auto futY = hpx::async(FlY, this, ref(FY), cref(phi), lower, upper);
+//            auto futZ = hpx::async(FlZ, this, ref(FZ), cref(phi), lower, upper);
+
+            horizontalFluxDirectional<1>(FY, phi, lower, upper);
+            horizontalFluxDirectional<2>(FZ, phi, lower, upper);
     
-            futY.get();
-            futZ.get();
+//            futY.get();
+//            futZ.get();
         #else
             horizontalFluxDirectional<1>(FY, phi, lower, upper);
             horizontalFluxDirectional<2>(FZ, phi, lower, upper);
@@ -124,6 +128,7 @@ struct imex_per_box_operators
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
 
+        #pragma omp parallel for schedule(dynamic)
         for (auto i = lower[0]; i <= upper[0]; ++i)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto k = lower[2]; k <= upper[2]; ++k)
@@ -144,11 +149,9 @@ struct imex_per_box_operators
       , sub_problem_state& phi_
         ) const
     { // {{{
-//        kI_.setVal(0.0);
-
         auto& kI  = kI_.U();
         auto& phi = phi_.U();
-        auto& A   = phi_.A();
+        auto& A   = phi_.A0();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -179,12 +182,16 @@ struct imex_per_box_operators
             for (hpx::future<void>& f : cols)
                 f.get();
         #else
-            #pragma omp parallel for
+            #pragma omp parallel for schedule(dynamic)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto k = lower[2]; k <= upper[2]; ++k)
                 {
-                    if (!A.is_cached()) 
-                        profile.build_vertical_operator_for_apply(A, b);
+                    #pragma omp critical
+                    {
+                        if (!A.is_cached()) 
+                            profile.build_vertical_operator_for_apply(A, b);
+                    }
+
                     profile.apply_vertical_operator(j, k, A, b, kI, phi);
                 }
         #endif
@@ -205,7 +212,7 @@ struct imex_per_box_operators
         #endif
 
         auto& phi = phi_.U();
-        auto& A   = phi_.A();
+        auto& A   = phi_.A1();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -215,12 +222,16 @@ struct imex_per_box_operators
 
         Box b(lower, upper);
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (auto j = lower[1]; j <= upper[1]; ++j)
             for (auto k = lower[2]; k <= upper[2]; ++k)
             {
-                if (!A.is_cached())
-                    profile.build_vertical_operator_for_solve(A, b, dtscale);
+                #pragma omp critical
+                {
+                    if (!A.is_cached())
+                        profile.build_vertical_operator_for_solve(A, b, dtscale);
+                }
+
                 profile.vertical_solve(j, k, A, b, phi);
             }
     } // }}}
@@ -259,7 +270,7 @@ struct imex_per_ld_operators
         DataIterator dit = phi_.U.dataIterator();
         std::size_t nbox = dit.size();
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             sub_problem_state sub_phi(phi_, dit[ibox]);
@@ -281,7 +292,7 @@ struct imex_per_ld_operators
         DataIterator dit = phi_.U.dataIterator();
         std::size_t nbox = dit.size();
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             sub_problem_state sub_phi(phi_, dit[ibox]);
@@ -310,7 +321,7 @@ struct imex_per_ld_operators
         DataIterator dit = phi_.U.dataIterator();
         std::size_t nbox = dit.size();
 
-        #pragma omp parallel for
+        #pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             sub_problem_state sub_phi(phi_, dit[ibox]);
