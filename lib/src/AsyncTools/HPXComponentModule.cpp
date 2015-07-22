@@ -16,6 +16,7 @@
 #include <boost/serialization/export.hpp>
 
 #include "HPXServices.H"
+#include "FArrayBox.H"
 #include "DistributedAsyncLevelData.H"
 
 #include "NamespaceVar.H"
