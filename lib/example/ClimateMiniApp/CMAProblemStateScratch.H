@@ -3,6 +3,8 @@
 
 #include <array>
 
+#include "ARK4.H"
+
 #include "CMAProblemState.H"
 
 namespace climate_mini_app
