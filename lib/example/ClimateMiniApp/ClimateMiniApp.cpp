@@ -32,7 +32,11 @@
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
 
-#include "ARK4.H"
+#if defined(CH_HPX)
+    #include "ARK4.H"
+#else
+    #include "OMPARK4.H"
+#endif
 
 #if defined(CH_HPX)
     #include "HPXDriver.H"
@@ -277,8 +281,9 @@ void stepLoop(
         climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
         climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
     #else
-        typedef climate_mini_app::imex_per_ld_operators<Profile> imexop;
-        typedef ARK4<
+//        typedef climate_mini_app::imex_per_ld_operators<Profile> imexop;
+        typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
+        typedef OMPARK4<
             climate_mini_app::problem_state
           , climate_mini_app::problem_state_scratch<false>
           , imexop

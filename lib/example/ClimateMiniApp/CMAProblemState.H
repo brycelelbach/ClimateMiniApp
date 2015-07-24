@@ -60,6 +60,8 @@ struct FluxFABDataFactory : DataFactory<FArrayBox>
 };
 #endif
 
+struct sub_problem_state;
+
 struct problem_state
 {
     problem_state()
@@ -69,6 +71,7 @@ struct problem_state
       , U()
       , FY()
       , FZ()
+      , dit_()
       #if defined(CH_HPX)
       , epoch_()
       #endif
@@ -81,6 +84,7 @@ struct problem_state
       , U()
       , FY()
       , FZ()
+      , dit_()
       #if defined(CH_HPX)
       , epoch_()
       #endif
@@ -131,14 +135,23 @@ struct problem_state
             FY.define(dbl, comps, ghost, factY);
             FZ.define(dbl, comps, ghost, factZ);
         #endif
+
+        dit_ = U.dataIterator();
+    } // }}}
+
+    sub_problem_state operator[](std::size_t ibox);
+
+    DataIterator dataIterator()
+    { // {{{
+        return U.dataIterator();
     } // }}}
 
     void copy(problem_state const& X)
     { // {{{
         DataIterator dit = U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].copy(X.U[dit[ibox]]);
@@ -150,9 +163,9 @@ struct problem_state
     void setVal(Real val)
     { // {{{
         DataIterator dit = U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].setVal(val);
@@ -164,9 +177,9 @@ struct problem_state
     void plus(problem_state const& X, Real factor)
     { // {{{
         DataIterator dit = U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].plus(X.U[dit[ibox]], factor);
@@ -176,9 +189,9 @@ struct problem_state
     void plus(problem_state const& X)
     { // {{{
         DataIterator dit = U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].plus(X.U[dit[ibox]]);
@@ -210,6 +223,7 @@ struct problem_state
 
     friend struct sub_problem_state;
 
+  public:
     LayoutData<LapackFactorization> A0;
     LayoutData<LapackFactorization> A1;
 
@@ -217,13 +231,17 @@ struct problem_state
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FY;
     AsyncLevelData<FArrayBox> FZ;
-
-  private:
-    LayoutData<std::size_t> epoch_;
 #else
     LevelData<FArrayBox> U;
     LevelData<FArrayBox> FY;
     LevelData<FArrayBox> FZ;
+#endif
+
+  private:
+    DataIterator dit_; // Workaround for RefCountedPtr being not thread-safe.
+
+#if defined(CH_HPX)
+    LayoutData<std::size_t> epoch_;
 #endif
 };
 
@@ -356,6 +374,15 @@ struct sub_problem_state
     problem_state* ps_;
     DataIndex di_;
 };
+
+sub_problem_state problem_state::operator[](std::size_t ibox)
+{ // {{{
+    std::size_t const nbox = dit_.size();
+
+    assert(ibox <= nbox);
+
+    return sub_problem_state(*this, dit_[ibox]);
+} // }}}
 
 }
 

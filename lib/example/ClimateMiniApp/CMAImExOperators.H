@@ -54,7 +54,7 @@ struct imex_per_box_operators
             upper.shift(d, -1*profile.ghostVect()[d]);
         }
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (auto k = lower[2]; k <= upper[2]; ++k)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto i = lower[0]; i <= upper[0]; ++i)
@@ -101,8 +101,8 @@ struct imex_per_box_operators
     void explicitOp(
         Real t
       , std::size_t stage
-      , sub_problem_state& kE_
-      , sub_problem_state& phi_
+      , sub_problem_state&& kE_
+      , sub_problem_state&& phi_
         ) const
     { // {{{
         // For HPX, we operate on sub_problem_states (e.g. FArrayBox
@@ -128,7 +128,7 @@ struct imex_per_box_operators
         ///////////////////////////////////////////////////////////////////////
         // Interior points.
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (auto i = lower[0]; i <= upper[0]; ++i)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto k = lower[2]; k <= upper[2]; ++k)
@@ -145,8 +145,8 @@ struct imex_per_box_operators
     void implicitOp(
         Real t
       , std::size_t stage
-      , sub_problem_state& kI_
-      , sub_problem_state& phi_
+      , sub_problem_state&& kI_
+      , sub_problem_state&& phi_
         ) const
     { // {{{
         auto& kI  = kI_.U();
@@ -182,11 +182,11 @@ struct imex_per_box_operators
             for (hpx::future<void>& f : cols)
                 f.get();
         #else
-            #pragma omp parallel for schedule(dynamic)
+            //#pragma omp parallel for schedule(dynamic)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto k = lower[2]; k <= upper[2]; ++k)
                 {
-                    #pragma omp critical
+                    //#pragma omp critical
                     {
                         if (!A.is_cached()) 
                             profile.build_vertical_operator_for_apply(A, b);
@@ -201,7 +201,7 @@ struct imex_per_box_operators
         Real t
       , std::size_t stage
       , Real dtscale
-      , sub_problem_state& phi_
+      , sub_problem_state&& phi_
         ) const
     { // {{{
         // For HPX, we operate on sub_problem_states (e.g. FArrayBox
@@ -222,11 +222,11 @@ struct imex_per_box_operators
 
         Box b(lower, upper);
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (auto j = lower[1]; j <= upper[1]; ++j)
             for (auto k = lower[2]; k <= upper[2]; ++k)
             {
-                #pragma omp critical
+                //#pragma omp critical
                 {
                     if (!A.is_cached())
                         profile.build_vertical_operator_for_solve(A, b, dtscale);
@@ -263,14 +263,16 @@ struct imex_per_ld_operators
         // If we're using MPI, we do the exchange at problem_state (e.g.
         // LevelData) granularity, and the exchange at the sub_problem_state
         // level (e.g. FArrayBox granularity) is #ifdef'd out. 
+/*
         #if !defined(CH_HPX)
             phi_.exchangeSync();
         #endif
+*/
 
         DataIterator dit = phi_.U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             sub_problem_state sub_phi(phi_, dit[ibox]);
@@ -290,9 +292,9 @@ struct imex_per_ld_operators
         ) const
     { // {{{
         DataIterator dit = phi_.U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             sub_problem_state sub_phi(phi_, dit[ibox]);
@@ -314,14 +316,16 @@ struct imex_per_ld_operators
         // If we're using MPI, we do the exchange at problem_state (e.g.
         // LevelData) granularity, and the exchange at the sub_problem_state
         // level (FArrayBox granularity) is #ifdef'd out. 
+/*
         #if !defined(CH_HPX)
             phi_.exchangeSync();
         #endif
+*/
 
         DataIterator dit = phi_.U.dataIterator();
-        std::size_t nbox = dit.size();
+        std::size_t const nbox = dit.size();
 
-        #pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(dynamic)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             sub_problem_state sub_phi(phi_, dit[ibox]);

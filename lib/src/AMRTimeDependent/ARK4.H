@@ -15,6 +15,8 @@
 
 #include <boost/array.hpp>
 
+#include "ARK4Sizes.H"
+
 #include "NamespaceHeader.H"
 
 /// This is a more flexible, reduced memory version 4th-order additive
@@ -28,12 +30,6 @@
    See also section 3 of Zhang, Johansen, and Colella,
    SIAM J. Sci. Comput. 34, pp. B179-B201.
 */
-
-enum ARK4Sizes : std::size_t
-{
-  s_nStages = 6,
-  s_nDenseCoefs = 3
-};
 
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
 class ARK4;
