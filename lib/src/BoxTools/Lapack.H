@@ -38,11 +38,11 @@ extern "C"
                 double* BETA, double* Y, int* INCY);
 
     // Band matrix LU factorization
-    void dgbtrf_(int* M, int* N, int* KL, int* KU, double* AB, 
+    void dgbtf2_(int* M, int* N, int* KL, int* KU, double* AB, 
                  int* LDAB, int* IPIV, int* INFO);
 
     // Band matrix LU solve
-    void dgbtrs_(char* TRANS, int* N, int* KL, int* KU, int* NRHS, double* AB, 
+    void chombo_dgbtrs_(char* TRANS, int* N, int* KL, int* KU, int* NRHS, double* AB, 
                  int* LDAB, int* IPIV, double* B, int* LDB, int* INFO);
 
     void dgbmv_(char *trans, int *m, int *n, int *kl, int *ku, double *alpha,

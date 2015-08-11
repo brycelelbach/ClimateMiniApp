@@ -48,7 +48,8 @@ void LapackWrapper::factorBandMatrix(LapackFactorization& A)
     int INFO;
 
     // Factorization
-    dgbtrf_(&M, &N, &KL, &KU, A.luPtr(), &LDAB, A.pivotPtr(), &INFO);
+    // dgtf2 is the unblocked version of dgbtrf
+    dgbtf2_(&M, &N, &KL, &KU, A.luPtr(), &LDAB, A.pivotPtr(), &INFO);
 
     CH_assert(INFO == 0);
 }
@@ -67,8 +68,8 @@ void LapackWrapper::solveBandMatrix(LapackFactorization& A, Real* const inout)
     // Solve using factorization
     char TRANS = 'N';
     int NRHS = 1;
-    dgbtrs_(&TRANS, &N, &KL, &KU, &NRHS, A.luPtr(), 
-            &LDAB, A.pivotPtr(), inout, &N, &INFO);
+    chombo_dgbtrs_(&TRANS, &N, &KL, &KU, &NRHS, A.luPtr(), 
+                   &LDAB, A.pivotPtr(), inout, &N, &INFO);
 
     CH_assert(INFO == 0);
 }
