@@ -303,7 +303,7 @@ void BoxLayoutData<T>::makeItSoLocalCopy(const Interval&   a_srcComps,
 
   CH_TIME("local copying");
   CopyIterator it(a_copier, CopyIterator::LOCAL);  int items=it.size();
-  //#pragma omp parallel for
+  #pragma omp parallel for schedule(dynamic)
   for (int n=0; n<items; n++)
     {
       const MotionItem& item = it[n];
@@ -633,7 +633,7 @@ void BoxLayoutData<T>::writeSendDataFromMeIntoBuffers(const BoxLayoutData<T>& a_
                                                   const LDOperator<T>& a_op) const
 {
   CH_TIME("write Data to buffers");
-  //#pragma omp parallel for
+  #pragma omp parallel for schedule(dynamic)
   for (unsigned int i=0; i<m_buff->m_fromMe.size(); ++i)
     {
       const CopierBuffer::bufEntry& entry = m_buff->m_fromMe[i];
