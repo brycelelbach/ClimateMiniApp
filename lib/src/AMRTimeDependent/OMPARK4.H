@@ -110,61 +110,78 @@ void OMPARK4<X, Scratch, ImExOp, DenseOutput>::advance(Real t, X& state)
     auto& kE  = m_scratch.kE;
     auto& kI  = m_scratch.kI;
 
-    #pragma omp parallel for schedule(dynamic)
-    for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+//    #pragma omp parallel
     {
-        // Reset the dense output coefs
-        zeroDenseCoefs(ibox, dense);
-  
-        // Set phi[0] := state, all others 0
-        phi[0][ibox].copy(state[ibox]);
-
-        for (std::size_t stage = 1; stage < s_nStages; stage++)
-            phi[stage][ibox].setVal(0.0);
-    }  
-
-    // For each stage
-    for (std::size_t stage = 0; stage < s_nStages; stage++)
-    {
-        Real next_t = t + s_c[stage]*m_dt;
-
-        if (stage > 0)
-        {
-            #pragma omp parallel for schedule(dynamic)
-            for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-                // Do the solve - copy rhs from phi[stage]
-                phi[stage][ibox].plus(phi[0][ibox]);
-      
-            phi[stage].exchangeSync();
- 
-            #pragma omp parallel for schedule(dynamic)
-            for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-                // Solve in-place for phi[stage] in
-                // (I - s_aIdiag * m_dt * FI) (phi[stage]) = phi[stage].
-                m_opImEx.solve(next_t, stage, s_aIdiag, phi[stage][ibox]);
-        }
-
-        phi[stage].exchangeSync();
-
-        #pragma omp parallel for schedule(dynamic)
+//        #pragma omp parallel for schedule(dynamic) nowait
+        #pragma omp parallel for schedule(dynamic) 
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            // Calculate the operators for this stage
-            m_opImEx.explicitOp(next_t, stage, kE[ibox], phi[stage][ibox]);
-            m_opImEx.implicitOp(next_t, stage, kI[ibox], phi[stage][ibox]);
+            // Reset the dense output coefs
+            zeroDenseCoefs(ibox, dense);
   
-            // Add the known stage operator values to future solves 
-            for (std::size_t k=stage+1; k < s_nStages; ++k)
+            // Set phi[0] := state, all others 0
+            phi[0][ibox].copy(state[ibox]);
+
+            for (std::size_t stage = 1; stage < s_nStages; stage++)
+                phi[stage][ibox].setVal(0.0);
+        }  
+
+        // For each stage
+        for (std::size_t stage = 0; stage < s_nStages; stage++)
+        {
+            Real next_t = t + s_c[stage]*m_dt;
+    
+            if (stage > 0)
             {
-                phi[k][ibox].plus(kE[ibox], m_dt*s_aE[k][stage]);
-                phi[k][ibox].plus(kI[ibox], m_dt*s_aI[k][stage]);
+//                #pragma omp parallel for schedule(dynamic) nowait
+                #pragma omp parallel for schedule(dynamic) 
+                for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+                    // Do the solve - copy rhs from phi[stage]
+                    phi[stage][ibox].plus(phi[0][ibox]);
+
+//                #pragma omp barrier
+
+//                #pragma omp single
+                {          
+                    phi[stage].exchangeSync();
+                }
+
+//                #pragma omp parallel for schedule(dynamic) nowait
+                #pragma omp parallel for schedule(dynamic) 
+                for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+                    // Solve in-place for phi[stage] in
+                    // (I - s_aIdiag * m_dt * FI) (phi[stage]) = phi[stage].
+                    m_opImEx.solve(next_t, stage, s_aIdiag, phi[stage][ibox]);
             }
-  
-            // Accumulate the final solution and accum registers
-            state[ibox].plus(kE[ibox], m_dt*s_b[stage]);
-            state[ibox].plus(kI[ibox], m_dt*s_b[stage]);
-  
-            accumulateDenseCoefs(ibox, stage, dense); 
+
+//            #pragma omp barrier
+
+//            #pragma omp single
+            {
+                phi[stage].exchangeSync();
+            }
+
+//            #pragma omp parallel for schedule(dynamic) nowait
+            #pragma omp parallel for schedule(dynamic) 
+            for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+            {
+                // Calculate the operators for this stage
+                m_opImEx.explicitOp(next_t, stage, kE[ibox], phi[stage][ibox]);
+                m_opImEx.implicitOp(next_t, stage, kI[ibox], phi[stage][ibox]);
+      
+                // Add the known stage operator values to future solves 
+                for (std::size_t k=stage+1; k < s_nStages; ++k)
+                {
+                    phi[k][ibox].plus(kE[ibox], m_dt*s_aE[k][stage]);
+                    phi[k][ibox].plus(kI[ibox], m_dt*s_aI[k][stage]);
+                }
+      
+                // Accumulate the final solution and accum registers
+                state[ibox].plus(kE[ibox], m_dt*s_b[stage]);
+                state[ibox].plus(kI[ibox], m_dt*s_b[stage]);
+      
+                accumulateDenseCoefs(ibox, stage, dense); 
+            }
         }
     }
 }
