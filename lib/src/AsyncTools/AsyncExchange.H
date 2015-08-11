@@ -33,6 +33,9 @@
 
 // FIXME: Add communicate operator to AsyncLevelData.
 
+// FIXME: We need to actually buffer the copy in the future or overlapping will
+// break.
+
 template <typename T>
 void LocalCopyImpl(
     CommType ct
