@@ -98,11 +98,12 @@ struct imex_per_box_operators
         #endif
     } // }}}
 
+    template <typename X>
     void explicitOp(
         Real t
       , std::size_t stage
-      , sub_problem_state&& kE_
-      , sub_problem_state&& phi_
+      , X&& kE_
+      , X&& phi_
         ) const
     { // {{{
         // For HPX, we operate on sub_problem_states (e.g. FArrayBox
@@ -131,27 +132,52 @@ struct imex_per_box_operators
         //#pragma omp parallel for schedule(dynamic)
         for (auto i = lower[0]; i <= upper[0]; ++i)
             for (auto j = lower[1]; j <= upper[1]; ++j)
-                for (auto k = lower[2]; k <= upper[2]; ++k)
+            {
+                auto k = lower[2];
+
+                Real const inv_dh_c = profile.inverse_dh_c();
+
+                for (; k <= upper[2]; k += 4)
                 {
-                    IntVect here(i, j, k);
+                    IntVect h0(i, j, k  );
+                    IntVect h1(i, j, k+1);
+                    IntVect h2(i, j, k+2);
+                    IntVect h3(i, j, k+3);
 
-                    Real const inv_dh_c = profile.inverse_dh_c();
+                    Real ke0, ke1, ke2, ke3;
 
-                    kE(here) = profile.horizontal_stencil(here, FY, FZ, inv_dh_c);
-//                             + profile.source_term(here, t); 
+                    ke0 = profile.horizontal_stencil(h0, FY, FZ, inv_dh_c);
+                    ke1 = profile.horizontal_stencil(h1, FY, FZ, inv_dh_c);
+                    ke2 = profile.horizontal_stencil(h2, FY, FZ, inv_dh_c);
+                    ke3 = profile.horizontal_stencil(h3, FY, FZ, inv_dh_c);
+
+                    kE(h0) = ke0; 
+                    kE(h1) = ke1; 
+                    kE(h2) = ke2; 
+                    kE(h3) = ke3; 
                 }
+
+                // Handle the remainder, if there is one.
+                for (; k <= upper[2]; ++k)
+                {
+                    IntVect h0(i, j, k  );
+
+                    kE(h0) = profile.horizontal_stencil(h0, FY, FZ, inv_dh_c);
+                }
+            }
     } // }}}
 
+    template <typename X>
     void implicitOp(
         Real t
       , std::size_t stage
-      , sub_problem_state&& kI_
-      , sub_problem_state&& phi_
+      , X&& kI_
+      , X&& phi_
         ) const
     { // {{{
         auto& kI  = kI_.U();
         auto& phi = phi_.U();
-        auto& A   = phi_.A0();
+//        auto& A   = phi_.A0();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -186,9 +212,11 @@ struct imex_per_box_operators
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto k = lower[2]; k <= upper[2]; ++k)
                 {
+                    LapackFactorization A;
+
                     //#pragma omp critical
                     {
-                        if (!A.is_cached()) 
+//                        if (!A.is_cached()) 
                             profile.build_vertical_operator_for_apply(A, b);
                     }
 
@@ -197,11 +225,12 @@ struct imex_per_box_operators
         #endif
     } // }}}
 
+    template <typename X>
     void solve(
         Real t
       , std::size_t stage
       , Real dtscale
-      , sub_problem_state&& phi_
+      , X&& phi_
         ) const
     { // {{{
         // For HPX, we operate on sub_problem_states (e.g. FArrayBox
@@ -212,7 +241,7 @@ struct imex_per_box_operators
         #endif
 
         auto& phi = phi_.U();
-        auto& A   = phi_.A1();
+//        auto& A   = phi_.A1();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -226,9 +255,11 @@ struct imex_per_box_operators
         for (auto j = lower[1]; j <= upper[1]; ++j)
             for (auto k = lower[2]; k <= upper[2]; ++k)
             {
+                LapackFactorization A;
+
                 //#pragma omp critical
                 {
-                    if (!A.is_cached())
+//                    if (!A.is_cached())
                         profile.build_vertical_operator_for_solve(A, b, dtscale);
                 }
 

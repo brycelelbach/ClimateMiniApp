@@ -156,7 +156,7 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Real inv_dh_c
         ) const
     { // {{{
-        assert((Dir == 1) || (Dir == 2));
+        static_assert((Dir == 1) || (Dir == 2), "Illegal Dir, should be 1 or 2");
 
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
             IntVect right1(here); right1.setVal(Dir, here[Dir]+1);
