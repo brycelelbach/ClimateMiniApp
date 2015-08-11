@@ -7,7 +7,7 @@ DIM=3
 
 CH_CPP=$(CXX) -E -P -C
 
-XTRACXXFLAGS += -I$(INTELDIR)/mkl/include -DMKL_DIRECT_CALL_SEQ
+XTRACXXFLAGS += -I$(INTELDIR)/mkl/include -mavx
 
 ifeq ($(TARGET),MIC)
     MKLDIR=$(INTELDIR)/mkl/lib/mic
