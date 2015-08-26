@@ -35,8 +35,6 @@
     #include "LevelData.H"
 #endif
 
-#include "LapackFactorization.H"
-
 namespace climate_mini_app
 {
 
@@ -66,9 +64,7 @@ struct problem_state
 {
     problem_state()
     // {{{
-      : A0()
-      , A1()
-      , U()
+      : U()
       , FY()
       , FZ()
       , dit_()
@@ -79,9 +75,7 @@ struct problem_state
 
     problem_state(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     // {{{
-      : A0()
-      , A1()
-      , U()
+      : U()
       , FY()
       , FZ()
       , dit_()
@@ -94,9 +88,6 @@ struct problem_state
 
     void define(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
     { // {{{
-        A0.define(dbl);
-        A1.define(dbl);
-
         U.define(dbl, comps, ghost);
 
         #if defined(CH_HPX)
@@ -117,10 +108,10 @@ struct problem_state
                     b = surroundingNodes(b, 2);
                     ld[di].define(b, ld.nComp());
                 }; 
-     
+
             FY.define(dbl, comps, ghost, defineFY);
             FZ.define(dbl, comps, ghost, defineFZ);
-    
+            
             epoch_.define(dbl);
     
             DataIterator dit(U.dataIterator());
@@ -130,10 +121,10 @@ struct problem_state
                 epoch_[dit()] = 0;
             }
         #else
-            FluxFABDataFactory factY(1), factZ(2);
+            FluxFABDataFactory fluxFactoryY(1), fluxFactoryZ(2);
     
-            FY.define(dbl, comps, ghost, factY);
-            FZ.define(dbl, comps, ghost, factZ);
+            FY.define(dbl, comps, ghost, fluxFactoryY);
+            FZ.define(dbl, comps, ghost, fluxFactoryZ);
         #endif
 
         dit_ = U.dataIterator();
@@ -224,9 +215,6 @@ struct problem_state
     friend struct sub_problem_state;
 
   public:
-    LayoutData<LapackFactorization> A0;
-    LayoutData<LapackFactorization> A1;
-
 #if defined(CH_HPX)
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FY;
@@ -346,28 +334,16 @@ struct sub_problem_state
         return ps_->FZ[di_]; 
     } // }}}
 
-    LapackFactorization& A0()
+    FArrayBox& factor_flops()
     { // {{{
         assert(ps_);
-        return ps_->A0[di_]; 
+        return ps_->factor_flops[di_]; 
     } // }}}
 
-    LapackFactorization const& A0() const
+    FArrayBox const& factor_flops() const
     { // {{{
         assert(ps_);
-        return ps_->A0[di_]; 
-    } // }}}
-
-    LapackFactorization& A1()
-    { // {{{
-        assert(ps_);
-        return ps_->A1[di_]; 
-    } // }}}
-
-    LapackFactorization const& A1() const
-    { // {{{
-        assert(ps_);
-        return ps_->A1[di_]; 
+        return ps_->factor_flops[di_]; 
     } // }}}
 
   private:
