@@ -17,11 +17,42 @@
 #if !defined(CHOMBO_61F4AE03_6BFD_4C15_965B_CBEB03757036)
 #define CHOMBO_61F4AE03_6BFD_4C15_965B_CBEB03757036
 
-#include <cstdint>
-#include <chrono>
+#include <boost/cstdint.hpp>
+#include <boost/chrono/chrono.hpp>
+#include <boost/chrono/process_cpu_clocks.hpp>
 
 namespace climate_mini_app 
 {
+    
+struct high_resolution_clock
+{
+    // This function returns a tick count with a resolution (not
+    // precision!) of 1 ns.
+    static boost::uint64_t now()
+    {
+        boost::chrono::nanoseconds ns =
+            boost::chrono::steady_clock::now().time_since_epoch();
+        return static_cast<boost::uint64_t>(ns.count());
+    }
+
+    // This function returns the smallest representable time unit as
+    // returned by this clock.
+    static boost::uint64_t (min)()
+    {
+        typedef boost::chrono::duration_values<boost::chrono::nanoseconds>
+            duration_values;
+        return (duration_values::min)().count();
+    }
+
+    // This function returns the largest representable time unit as
+    // returned by this clock.
+    static boost::uint64_t (max)()
+    {
+        typedef boost::chrono::duration_values<boost::chrono::nanoseconds>
+            duration_values;
+        return (duration_values::max)().count();
+    }
+};
 
 ///////////////////////////////////////////////////////////////////////////
 //
@@ -32,47 +63,57 @@ namespace climate_mini_app
 class high_resolution_timer
 {
 public:
-    typedef std::chrono::high_resolution_clock::time_point time_point;
-
     high_resolution_timer()
       : start_time_(take_time_stamp())
     {
+    }
+
+    high_resolution_timer(double t)
+      : start_time_(static_cast<boost::uint64_t>(t * 1e9))
+    {}
+
+    static double now()
+    {
+        return take_time_stamp() * 1e-9;
     }
 
     void restart()
     {
         start_time_ = take_time_stamp();
     }
-
-    double elapsed() const // return elapsed time in seconds
+    double elapsed() const                  // return elapsed time in seconds
     {
-        using namespace std::chrono;
-        auto t2 = take_time_stamp();
-        return duration_cast<duration<double> >(t2 - start_time_).count();
+        return double(take_time_stamp() - start_time_) * 1e-9;
     }
 
-    std::int64_t elapsed_microseconds() const
+    boost::int64_t elapsed_microseconds() const
     {
-        using namespace std::chrono;
-        auto t2 = take_time_stamp();
-        return duration_cast<microseconds>(t2 - start_time_).count();
+        return boost::int64_t((take_time_stamp() - start_time_) * 1e-3);
     }
 
-    std::int64_t elapsed_nanoseconds() const
+    boost::int64_t elapsed_nanoseconds() const
     {
-        using namespace std::chrono;
-        auto t2 = take_time_stamp();
-        return duration_cast<nanoseconds>(t2 - start_time_).count();
+        return boost::int64_t(take_time_stamp() - start_time_);
+    }
+
+    double elapsed_max() const   // return estimated maximum value for elapsed()
+    {
+        return (high_resolution_clock::max)() * 1e-9;
+    }
+
+    double elapsed_min() const   // return minimum value for elapsed()
+    {
+        return (high_resolution_clock::min)() * 1e-9;
     }
 
 protected:
-    static time_point take_time_stamp()
+    static boost::uint64_t take_time_stamp()
     {
-        return std::chrono::high_resolution_clock::now();
+        return high_resolution_clock::now();
     }
 
 private:
-    time_point start_time_;
+    boost::uint64_t start_time_;
 };
 
 }
