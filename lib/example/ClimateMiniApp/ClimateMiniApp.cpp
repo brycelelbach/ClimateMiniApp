@@ -15,7 +15,6 @@
 
 #if defined(CH_HPX)
     #include <hpx/config.hpp>
-    #include <hpx/util/high_resolution_timer.hpp>
 #endif
 
 #include <boost/format.hpp>
@@ -47,13 +46,44 @@
 #include "CMAHighResolutionTimer.H"
 
 // FIXME: Move this to ALD
+#if defined(CH_HPX)
+template <typename LD, typename F>
+void visit(LD& soln, F f)
+{
+    std::vector<hpx::future<void> > futures;
+    DataIterator dit = soln.dataIterator();
+
+    for (dit.begin(); dit.ok(); ++dit)
+    { 
+        auto F = 
+            [&](DataIndex di)
+            {
+                auto& subsoln = soln[di];
+                IntVect lower = subsoln.smallEnd();
+                IntVect upper = subsoln.bigEnd(); 
+
+                for (auto k = lower[2]; k <= upper[2]; ++k)
+                    for (auto j = lower[1]; j <= upper[1]; ++j)
+                        for (auto i = lower[0]; i <= upper[0]; ++i)
+                            f(subsoln(IntVect(i, j, k)), IntVect(i, j, k));
+            };
+
+        futures.emplace_back(hpx::async(F, dit()));
+    }
+    
+    hpx::lcos::when_all(futures).get();
+}
+#else
 template <typename LD, typename F>
 void visit(LD& soln, F f)
 {
     DataIterator dit = soln.dataIterator();
-    for (dit.begin(); dit.ok(); ++dit)
-    { 
-        auto& subsoln = soln[dit];
+    std::size_t const nbox = dit.size();
+
+    #pragma omp parallel for schedule(dynamic)
+    for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+    {
+        auto& subsoln = soln[dit[ibox]];
         IntVect lower = subsoln.smallEnd();
         IntVect upper = subsoln.bigEnd(); 
 
@@ -63,6 +93,7 @@ void visit(LD& soln, F f)
                     f(subsoln(IntVect(i, j, k)), IntVect(i, j, k));
     }
 }
+#endif
  
 #if defined(CH_USE_HDF5)
 std::string format_filename(boost::format& fmter)
@@ -281,7 +312,6 @@ void stepLoop(
         climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
         climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
     #else
-//        typedef climate_mini_app::imex_per_ld_operators<Profile> imexop;
         typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
         typedef OMPARK4<
             climate_mini_app::problem_state
