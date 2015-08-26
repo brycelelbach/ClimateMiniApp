@@ -21,14 +21,6 @@
 #include "CMAImExOperators.H"
 #include "CMAProfileBase.H"
 
-/*
-#if defined(__INTEL_COMPILER)
-    #include <mkl_lapacke.h>
-#else
-    #include <lapacke.h>
-#endif
-*/
-
 namespace climate_mini_app
 {
 
@@ -47,12 +39,23 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , kx(kx_), vy(vy_), vz(vz_)
     {} // }}}
 
+    bool implicitOpDisabled() const
+    { // {{{ 
+        // kx == 0
+        return std::fabs(kx-0.0) < 1e-14;
+    } // }}}
+
+    bool explicitOpDisabled() const
+    { // {{{
+        // (vy == 0) || (vz == 0)
+        return (std::fabs(vy-0.0) < 1e-14) || (std::fabs(vz-0.0) < 1e-14);
+    } // }}}
+
     // Time step size
     Real dt() const
     { // {{{
         // Check if advection is on. 
-        // (vy!=0) || (vz!=0)
-        if ((std::fabs(vy-0.0) > 1e-14) || (std::fabs(vz-0.0) > 1e-14))
+        if (!explicitOpDisabled())
         {
             // For advection: 
             //
@@ -184,9 +187,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Real dtscale
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-14)
-            return;
-
         Real const c1 = 1.0;
         Real const c2 = -(kx*dt()*dtscale);
         build_vertical_operator(A, b, c1, c2);
@@ -197,9 +197,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Box b
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-14)
-            return;
-
         Real const c1 = 0.0;
         Real const c2 = kx;
         build_vertical_operator(A, b, c1, c2);
@@ -266,9 +263,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox& phi
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-14)
-            return;
-
         IntVect lower = b.smallEnd();
         IntVect upper = b.bigEnd();
 
@@ -292,9 +286,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , FArrayBox& phi
         ) const
     { // {{{
-        if (std::fabs(kx-0.0) < 1e-14)
-            return;
-
         IntVect lower = b.smallEnd();
         IntVect upper = b.bigEnd();
 
@@ -306,11 +297,15 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
         Real* rhs = &phi(IntVect(lower[0], j, k)); 
 
-        LapackFactorization AB;
-        AB.define(A);
+        LapackWrapper::factorBandMatrix(A);
+        LapackWrapper::solveBandMatrix(A, rhs);
 
-        LapackWrapper::factorBandMatrix(AB);
-        LapackWrapper::solveBandMatrix(AB, rhs);
+        // auto const KL = A.numLower();
+        // auto const KU = A.numUpper();
+        // auto const N  = A.numCols();
+        // 
+        // Real const factor_flops = (2.0 * N * KL * (KL + KU + 1)) / elapsed;
+        // Real const solve_flops = (2.0 * N * (2.0 * KL + KU)) / elapsed;
     } // }}}
 
     Real initial_state(IntVect here) const
