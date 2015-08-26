@@ -76,26 +76,8 @@ struct imex_per_box_operators
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
 
-        // Compute the two horizontal fluxes in parallel if using HPX.
-        #if defined(CH_HPX)
-            using std::ref;
-            using std::cref;
-   
-            auto FlY = &imex_per_box_operators::horizontalFluxDirectional<1>;
-            auto FlZ = &imex_per_box_operators::horizontalFluxDirectional<2>;
- 
-//            auto futY = hpx::async(FlY, this, ref(FY), cref(phi), lower, upper);
-//            auto futZ = hpx::async(FlZ, this, ref(FZ), cref(phi), lower, upper);
-
-            horizontalFluxDirectional<1>(FY, phi, lower, upper);
-            horizontalFluxDirectional<2>(FZ, phi, lower, upper);
-    
-//            futY.get();
-//            futZ.get();
-        #else
-            horizontalFluxDirectional<1>(FY, phi, lower, upper);
-            horizontalFluxDirectional<2>(FZ, phi, lower, upper);
-        #endif
+        horizontalFluxDirectional<1>(FY, phi, lower, upper);
+        horizontalFluxDirectional<2>(FZ, phi, lower, upper);
     } // }}}
 
     template <typename X>
@@ -106,6 +88,9 @@ struct imex_per_box_operators
       , X&& phi_
         ) const
     { // {{{
+        if (explicitOpDisabled())
+            return;
+
         // For HPX, we operate on sub_problem_states (e.g. FArrayBox
         // granularity). For MPI, these exchanges are done on problem_states
         // (e.g. LevelData granularity). 
@@ -175,73 +160,11 @@ struct imex_per_box_operators
       , X&& phi_
         ) const
     { // {{{
+        if (implicitOpDisabled())
+            return;
+
         auto& kI  = kI_.U();
         auto& phi = phi_.U();
-//        auto& A   = phi_.A0();
- 
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd(); 
-
-        lower.shift(profile.config.ghost_vector);
-        upper.shift(-1*profile.config.ghost_vector);
-
-        Box b(lower, upper);
-
-        #if 0 
-            auto F =
-                [&](int j, IntVect lower, IntVect upper, Box b)
-                {
-                    for (auto k = lower[2]; k <= upper[2]; ++k)
-                    {
-                        LapackFactorization A;
-
-                        profile.build_vertical_operator_for_apply(A, b);
-                        profile.apply_vertical_operator(j, k, A, b, kI, phi);
-                    }
-                };
-
-            std::vector<hpx::future<void> > cols;
-
-            for (auto j = lower[1]; j <= upper[1]; ++j)
-                cols.push_back(hpx::async(F, j, lower, upper, b));
-
-            for (hpx::future<void>& f : cols)
-                f.get();
-        #else
-            //#pragma omp parallel for schedule(dynamic)
-            for (auto j = lower[1]; j <= upper[1]; ++j)
-                for (auto k = lower[2]; k <= upper[2]; ++k)
-                {
-                    LapackFactorization A;
-
-                    //#pragma omp critical
-                    {
-//                        if (!A.is_cached()) 
-                            profile.build_vertical_operator_for_apply(A, b);
-                    }
-
-                    profile.apply_vertical_operator(j, k, A, b, kI, phi);
-                }
-        #endif
-    } // }}}
-
-    template <typename X>
-    void solve(
-        Real t
-      , std::size_t stage
-      , Real dtscale
-      , X&& phi_
-        ) const
-    { // {{{
-        // For HPX, we operate on sub_problem_states (e.g. FArrayBox
-        // granularity). For MPI, these exchanges are done on problem_states
-        // (e.g. LevelData granularity). 
-        #if defined(CH_HPX)
-            phi_.exchangeSync();
-        #endif
-
-        auto& phi = phi_.U();
-//        auto& A   = phi_.A1();
  
         IntVect lower = phi.smallEnd();
         IntVect upper = phi.bigEnd(); 
@@ -257,14 +180,62 @@ struct imex_per_box_operators
             {
                 LapackFactorization A;
 
-                //#pragma omp critical
-                {
-//                    if (!A.is_cached())
-                        profile.build_vertical_operator_for_solve(A, b, dtscale);
-                }
+                profile.build_vertical_operator_for_apply(A, b);
+
+                profile.apply_vertical_operator(j, k, A, b, kI, phi);
+            }
+    } // }}}
+
+    template <typename X>
+    void solve(
+        Real t
+      , std::size_t stage
+      , Real dtscale
+      , X&& phi_
+        ) const
+    { // {{{
+        if (implicitOpDisabled())
+            return;
+
+        // For HPX, we operate on sub_problem_states (e.g. FArrayBox
+        // granularity). For MPI, these exchanges are done on problem_states
+        // (e.g. LevelData granularity). 
+        #if defined(CH_HPX)
+            phi_.exchangeSync();
+        #endif
+
+        auto& phi = phi_.U();
+
+        auto& factor_flops = phi_.factor_flops();
+ 
+        IntVect lower = phi.smallEnd();
+        IntVect upper = phi.bigEnd(); 
+
+        lower.shift(profile.config.ghost_vector);
+        upper.shift(-1*profile.config.ghost_vector);
+
+        Box b(lower, upper);
+
+        //#pragma omp parallel for schedule(dynamic)
+        for (auto j = lower[1]; j <= upper[1]; ++j)
+            for (auto k = lower[2]; k <= upper[2]; ++k)
+            {
+                LapackFactorization A;
+
+                profile.build_vertical_operator_for_solve(A, b, dtscale);
 
                 profile.vertical_solve(j, k, A, b, phi);
             }
+    } // }}}
+
+    bool implicitOpDisabled() const
+    { // {{{
+        return profile.implicitOpDisabled();
+    } // }}}
+
+    bool explicitOpDisabled() const
+    { // {{{
+        return profile.explicitOpDisabled();
     } // }}}
 
   private:
