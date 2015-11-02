@@ -8,3 +8,14 @@ exchange_boundary_overlap.c
 
 gsrb.vl.c
 - stencil loop example that uses a 4th-order var coef like ours
+
+From a second batch re: flux calculations, threaded, pipelined, omp4 simd,
+alignment for intel compiler for Div-Flux type calculations:
+
+files: residual.c operators.flux.c gsrb.c
+
+macros are defined in operators.flux.c
+
+residual/gsrb stream thru k calculating the fluxes in i and j as well as a new
+flux in the k direction.  It also saves the old flux in the k direction
+(flux_klo).  It then sums them up to calculate the laplacian.
