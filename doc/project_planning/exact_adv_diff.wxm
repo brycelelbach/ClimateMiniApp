@@ -1,0 +1,41 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 13.04.0 ] */
+
+/* [wxMaxima: input   start ] */
+kill(all);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+omega_z: k_z*c_z^2;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+omega_xy: -c_y*u_y - c_x*u_x;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+phi: exp(- omega_z*t)*cos(c_z*z) + sin(c_x*x + c_y*y - omega_xy*t);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+phi_zz: k_z*diff(diff(phi,z),z);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+phi_t: diff(phi,t);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+u_grad_phi: u_x*diff(phi,x) + u_y*diff(phi,y);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+f: phi_t - phi_zz - u_grad_phi ;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+trigsimp(f);
+/* [wxMaxima: input   end   ] */
+
+/* Maxima can't load/batch files which end with a comment! */
+"Created with wxMaxima"$
