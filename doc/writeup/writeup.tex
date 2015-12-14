@@ -23,7 +23,7 @@
 \section*{AMR Subcycled Miniapp Algorithm Description \\
           Bryce Lelbach and Hans Johansen}
 
-\section{Mini-app: Higher-order ImEx Heat Equation}
+\section{Mini-app: Higher-order ImEx Advection-Diffusion Equation}
 
 \subsection{Domain}
 Define the 3D domain $\Omega$ with the following assumptions:
@@ -32,92 +32,139 @@ Define the 3D domain $\Omega$ with the following assumptions:
     consisting of a disjoint set of boxes, and $l = 0$ base level covering
     the entire domain.
   \item Each box is discretized into cells $h_d$ on a side, indexed
-    on that level with $i$
+    on that level with $(i,j,k)$ in the $(x,y,z)$ directions.
   \item Each box has $N_g$ ghost cells (including corners) to communicate, 
     which must match the stencil size of the operators, and have proper
-    nesting between levels (ghost cells must be filled by stencils on one level).
+    nesting between levels 
+    (ghost cells must be filled by stencils on one level).
 \end{itemize}
 
 \subsection{Equations and finite volume discretization}
-Variable-coefficient heat equation:
+Flux-divergence form of a advection-diffusion equation would
+  have . :
+\begin{equation}
+\label{eqn:adv-diff}
+  \partial_t \phi = \nabla \cdot \left( - \vec{u} \phi \right) 
+    + \nu \Delta \phi \, .
+\end{equation}
+We can split the spatial operators in \eqref{eqn:adv-diff} into 
+  horizontal $(x,y)$ and vertical $(z)$ operators that contain
+  only some of the terms:
 \begin{align}
-\label{eqn:heat}
+\label{eqn:advxy-diffz}
   \partial_t \phi 
-    & = \grad \cdot \left( \beta \grad \phi \right) + S \\
-    & = \partial_x \left( \beta \partial_x \phi \right) 
-      + \partial_y \left( \beta \partial_y \phi \right) 
-      + \partial_y \left( \beta \partial_y \phi \right) 
-      + S
+    & = \partial_x \left( - u_x \phi \right) 
+      + \partial_y \left( - u_y \phi \right) 
+      + \partial_z \left( \nu \partial_z \phi \right)  \, .
 \end{align}
 For a finite volume method, we integrate this over a cell $V_i$ and
   from $t^n$ to $t^{n+1}$ to obtain an
   equation for the evolution of the cell averages in terms of fluxes:
 \begin{align}
    \avg{\phi^{n+1}} - \avg{\phi^n} 
-    & = \dt \sum_d \frac{1}{h_d} \left( \avg{F}_\iphed - \avg{F}_\imhed \right) 
-    + \dt \avg{S}_i \, ,
+    & = \dt \sum_d \frac{1}{h_d} 
+    \left( \avg{F}_\iphed - \avg{F}_\imhed \right) \, ,
 \end{align}
-  where $F = \beta \grad \phi$.
+  where horizontal fluxes $F_x = - u_x \phi$ and $F_y = - u_y \phi$, and 
+  vertical $F_z = \nu \partial_{z} \phi$.
 Note that quantities on the right hand side are averaged
   both in space and in time (from ${n \rightarrow {n+1}}$).
 
 \subsection{Calculating fluxes}
 
-Fourth-order face average of a product:
-\begin{equation}
-  \avg{\beta \, \partial_d \phi}_\iphed = \avg{\beta}_\iphed \, \avg{\partial_d \phi}_\iphed + 
-  \frac{1}{12}\sum_{d'\neq d}
-  h_{d'}^2 \, {\partial_{d'} \beta_d} \, {\partial_{d' d} \phi}  +
-  O(h^4) \\
-\end{equation}
+\subsubsection{Horizontal fluxes}
+Assuming a constant horizontal velocity $\vec{u} = (u_x, u_y)$,
+  with $u_x, u_y \ge 0$,
+  a fifth-order accurate upwind flux stencil is:
+\begin{align}
+  \nonumber
+  \avg{F_x}_{i - \half} & = \avg{-u_x \phi}_{i - \half} \\
+  & = (-u_x) 
+  \left( 
+    +2 \phi_{i - 3}
+    -13 \phi_{i - 2}
+    +47 \phi_{i - 1}
+    +27 \phi_{i}
+    -3 \phi_{i + 1}
+  \right)
+  \frac{1}{60}
+  + O(h^5) \, .
+\end{align}
+The stencil for $F_y$ is similar. Note that these formula require
+  $N_g = 3$ ghost cells, in each direction, but no corner cells.
 
-In stencil form:
-\begin{gather*}
-\avg{\beta \, \partial_d \phi}_{\iphed} = 
-\avg{\beta}_\iphed
-\frac{1}{12 h_d}
-\left[ 
-  \begin{array}{cccc}
-    1  &  -15  &  15  &  -1  
-  \end{array} 
-\right] 
-\left[ 
-  \begin{array}{c}
-    \phi_{\ibold - \ed} \\
-    \phi_{\ibold } \\
-    \phi_{\ibold + \ed} \\
-    \phi_{\ibold + 2\ed} \\
-  \end{array} 
-\right]
- + 
+\subsection{Vertical fluxes and solve}
+In stencil form, if $\nu$ is a constant, the vertical operator is:
+\begin{align}
+  \avg{F_z}_{k - \half} & = \avg{\nu \, \partial_z \phi}_{k - \half} \\ 
+   & = \frac{\nu}{h} \left( \phi_{k} - \phi_{k-1} \right) + O(h^2) \, ,
+\end{align}
+  and we assume $F_z = 0$ at the top and bottom boundaries.
+We wish to advance this part implicitly, so the time integration 
+  requires we solve the following system at each time step:
+\begin{align}
+ \phi^{n+1}_k & = 
+    \phi^n_k + \frac{\dt}{h} \left(F_{k+\half} - F_{k-\half} \right) 
 \\
-\frac{1}{12}
-\sum_{d'\neq d}
-\frac{1}{2 h_{d'}} 
-\left( 
-    \avg{\beta}_{\iphed + \ebold^{d'}} - 
-    \avg{\beta}_{\iphed - \ebold^{d'}} 
-\right)
- \frac{1}{2 h^2} 
-\left[ 
-  \begin{array}{cccc}
-    -1  &  1  &  1  &  -1
-  \end{array} 
-\right] 
-\left[ 
-  \begin{array}{c}
-    \phi_{\ibold       + \ebold^{d'}} \\
-    \phi_{\ibold       - \ebold^{d'}} \\
-    \phi_{\ibold + \ed + \ebold^{d'}} \\
-    \phi_{\ibold + \ed - \ebold^{d'}}
-  \end{array} 
-\right]
-\end{gather*}
-(NOTE: need to fix this last one, it's not correct for $h_d$ different)
+ & = \phi^n_k +
+    \frac{\nu \dt}{h^2} \left(\phi_{k+1}-2\phi_{k}+\phi_{k-1}\right) \, .
+\end{align}
+This leads to a simple tri-diagonal system to be solved each time step
+  for each $(i,j)$ column:
+\begin{align}
+\label{eqn:vertsolve}
+  \begin{bmatrix}
+    (1 + \alpha) & -\alpha & 0 & 0 & \dots  \\
+    -\alpha & (1 + 2 \alpha) & -\alpha & 0 & \dots  \\
+    \dots & -\alpha & (1 + 2 \alpha) & -\alpha & \dots  \\
+    \dots & 0 & -\alpha & (1 + 2 \alpha) & -\alpha \\
+    \dots & 0 &  0 & -\alpha & (1 + \alpha) \\
+  \end{bmatrix}
+  \phi^{n+1}_k = \phi^n_k
+\end{align}
+  where $\alpha = \frac{\nu \dt}{h^2}$.
+
+\subsection{Analytic solution}
+In a domain $x,y,z \in [0,1]$, which is periodic only in the $x,y$ 
+  directions, we can assume a solution of the form:
+\begin{align}
+\nonumber
+  \phi(x,y,z,t) & = V(z,t) + H(x,y,t) \\
+\label{eqn:exact}
+  & = e^{-\omega_z t} \cos(\pi c_z z)
+    + \sin(2\pi (c_x x + c_y y) - \omega_{xy} t) \, ,
+\end{align}
+  where $\omega_z = \nu \pi^2 c_z^2$ and 
+  $\omega_{xy} = u_x c_x + u_y c_y$ .
+Subsituting this into \eqref{eqn:advxy-diffz} shows that it is an exact
+  solution of our model equation.
+
+\subsubsection{Tests}
+For the vertical operator, a simple test is to do just the 
+  implicit solve starting with $\phi^n = V(z,0)$.
+Discrete Fourier analysis on \eqref{eqn:vertsolve} concludes that
+  the solve implies $\phi^{n+1} = \phi^n \left(1 + \dt \gamma_z \right)^{-1}$,
+  where $\gamma_z = \nu (2 - 2 \cos(\pi c_z h)) / h^2$ is the
+  resulting scaling of applying the implicit operator to $V(z,t)$.
+
+Similarly, for $\phi^{n+1} = H(x,y,0)$, an explicit Euler update would be
+  $\phi^{n+1} = \phi^n \left(1 + \dt \nu \gamma_{xy} \right)$,
+  where $\gamma_{xy} = TODO $ is the
+  scaling of applying the explicit operator to $H(x,y,t)$.
 
 \subsection{Time integration}
 
-We can split the spatial operators in \eqref{eqn:heat} into horizontal $(x,y)$ and
-vertical $(z)$ operators that are treated differently depending on the 
+\section{Variations}
+
+\subsection{Horizontal fluxes - spatially-varying velocity}
+This is what the dycore does, which requires corner ghost cells
+\begin{equation}
+  \avg{- u_d \, \partial_d \phi}_\iphed = \avg{u_d}_\iphed 
+    \, \avg{\partial_d \phi}_\iphed + 
+  \frac{1}{12}\sum_{d'\neq d}
+  h_{d'}^2 \, {\partial_{d'} u_d} \, {\partial_{d' d} \phi}  +
+  O(h^4) \\
+\end{equation}
+
 
 \end{document}
