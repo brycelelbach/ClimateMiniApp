@@ -31,7 +31,7 @@ Define the 3D domain $\Omega$ with the following assumptions:
   \item Rectangular domain decomposed into $N_l$ levels, each
     consisting of a disjoint set of boxes, and $l = 0$ base level covering
     the entire domain.
-  \item Each box is discretized into cells $h_d$ on a side, indexed
+  \item Each box is discretized into cells size $h$, indexed
     on that level with $(i,j,k)$ in the $(x,y,z)$ directions.
   \item Each box has $N_g$ ghost cells (including corners) to communicate, 
     which must match the stencil size of the operators, and have proper
@@ -79,6 +79,7 @@ Assuming a constant horizontal velocity $\vec{u} = (u_x, u_y)$,
 \begin{align}
   \nonumber
   \avg{F_x}_{i - \half} & = \avg{-u_x \phi}_{i - \half} \\
+\label{eqn:oh5upwind}
   & = (-u_x) 
   \left( 
     +2 \phi_{i - 3}
@@ -104,13 +105,15 @@ We wish to advance this part implicitly, so the time integration
   requires we solve the following system at each time step:
 \begin{align}
  \phi^{n+1}_k & = 
-    \phi^n_k + \frac{\dt}{h} \left(F_{k+\half} - F_{k-\half} \right) 
+    \phi^n_k + \frac{\dt}{h} 
+    \left(F^{n+1}_{k+\half} - F^{n+1}_{k-\half} \right) 
 \\
  & = \phi^n_k +
-    \frac{\nu \dt}{h^2} \left(\phi_{k+1}-2\phi_{k}+\phi_{k-1}\right) \, .
+    \frac{\nu \dt}{h^2} 
+    \left(\phi^{n+1}_{k+1}-2\phi^{n+1}_{k}+\phi^{n+1}_{k-1}\right) \, .
 \end{align}
-This leads to a simple tri-diagonal system to be solved each time step
-  for each $(i,j)$ column:
+This leads to a simple tri-diagonal system to be solved
+  for each time step on each $(i,j)$ column of $\phi^{n+1}_k$ values:
 \begin{align}
 \label{eqn:vertsolve}
   \begin{bmatrix}
@@ -135,24 +138,44 @@ In a domain $x,y,z \in [0,1]$, which is periodic only in the $x,y$
     + \sin(2\pi (c_x x + c_y y) - \omega_{xy} t) \, ,
 \end{align}
   where $\omega_z = \nu \pi^2 c_z^2$ and 
-  $\omega_{xy} = u_x c_x + u_y c_y$ .
+  $\omega_{xy} = u_x c_x + u_y c_y$, where $c \in \{0, 1, 2, \dots\}$.
 Subsituting this into \eqref{eqn:advxy-diffz} shows that it is an exact
   solution of our model equation.
 
 \subsubsection{Tests}
 For the vertical operator, a simple test is to do just the 
-  implicit solve starting with $\phi^n = V(z,0)$.
+  implicit solve starting with $\phi^n = V(z,0)$, evaluated
+  at cell centers (not sure about cell average initialization).
 Discrete Fourier analysis on \eqref{eqn:vertsolve} concludes that
-  the solve implies $\phi^{n+1} = \phi^n \left(1 + \dt \gamma_z \right)^{-1}$,
-  where $\gamma_z = \nu (2 - 2 \cos(\pi c_z h)) / h^2$ is the
-  resulting scaling of applying the implicit operator to $V(z,t)$.
+  the vertical operator acting on $V(z,0)$ is:
+\begin{gather}
+  L_{z} V(x,0) =  \gamma_z \cos(\pi c_z z)
+  \, , \hbox{ where} \\
+  \gamma_z = \frac{\nu}{h^2} (2 \cos(\pi c_z h) - 2) \, .
+\end{gather}
+Doing the implicit solve \eqref{eqn:vertsolve}
+  on this solution $\phi^n = V(z,0)$
+  implies $\phi^{n+1} = \left(1 - \dt \gamma_z \right)^{-1} \phi^n $,
+  to round-off.
 
-Similarly, for $\phi^{n+1} = H(x,y,0)$, an explicit Euler update would be
-  $\phi^{n+1} = \phi^n \left(1 + \dt \nu \gamma_{xy} \right)$,
-  where $\gamma_{xy} = TODO $ is the
-  scaling of applying the explicit operator to $H(x,y,t)$.
+Similarly, for $\phi^n = H(x,y,0)$, the advection operator
+  using the fifth-order stencil \eqref{eqn:oh5upwind} can be written as
+  an expression that depends on $(u_x,u_y)$, and the ``shift'' $s$
+  of the horizontal operator stencil:
+\begin{equation}
+  L_{xy} H(x,y,0) = 
+    -u_x \sum_s q_s \sin(2\pi c_x (x + sh) + 2\pi c_y y) \, 
+    -u_y \sum_s q_s \sin(2\pi c_x x + 2\pi c_y (y + sh)) 
+  \, ,
+\end{equation}
+  where for $s \in \{-3, \dots, 2\}, q_s = (-2, 15, -60, 20, 30, -3)/(60 h)$
+  is the difference of the face flux stencil, \eqref{eqn:oh5upwind}.
+This should be accurate to round-off.
 
 \subsection{Time integration}
+The horizontal operator requires RK3, RK4 or ARK4, due to its minimal 
+  dissipation and dispersion properties.
+A CFL of $\frac{\dt |\vec{u}|}{h} \le \half$ should be stable.
 
 \section{Variations}
 
