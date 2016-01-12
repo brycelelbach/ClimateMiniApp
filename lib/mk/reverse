@@ -1,23 +1,14 @@
-#!/bin/csh -f
+#!/bin/sh
 
-###
-### Purpose: print the argument list in reverse order
-###
+i=$#
+while [ "$i" -gt 0 ]; do
+  eval "value=\${$i}"
+  echo -n "$value"
+  if [ "$i" -ne 1 ]; then
+    echo -n " "
+  fi
+  i=$((i-1))
+done
 
-if ( $#argv < 1 ) then
-    exit 0
-endif
-
-set noglob
-
-echo -n "${argv[$#argv]:q}"
-
-@ i = $#argv - 1
-
-while ( $i > 0 )
-    echo -n " ${argv[$i]:q}"
-    @ i = $i - 1
-end
-
-echo ""
+echo
 
