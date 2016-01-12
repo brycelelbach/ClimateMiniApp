@@ -93,12 +93,12 @@ o/$(2dconfig)/%.o : %.cpp   d/$(2dconfig)/%.d
 o/$(2dconfig)/%.o : %.ChF  d/$(2dconfig)/%.d
 	$(QUIET)$(chfpp_src) -f $< $(CHFFLAGS) -p p/$(2dconfig)/$(notdir $*.C) -c /dev/null -D 2
 #       this is not as stupid as it looks---see comment below
-	$(QUIET)$(CSHELLCMD) "$(CH_CPP) -DCH_SPACEDIM=2 $(MDCPPFLAGS)  -I. $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT p/$(2dconfig)/$(notdir $*.C) | awk 'NF>0' > p/$(2dconfig)/$(notdir $*.cpre)"
-	$(QUIET)$(CSHELLCMD) "cat p/$(2dconfig)/$(notdir $*.cpre) | $(stripsharp_src)  | $(fortpost)  > f/$(2dconfig)/$*.f"
+	$(QUIET)$(BASHCMD) "$(CH_CPP) -DCH_SPACEDIM=2 $(MDCPPFLAGS)  -I. $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT p/$(2dconfig)/$(notdir $*.C) | awk 'NF>0' > p/$(2dconfig)/$(notdir $*.cpre)"
+	$(QUIET)$(BASHCMD) "cat p/$(2dconfig)/$(notdir $*.cpre) | $(stripsharp_src)  | $(fortpost)  > f/$(2dconfig)/$*.f"
 	$(QUIET)$(FC) $(FFLAGS) $(XTRAFFLAGS) $(fcompflag) f/$(2dconfig)/$*.f $(fobjflag)$@
 
 o/$(2dconfig)/%.o : %.F  d/$(2dconfig)/%.d
-	$(QUIET)$(CSHELLCMD) "$(CH_CPP)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT $< | $(fortpost) | awk 'NF>0' > f/$(2dconfig)/$*.f"
+	$(QUIET)$(BASHCMD) "$(CH_CPP)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT $< | $(fortpost) | awk 'NF>0' > f/$(2dconfig)/$*.f"
 	$(QUIET)$(FC) $(FFLAGS) $(XTRAFFLAGS) $(fcompflag) f/$(2dconfig)/$*.f $(fobjflag)$@
 
 o/$(2dconfig)/%.o : %.f  d/$(2dconfig)/%.d
@@ -117,9 +117,9 @@ o/$(2dconfig)/%.o : %.f  d/$(2dconfig)/%.d
 d/$(2dconfig)/%.d : %.cpp d/$(2dconfig)/.dummy
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
@@ -127,9 +127,9 @@ endif
 d/$(2dconfig)/%.d : %.ChF d/$(2dconfig)/.dummy
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
@@ -137,9 +137,9 @@ endif
 d/$(2dconfig)/%.d : %.F d/$(2dconfig)/.dummy
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
@@ -149,9 +149,9 @@ d/$(2dconfig)/%.d : %.f d/$(2dconfig)/.dummy
 #	$(QUIET)touch $<
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_2dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep)  -DCH_SPACEDIM=2 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(2dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi

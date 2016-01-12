@@ -92,12 +92,12 @@ o/$(1dconfig)/%.o : %.cpp   d/$(1dconfig)/%.d
 
 o/$(1dconfig)/%.o : %.ChF  d/$(1dconfig)/%.d
 	$(QUIET)$(chfpp_src) -f $< $(CHFFLAGS) -p p/$(1dconfig)/$(notdir $*.C) -c /dev/null -D 1
-	$(QUIET)$(CSHELLCMD) "$(CH_CPP) -DCH_SPACEDIM=1 $(MDCPPFLAGS) -I. $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT p/$(1dconfig)/$(notdir $*.C) | awk 'NF>0' > p/$(1dconfig)/$(notdir $*.cpre)"
-	$(QUIET)$(CSHELLCMD) "cat p/$(1dconfig)/$(notdir $*.cpre) | $(stripsharp_src)  | $(fortpost)  > f/$(1dconfig)/$*.f"
+	$(QUIET)$(BASHCMD) "$(CH_CPP) -DCH_SPACEDIM=1 $(MDCPPFLAGS) -I. $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT p/$(1dconfig)/$(notdir $*.C) | awk 'NF>0' > p/$(1dconfig)/$(notdir $*.cpre)"
+	$(QUIET)$(BASHCMD) "cat p/$(1dconfig)/$(notdir $*.cpre) | $(stripsharp_src)  | $(fortpost)  > f/$(1dconfig)/$*.f"
 	$(QUIET)$(FC) $(FFLAGS) $(XTRAFFLAGS) $(fcompflag) f/$(1dconfig)/$*.f $(fobjflag)$@
 
 o/$(1dconfig)/%.o : %.F  d/$(1dconfig)/%.d
-	$(QUIET)$(CSHELLCMD) "$(CH_CPP) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT $< | $(fortpost) | awk 'NF>0' > f/$(1dconfig)/$*.f"
+	$(QUIET)$(BASHCMD) "$(CH_CPP) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $(fcppflags) -DCH_LANG_FORT $< | $(fortpost) | awk 'NF>0' > f/$(1dconfig)/$*.f"
 	$(QUIET)$(FC) $(FFLAGS) $(XTRAFFLAGS) $(fcompflag) f/$(1dconfig)/$*.f $(fobjflag)$@
 
 o/$(1dconfig)/%.o : %.f  d/$(1dconfig)/%.d
@@ -115,9 +115,9 @@ o/$(1dconfig)/%.o : %.f  d/$(1dconfig)/%.d
 d/$(1dconfig)/%.d : %.cpp d/$(1dconfig)/.dummy
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
@@ -125,9 +125,9 @@ endif
 d/$(1dconfig)/%.d : %.ChF d/$(1dconfig)/.dummy
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
@@ -135,9 +135,9 @@ endif
 d/$(1dconfig)/%.d : %.F d/$(1dconfig)/.dummy
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
@@ -147,9 +147,9 @@ d/$(1dconfig)/%.d : %.f d/$(1dconfig)/.dummy
 #	$(QUIET)touch $<
 	@if [ x"$(QUIET)" != x"@" ]; then echo Depending $< ...; fi
 ifdef lbase
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%$(_lib_1dconfig)(\1.o) $@ : %g' > $@"
 else
-	$(ECHO)$(CSHELLCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
+	$(ECHO)$(BASHCMD) "$(mkdep) -DCH_SPACEDIM=1 $(MDCPPFLAGS) $(XTRACPPFLAGS) $< | sed 's%\($*\)\.o[ :]*%o/$(1dconfig)/\1.o $@ : %g' > $@"
 endif
 #	# if $(mkdep) failed, sed will still make the output file so delete it if it is empty
 	$(ECHO)if [ ! -s $@ ]; then $(RM) $@; fi
