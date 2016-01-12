@@ -1,13 +1,20 @@
 # DEBUG=FALSE
 
 INTELDIR=$(shell inteldir)
-CXX=icpc
-FC=ifort
+
+ifeq ($(SYSTEM),EDISON)
+    CXX=CC
+    FC=ftn
+else
+    CXX=icpc
+    FC=ifort
+endif
+
 DIM=3
 
 CH_CPP=$(CXX) -E -P -C
 
-XTRACXXFLAGS += -I$(INTELDIR)/mkl/include -mavx
+XTRACXXFLAGS += -I$(INTELDIR)/mkl/include -I/opt/intel/advisor_xe/include -mavx
 
 ifeq ($(TARGET),MIC)
     MKLDIR=$(INTELDIR)/mkl/lib/mic
@@ -18,10 +25,12 @@ else
 endif
 
 XTRALIBFLAGS += -lsvml
-XTRAPOSTFLAGS += -Wl,--start-group $(MKLDIR)/libmkl_intel_lp64.a $(MKLDIR)/libmkl_lapack95_lp64.a $(MKLDIR)/libmkl_sequential.a $(MKLDIR)/libmkl_core.a -Wl,--end-group
 
-#XTRALIBFLAGS += -mkl=sequential -lsvml
-#LAPACKLIBS = -lmkl
+ifeq ($(SYSTEM),EDISON)
+    XTRALIBFLAGS += -dynamic
+endif
+
+XTRAPOSTFLAGS += -Wl,--start-group $(MKLDIR)/libmkl_intel_lp64.a $(MKLDIR)/libmkl_lapack95_lp64.a $(MKLDIR)/libmkl_sequential.a $(MKLDIR)/libmkl_core.a -Wl,--end-group
 
 ifeq ($(RUNTIME),HPX)
     include $(CHOMBO_HOME)/mk/Make.defs.local.hpx

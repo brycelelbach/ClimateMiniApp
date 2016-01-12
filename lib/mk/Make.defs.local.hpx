@@ -8,20 +8,28 @@ USE_MT=FALSE
 USE_HPX=TRUE
 XTRACXXFLAGS += -DCH_HPX 
 
-ifeq ($(DEBUG),TRUE)
+ifeq ($(OPT),TRUE)
+    HPX_LIB_POSTFIX=
+    XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application) -O3 
+    XTRAPOSTFLAGS += $(shell pkg-config --libs hpx_application)
+    ifeq ($(DEBUG),TRUE)
+        XTRACXXFLAGS += -ggdb -fno-omit-frame-pointer
+    endif
+else # assume we're a debug build
     HPX_LIB_POSTFIX=d
     XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application_debug) -O0 -ggdb
     XTRAPOSTFLAGS += $(shell pkg-config --libs hpx_application_debug)
 endif
-ifeq ($(DEBUG),FALSE)
-    HPX_LIB_POSTFIX=
-    XTRACXXFLAGS += $(shell pkg-config --cflags hpx_application) -O3 
-    XTRAPOSTFLAGS += $(shell pkg-config --libs hpx_application)
+
+ifeq ($(TARGET),MIC)
+    XTRAFFLAGS += -mmic
 endif
 
 HDF5_DIR=/global/homes/w/wash/development/hdf5-1.8.7/HPX_INSTALL
-HDFINCFLAGS=-I$(HDF5_DIR)/include
-HDFLIBFLAGS=-Wl,-rpath=$(HDF5_DIR)/lib -L$(HDF5_DIR)/lib -lhdf5 -lz
+HDFMPIINCFLAGS=-I$(HDF5_DIR)/include
+HDFMPILIBFLAGS=-Wl,-rpath=$(HDF5_DIR)/lib -L$(HDF5_DIR)/lib -lhdf5 -lz
+HDFINCFLAGS=$(HDFMPIINCFLAGS)
+HDFLIBFLAGS=$(HDFMPILIBFLAGS)
 
 ## To run on Stampede, then you would do:
 #include $(CHOMBO_HOME)/mk/local/Make.defs.stampede.cpu_only
