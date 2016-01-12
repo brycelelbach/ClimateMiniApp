@@ -16,6 +16,8 @@
 #if !defined(CHOMBO_B541E23D_4C47_4C2F_8FDC_2FAEE6E2CE81)
 #define CHOMBO_B541E23D_4C47_4C2F_8FDC_2FAEE6E2CE81
 
+#include <hpx/async.hpp>
+
 #include "LayoutData.H"
 #include "IntVect.H"
 #include "Interval.H"
@@ -122,16 +124,30 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     template <typename F>
     void defineData(F&& defineElement)
     {
-        DataIterator dit(this->dataIterator());
+        std::vector<hpx::future<void> > futures;
+        DataIterator dit = this->dataIterator();
+
         for (dit.begin(); dit.ok(); ++dit)
-            defineElement(*this, dit());
+        {
+            auto def =
+                [&](DataIndex di)
+                {
+                    defineElement(*this, di);
+                };
+
+            futures.emplace_back(hpx::async(def, dit()));
+        }
+
+        hpx::lcos::when_all(futures).get();
     }
 
     void installRegions()
     {
         // Same-level ghost zone regions.
         for (AsyncRegion const& ar : m_exchangeCopier.regions())
-            (*this)[ar.toIndex].addRegion(Comm_ExchangeState, ar.toRegion);
+            (*this)[ar.toIndex].addRegion(
+                Comm_ExchangeState, interval(), ar.toRegion
+            );
     } 
 
   public:
@@ -158,13 +174,23 @@ void DefineData(
   , IntVect ghost = IntVect::Zero
     )
 {
-    DataIterator dit(ld.dataIterator());
+    std::vector<hpx::future<void> > futures;
+    DataIterator dit = ld.dataIterator();
+
     for (dit.begin(); dit.ok(); ++dit)
     {
-        Box b = ld.boxLayout()[dit()];
-        b.grow(ghost);
-        ld[dit()].define(b, comps);
+        auto def =
+            [&](DataIndex di)
+            {
+                Box b = ld.boxLayout()[di];
+                b.grow(ghost);
+                ld[di].define(b, comps);
+            };
+
+        futures.emplace_back(hpx::async(def, dit()));
     } 
+
+    hpx::lcos::when_all(futures).get();
 }
 
 #include "NamespaceFooter.H"
