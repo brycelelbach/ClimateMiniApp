@@ -31,47 +31,85 @@
 // functions should be made methods of a new AsyncExchange class. The downside
 // of this is that then we'd have to pass this class around everywhere.
 
+// FIXME FIXME: Yes, turn this into a class.
+
 // FIXME: Add communicate operator to AsyncLevelData.
 
 // FIXME: We need to actually buffer the copy in the future or overlapping will
 // break.
 
+// FIXME: Is (from, to) the correct calling convention? memcpy is (to, from),
+// but std::copy is (from, to).
+
+// FIXME: LDOperator is virtual and awful.
+
+// FIXME: Change comps to be Intervals.
+
 template <typename T>
-void LocalCopyImpl(
-    CommType ct
-  , std::size_t epoch
+void LocalPack(
+    std::size_t epoch
+  , std::size_t ct 
   , AsyncSendInstructions asi 
   , AsyncLevelData<T> const& from_ld
-  , unsigned from_comp
+  , Interval from_comps
   , AsyncLevelData<T>& to_ld
-  , unsigned to_comp
-  , unsigned num_comp
+  , Interval to_comps
     ) 
 {
-    CH_assert(
-        to_ld.nComp() == from_ld.nComp()
-    );
+//    CH_assert(to_ld.nComp() == from_ld.nComp());
 
-    to_ld[asi.toIndex].copy(
-        from_ld[asi.fromIndex]
-      , asi.fromRegion, /* starting comp */ from_comp
-      , asi.toRegion,   /* starting comp */ to_comp
-      , num_comp);
+    CH_assert(to_comps.size() == from_comps.size());
 
-    to_ld[asi.toIndex].store(ct, epoch, asi.toRegion); 
+    CH_assert(to_comps.size() <= to_ld.nComp());
+    CH_assert(from_comps.size() <= from_ld.nComp());
+
+    LDOperator<T> op;
+
+    auto from_size = op.size(from_ld[asi.fromIndex], asi.fromRegion, from_comps);
+    auto to_size   = op.size(to_ld[asi.toIndex], asi.toRegion, to_comps);
+
+    CH_assert(from_size == to_size);
+
+    typename DataflowBox<T>::buffer buf(from_size);
+    void* b = reinterpret_cast<void*>(buf.data());
+
+    op.linearOut(from_ld[asi.fromIndex], b, asi.fromRegion, from_comps);
+
+//    to_ld[asi.toIndex].copy(
+//        from_ld[asi.fromIndex]
+//      , asi.fromRegion, /* starting comp */ from_comp
+//      , asi.toRegion,   /* starting comp */ to_comp
+//      , num_comp);
+
+    to_ld[asi.toIndex].store(epoch, ct, to_comps, asi.toRegion, std::move(buf)); 
+}
+
+template <typename T>
+void LocalUnpack(
+    std::size_t ct
+  , Interval to_comps
+  , Box to_region
+  , DataflowBox<T>& to_box
+  , typename DataflowBox<T>::buffer&& buf
+    )
+{
+    LDOperator<T> op;
+
+    void* b = reinterpret_cast<void*>(buf.data());
+
+    op.linearIn(to_box, b, to_region, to_comps);  
 }
 
 // FIXME: Cache ASI lookup.
 template <typename T>
 hpx::future<void> LocalSendCopyAsync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
-  , unsigned from_comp
+  , Interval from_comps
   , AsyncLevelData<T>& to_ld
-  , unsigned to_comp
-  , unsigned num_comp
+  , Interval to_comps
   , AsyncCopier const& ac 
     )
 {
@@ -100,14 +138,13 @@ hpx::future<void> LocalSendCopyAsync(
                  , unsigned
                  )
 */
-        auto F = LocalCopyImpl<T>;
+        auto F = LocalPack<T>;
 
         outbound.push_back(
             hpx::async(
-                F, ct, epoch, asi
-              , std::ref(from_ld), from_comp
-              , std::ref(to_ld), to_comp
-              , num_comp
+                F, epoch, ct, asi
+              , std::ref(from_ld), from_comps
+              , std::ref(to_ld),   to_comps
             )
         );
     }
@@ -118,54 +155,59 @@ hpx::future<void> LocalSendCopyAsync(
 // Copies all components.
 template <typename T>
 hpx::future<void> LocalSendCopyAsync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
   , AsyncLevelData<T>& to_ld
   , AsyncCopier const& ac 
     )
 {
-    unsigned const num_comp = from_ld.nComp();
-    return LocalSendCopyAsync(ct, epoch, di, from_ld, 0, to_ld, 0, num_comp, ac);
+    return LocalSendCopyAsync(
+        epoch, ct, di
+      , from_ld, Interval(0, from_ld.nComp() - 1)
+      , to_ld,   Interval(0, to_ld.nComp() - 1) 
+      , ac
+    );
 }
 
 template <typename T>
 hpx::future<void> LocalRecvCopyAsync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T>& to_ld
+  , Interval to_comps
     )
 {
-    return to_ld[di].dependAll(ct, epoch);
+    auto F = LocalUnpack<T>;
+    return to_ld[di].enqueueAll(epoch, ct, to_comps, F);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
 hpx::future<void> LocalCopyAsync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
-  , unsigned from_comp
+  , Interval from_comps
   , AsyncLevelData<T>& to_ld
-  , unsigned to_comp
-  , unsigned num_comp
+  , Interval to_comps
   , AsyncCopier const& ac 
     )
 {
     hpx::future<void> outbound
         = LocalSendCopyAsync(
-              ct, epoch, di 
-            , from_ld, from_comp
-            , to_ld, to_comp
-            , num_comp, ac
+              epoch, ct, di 
+            , from_ld, from_comps
+            , to_ld,   to_comps
+            , ac
           );
 
     hpx::future<void> inbound
-        = LocalRecvCopyAsync(ct, epoch, di, to_ld);
+        = LocalRecvCopyAsync(epoch, ct, di, to_ld, to_comps);
 
     return hpx::lcos::when_all(outbound, inbound);
 }
@@ -173,51 +215,54 @@ hpx::future<void> LocalCopyAsync(
 // Copies all components.
 template <typename T>
 hpx::future<void> LocalCopyAsync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
   , AsyncLevelData<T>& to_ld
   , AsyncCopier const& ac 
     )
 {
-    unsigned const num_comp = from_ld.nComp();
-    return LocalCopyAsync(ct, epoch, di, from_ld, 0, to_ld, 0, num_comp, ac);
+    return LocalCopyAsync(
+        epoch, ct, di
+      , from_ld, Interval(0, from_ld.nComp() - 1) 
+      , to_ld,   Interval(0, to_ld.nComp() - 1)
+      , ac
+    );
 }
 
 template <typename T>
 void LocalCopySync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
-  , unsigned from_comp
+  , Interval from_comps
   , AsyncLevelData<T>& to_ld
-  , unsigned to_comp
-  , unsigned num_comp
+  , Interval to_comps
   , AsyncCopier const& ac 
     )
 {
     LocalCopyAsync(    
-        ct, epoch, di 
-      , from_ld, from_comp
-      , to_ld, to_comp
-      , num_comp, ac
+        epoch, ct, di 
+      , from_ld, from_comps
+      , to_ld,   to_comps
+      , ac
     ).get();
 }
 
 // Copies all components.
 template <typename T>
 void LocalCopySync(
-    CommType ct
-  , std::size_t epoch
+    std::size_t epoch
+  , std::size_t ct 
   , DataIndex di 
   , AsyncLevelData<T> const& from_ld
   , AsyncLevelData<T>& to_ld
   , AsyncCopier const& ac 
     )
 {
-    LocalCopyAsync(ct, epoch, di, from_ld, to_ld, ac).get();
+    LocalCopyAsync(epoch, ct, di, from_ld, to_ld, ac).get();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -227,16 +272,15 @@ hpx::future<void> LocalExchangeAsync(
     std::size_t epoch
   , DataIndex di 
   , AsyncLevelData<T>& ld
-  , unsigned from_comp
-  , unsigned to_comp
-  , unsigned num_comp
+  , Interval from_comps
+  , Interval to_comps
     )
 {
     return LocalCopyAsync(
-        Comm_ExchangeState, epoch, di
-      , ld, from_comp
-      , ld, to_comp
-      , num_comp, ld.exchangeCopier()
+        epoch, Comm_ExchangeState, di
+      , ld, from_comps
+      , ld, to_comps
+      , ld.exchangeCopier()
     );
 }
 
@@ -249,7 +293,7 @@ hpx::future<void> LocalExchangeAsync(
     )
 {
     return LocalCopyAsync(
-        Comm_ExchangeState, epoch, di, ld, ld, ld.exchangeCopier()
+        epoch, Comm_ExchangeState, di, ld, ld, ld.exchangeCopier()
     );
 }
 
@@ -258,12 +302,11 @@ void LocalExchangeSync(
     std::size_t epoch
   , DataIndex di 
   , AsyncLevelData<T>& ld
-  , unsigned from_comp
-  , unsigned to_comp
-  , unsigned num_comp
+  , Interval from_comps
+  , Interval to_comps
     )
 {
-    LocalExchangeAsync(epoch, di, ld, from_comp, to_comp, num_comp).get();
+    LocalExchangeAsync(epoch, di, ld, from_comps, to_comps).get();
 }
 
 // Copies all components.
