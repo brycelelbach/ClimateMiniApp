@@ -30,6 +30,7 @@
 #include "AMRIO.H"
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
+#include "HighResolutionTimer.H"
 
 #if defined(CH_HPX)
     #include "ARK4.H"
@@ -43,7 +44,6 @@
 
 #include "CMAProblemStateScratch.H"
 #include "CMAAdvectionDiffusionProfile.H"
-#include "CMAHighResolutionTimer.H"
 
 // FIXME: Move this to ALD
 #if defined(CH_HPX)
@@ -80,7 +80,7 @@ void visit(LD& soln, F f)
     DataIterator dit = soln.dataIterator();
     std::size_t const nbox = dit.size();
 
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(static)
     for (std::size_t ibox = 0; ibox < nbox; ++ibox)
     {
         auto& subsoln = soln[dit[ibox]];
@@ -253,7 +253,7 @@ void stepLoop(
   , Real nt
     )
 { 
-    climate_mini_app::high_resolution_timer clock;
+    HighResolutionTimer clock;
 
     climate_mini_app::configuration const& config = profile.config;
 
@@ -307,7 +307,7 @@ void stepLoop(
     
         for (climate_mini_app::problem_state& ps : phi)
             ps.define(dbl, 1, config.ghost_vector);
-    
+ 
         // FIXME: Can we remove flux, ghost zones?
         climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
         climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
@@ -634,6 +634,7 @@ int main(int argc, char** argv)
             , boost::program_options::value<std::uint64_t>()->
                 default_value(1)
             , "number of OS-threads")
+            ( "help", "print this information")
             ;
  
         boost::program_options::variables_map vm;
