@@ -28,6 +28,12 @@ struct Interval
     m_end(-1)
   {}
 
+  Interval(const Interval& p)
+    :
+    m_begin(p.m_begin),
+    m_end(p.m_end)
+  {}
+
   ///
   /**
       initialize with first and last component numbers
@@ -87,6 +93,12 @@ struct Interval
   bool operator==(const Interval& p) const
   {
     return ( (m_begin == p.m_begin) && (m_end == p.m_end));
+  }
+
+  bool operator<(const Interval& p) const
+  {
+    return std::pair<int, int>(m_begin, m_end)
+         < std::pair<int, int>(p.m_begin, p.m_end);
   }
 
 private:
