@@ -788,7 +788,7 @@ void BoxLayoutData<T>::unpackReceivesToMe(BoxLayoutData<T>& a_dest,
       {
         //hell if I know what to do about failed messaging here
       }
-    //#pragma omp parallel for
+    #pragma omp parallel for schedule(dynamic)
     for (unsigned int i=0; i<m_buff->m_toMe.size(); ++i)
       {
         const CopierBuffer::bufEntry& entry = m_buff->m_toMe[i];
@@ -820,7 +820,7 @@ void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr
       {
         //hell if I know what to do about failed messaging here
       }
-   //#pragma omp parallel for
+    #pragma omp parallel for schedule(dynamic)
     for (unsigned int i=0; i<m_buff->m_toMe.size(); ++i)
       {
         const CopierBuffer::bufEntry& entry = m_buff->m_toMe[i];
@@ -877,7 +877,7 @@ void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
 
     // perform local copy
   CopyIterator it(a_copier, CopyIterator::LOCAL); int items=it.size();
-  //#pragma omp parallel for
+  #pragma omp parallel for schedule(dynamic)
   for (int i=0; i<items; i++)
     {
       const MotionItem& item = it[i];
