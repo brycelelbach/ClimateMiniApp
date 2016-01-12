@@ -58,10 +58,6 @@ BoxLayout::operator[](const DataIterator& index) const
   return this->operator[](index());
 }
 
-BoxLayout::~BoxLayout()
-{
-}
-
 BoxLayout::BoxLayout()
   :m_boxes(new Vector<Entry>()),
    m_layout(new int),

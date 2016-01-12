@@ -182,7 +182,7 @@ public:
     are cleaned up
   */
   virtual
-  ~BoxLayout();
+  ~BoxLayout() {}
 
   ///
   /**
