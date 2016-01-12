@@ -56,7 +56,7 @@ AM_LDFLAGS = -L$(HDF5LIBPATH) -L$(pkglibdir) $(LG2C) $(LEXTRA)
 # have been innocuous.
 
 %.f : %.cpre
-	/bin/csh -f -c "cat $< | $(PERL) -I $(chfpp_dir) $(chfpp_dir)/stripsharpmain.pl  | $(PERL) -I $(chfpp_dir) $(chfpp_dir)/fort72  > $@"	
+	/bin/sh -f -c "cat $< | $(PERL) -I $(chfpp_dir) $(chfpp_dir)/stripsharpmain.pl  | $(PERL) -I $(chfpp_dir) $(chfpp_dir)/fort72  > $@"	
 
 
 MOSTLYCLEANFILES = *.C *.cpre installed_multidim.flag

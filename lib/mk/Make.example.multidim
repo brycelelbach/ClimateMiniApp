@@ -302,7 +302,7 @@ AUTONAME=FALSE
 $(mdebase) : $(mdebase).$(newconfig).ex
 
 $(mdebase).$(newconfig).ex : $(local_base_object) $(local_app_objects)  $(shell $(CHOMBO_HOME)/mk/reverse $(all_libs)) 
-	$(QUIET)$(CSHELLCMD) "$(LD) $(CXXFLAGS) $(XTRACXXFLAGS) $(LDFLAGS) $(XTRALDFLAGS) $< $(local_app_objects)  $(MDLIBFLAGS) $(XTRALIBFLAGS) $(cxxexeflag)$@ |&  awk -f $(CHOMBO_HOME)/mk/tempnam.awk"	
+	$(QUIET)$(BASHCMD) "$(LD) $(CXXFLAGS) $(XTRACXXFLAGS) $(LDFLAGS) $(XTRALDFLAGS) $< $(local_app_objects)  $(MDLIBFLAGS) $(XTRALIBFLAGS) $(cxxexeflag)$@ 2>&1 | awk -f $(CHOMBO_HOME)/mk/tempnam.awk"	
 
 
 # This file exists solely to force creation of the subdirectories that
