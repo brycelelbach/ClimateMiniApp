@@ -303,7 +303,9 @@ void BoxLayoutData<T>::makeItSoLocalCopy(const Interval&   a_srcComps,
 
   CH_TIME("local copying");
   CopyIterator it(a_copier, CopyIterator::LOCAL);  int items=it.size();
+#ifdef CH_MPI
   #pragma omp parallel for schedule(dynamic)
+#endif
   for (int n=0; n<items; n++)
     {
       const MotionItem& item = it[n];
@@ -877,7 +879,9 @@ void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
 
     // perform local copy
   CopyIterator it(a_copier, CopyIterator::LOCAL); int items=it.size();
+#ifdef CH_MPI
   #pragma omp parallel for schedule(dynamic)
+#endif
   for (int i=0; i<items; i++)
     {
       const MotionItem& item = it[i];
