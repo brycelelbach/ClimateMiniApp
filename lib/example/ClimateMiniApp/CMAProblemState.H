@@ -28,6 +28,8 @@
 #include "IntVect.H"
 #include "FArrayBox.H"
 
+#include "VectorizedFABOps.H"
+
 #if defined(CH_HPX)
     #include "AsyncLevelData.H"
     #include "AsyncExchange.H"
@@ -142,7 +144,7 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].copy(X.U[dit[ibox]]);
@@ -156,7 +158,7 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].setVal(val);
@@ -170,7 +172,7 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].plus(X.U[dit[ibox]], factor);
@@ -182,7 +184,7 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(dynamic)
+        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].plus(X.U[dit[ibox]]);
@@ -262,9 +264,12 @@ struct sub_problem_state
 
     void copy(sub_problem_state const& X)
     { // {{{
-        U().copy(X.U());
-        FY().copy(X.FY());
-        FZ().copy(X.FZ());
+        vectorizedCopy(X.U(), U());
+        vectorizedCopy(X.FY(), FY());
+        vectorizedCopy(X.FZ(), FZ());
+//        U().copy(X.U());
+//        FY().copy(X.FY());
+//        FZ().copy(X.FZ());
     } // }}}
 
     void setVal(Real val)
@@ -276,12 +281,60 @@ struct sub_problem_state
 
     void plus(sub_problem_state const& X, Real factor)
     { // {{{
-        U().plus(X.U(), factor);
+        auto&       dest = U();
+        auto const& src  = X.U();
+
+        vectorizedPlus(src, dest, factor);
+/*
+        assert(dest.box() == src.box());
+        assert(dest.nComp() == src.nComp());
+
+        for (auto n = 0; n < dest.nComp(); ++n)
+        {
+            Real* __restrict__       dest_p = dest.dataPtr(n);
+            Real const* __restrict__ src_p  = src.dataPtr(n);
+
+            IntVect const lower = dest.smallEnd();
+            IntVect const upper = dest.bigEnd(); 
+
+            auto const size = (upper[0]-lower[0]+1)
+                            * (upper[1]-lower[1]+1)
+                            * (upper[2]-lower[2]+1);
+
+            #pragma simd
+            for (auto i = 0; i < size; ++i)
+                dest_p[i] += factor * src_p[i];
+        }
+*/
     } // }}}
 
     void plus(sub_problem_state const& X)
     { // {{{
-        U().plus(X.U());
+        auto&       dest = U();
+        auto const& src  = X.U();
+
+        vectorizedPlus(src, dest);
+/*
+        assert(dest.box() == src.box());
+        assert(dest.nComp() == src.nComp());
+
+        for (auto n = 0; n < dest.nComp(); ++n)
+        {
+            Real* __restrict__       dest_p = dest.dataPtr(n);
+            Real const* __restrict__ src_p  = src.dataPtr(n);
+
+            IntVect const lower = dest.smallEnd();
+            IntVect const upper = dest.bigEnd(); 
+
+            auto const size = (upper[0]-lower[0]+1)
+                            * (upper[1]-lower[1]+1)
+                            * (upper[2]-lower[2]+1);
+
+            #pragma simd
+            for (auto i = 0; i < size; ++i)
+                dest_p[i] += src_p[i];
+        }
+*/
     } // }}}
 
 #if defined(CH_HPX)
@@ -295,6 +348,15 @@ struct sub_problem_state
     { // {{{
         assert(ps_);
         LocalExchangeSync(ps_->epoch_[di_]++, di_, ps_->U);
+    } // }}}
+
+    // FIXME FIXME FIXME
+    void exchangeFluxSync()
+    { // {{{
+        assert(ps_);
+        auto ffy = LocalExchangeAsync(ps_->epoch_[di_]++, di_, ps_->FY);
+        auto ffz = LocalExchangeAsync(ps_->epoch_[di_]++, di_, ps_->FZ);
+        hpx::lcos::when_all(ffy, ffz).get();
     } // }}}
 #endif
 
@@ -332,18 +394,6 @@ struct sub_problem_state
     { // {{{
         assert(ps_);
         return ps_->FZ[di_]; 
-    } // }}}
-
-    FArrayBox& factor_flops()
-    { // {{{
-        assert(ps_);
-        return ps_->factor_flops[di_]; 
-    } // }}}
-
-    FArrayBox const& factor_flops() const
-    { // {{{
-        assert(ps_);
-        return ps_->factor_flops[di_]; 
     } // }}}
 
   private:

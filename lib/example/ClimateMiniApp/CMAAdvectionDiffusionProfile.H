@@ -47,8 +47,8 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
     bool explicitOpDisabled() const
     { // {{{
-        // (vy == 0) || (vz == 0)
-        return (std::fabs(vy-0.0) < 1e-14) || (std::fabs(vz-0.0) < 1e-14);
+        // (vy == 0) && (vz == 0)
+        return (std::fabs(vy-0.0) < 1e-14) && (std::fabs(vz-0.0) < 1e-14);
     } // }}}
 
     // Time step size
@@ -94,41 +94,39 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 
         return domain;
     } // }}} 
-    
-    template <std::size_t Dir>
+
+    // FIXME: handle negative velocity
+    template <std::size_t Dir, typename Integral>
     Real horizontal_flux_stencil(
-        IntVect here
-      , FArrayBox const& phi
+        Real const* p
+      , Integral idx
+      , Integral step 
         ) const
     { // {{{
-        Real const dh = dp()[1]; 
+        static_assert((1 == Dir) || (2 == Dir)
+                    , "Illegal Dir, should be 1 or 2");
+        return (1 == Dir ? vy : vz) * 0.5 * (p[idx-step] + p[idx]);
 
-        Real v = 0.0;
-        IntVect left;
+/* {{{
+        auto const v = (1 == Dir ? vy : vz);
+        auto constexpr denom = 1.0/60.0;
 
-        if      (1 == Dir)
-        { 
-            v = vy;
-            left = IntVect(here[0], here[1]-1, here[2]);
-        }
+        auto const f0 = ( 37.0 * (p[idx]        + p[idx-step]  )
+                        - 8    * (p[idx+step]   + p[idx-2*step])
+                        +        (p[idx+2*step] + p[idx-3*step])
+                        );
 
-        else if (2 == Dir)
-        {
-            v = vz;
-            left = IntVect(here[0], here[1], here[2]-1);
-        }
+        auto const f1 = ( 10.0 * (p[idx+step]   - p[idx]       )
+                        - 5.0  * (p[idx+2*step] - p[idx-step]  )
+                        +        (p[idx+3*step] - p[idx-2*step])
+                        );
 
-        else
-            assert(false);
-
-        if (!phi.box().contains(left))
-            return 0.0;
-
-        return v * 0.5 * (phi(left) + phi(here));
+        return v * denom * f0 - std::fabs(v) * denom * f1;
+}}} */
     } // }}}
 
     Real inverse_dh_c() const
-    {
+    { // {{{
         Real const dh = dp()[1]; 
 
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
@@ -137,8 +135,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
             Real constexpr c = (-1.0/60.0);
             return c*(1.0/dh); 
         #endif
-    }
+    } // }}}
 
+/*
     // FIXME: IntVect indexing may be expensive, compare to Hans' loops
     Real horizontal_stencil(
         IntVect here
@@ -150,7 +149,9 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         return horizontal_stencil_1d<1>(here, FY, inv_dh_c)
              + horizontal_stencil_1d<2>(here, FZ, inv_dh_c);
     } // }}}
+*/
 
+/*
     // FIXME - should be a tiled stencil loop
     template <std::size_t Dir>
     Real horizontal_stencil_1d(
@@ -159,13 +160,40 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Real inv_dh_c
         ) const
     { // {{{
-        static_assert((Dir == 1) || (Dir == 2), "Illegal Dir, should be 1 or 2");
+        static_assert((1 == Dir) || (2 == Dir)
+                    , "Illegal Dir, should be 1 or 2");
 
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
             IntVect right1(here); right1.setVal(Dir, here[Dir]+1);
     
             return inv_dh_c * (F(right1) - F(here)); 
         #else
+            Real const* p = F.dataPtr(0); // FIXME: Maybe restrict.
+            Box const b = F.box();
+    
+            auto idx = here[0]-b.smallEnd(0);
+    
+            auto const len0 = (b.bigEnd(0)-b.smallEnd(0)+1);
+            auto const len1 = (b.bigEnd(1)-b.smallEnd(1)+1);
+    
+            auto const dif1 = here[1]-b.smallEnd(1);
+            auto const dif2 = here[2]-b.smallEnd(2);
+    
+            idx += len0*(dif1 + len1*dif2);
+    
+            decltype(idx) step = 0; 
+    
+            if (1 == Dir)
+                step = len0;
+            else // 2 == Dir
+                step = len0*len1; 
+
+            return inv_dh_c
+                 * ( 3.0*p[idx-2*step] - 30.0*p[idx-1*step]
+                   - 20.0*p[idx]
+                   + 60.0*p[idx+1*step] - 15.0*p[idx+2*step] + 2.0*p[idx+3*step]
+                   );
+#ifdef 0
             IntVect left2(here); left2.setVal(Dir, here[Dir]-2);
             IntVect left1(here); left1.setVal(Dir, here[Dir]-1);
     
@@ -177,8 +205,28 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
                  * ( 3.0*F(left2) - 30.0*F(left1)
                    - 20.0*F(here)
                    + 60.0*F(right1) - 15.0*F(right2) + 2.0*F(right3)
-                   ); 
+                   );
+#endif
         #endif
+    } // }}}
+*/
+
+    template <std::size_t Dir, typename Integral>
+    Real horizontal_stencil_1d(
+        Real const* p
+      , Integral idx
+      , Integral step 
+      , Real inv_dh_c
+        ) const
+    { // {{{
+        static_assert((1 == Dir) || (2 == Dir)
+                    , "Illegal Dir, should be 1 or 2");
+
+        return inv_dh_c
+             * ( 3.0*p[idx-2*step] - 30.0*p[idx-1*step]
+               - 20.0*p[idx]
+               + 60.0*p[idx+1*step] - 15.0*p[idx+2*step] + 2.0*p[idx+3*step]
+               );
     } // }}}
 
     void build_vertical_operator_for_solve(
