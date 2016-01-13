@@ -3,18 +3,19 @@
 #ifndef _RKACCUM_H_
 #define _RKACCUM_H_
 
+template<int N>
 struct RKAccum {
-  int nAccum;
-  Real scale[10];
-  LevelData<FArrayBox>* accum[10];
+  const int nAccum=N;
+  Real scale[N];
+  LevelData<FArrayBox>* accum[N];
 };
 
+template<int N>
 struct RKAccumFAB {
-  int nAccum;
-  Real scale[10];
-  Real* accum[10];
+  const int nAccum=N;
+  Real scale[N];
+  Real* accum[N];
   dataix d;
-  // FArrayBox* accum[10];
 };
 
 #endif

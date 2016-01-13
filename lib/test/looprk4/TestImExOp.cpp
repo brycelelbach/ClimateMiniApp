@@ -11,6 +11,7 @@
 #include "TestImExOp.H"
 #include "LevelDataOps.H"
 #include "StencilLoopMacros.H"
+#include "StencilLoopOps.H"
 
 #include "NamespaceHeader.H"
 
@@ -59,16 +60,11 @@ TestImExOp::resetDt(Real a_dt)
 }
 
 
+#if 0
 void
 TestImExOp::explicitOp(TestRhsData& a_result, Real a_time, 
                        const TestSolnData&  a_state, 
-                       RKAccum& a_rk)
-                       /*
-                       const Real a_stageScale,  
-                       TestSolnData&  a_stage, 
-                       const Real a_finalScale,
-                       TestRhsData&  a_final_state)
-                       */
+                       RKAccum<N>& a_rk)
 {
   CH_TIMERS("TestImExOp::explicitOp");
   CH_assert(isDefined());
@@ -95,57 +91,10 @@ TestImExOp::explicitOp(TestRhsData& a_result, Real a_time,
       
       // This is just a simple test for the time integration
       Real opval = 4.0*s_cE*pow(a_time,3); // d/dt of 1 + cE*t^4
-      setValLoop(resultDataFab, b, opval, 0, rkfab);
+      setValLoop<2>(resultDataFab, b, opval, 0, rkfab);
     }
 }
-
-
-/**
- * setValLoop
- * Set a cell-centered fab component to the value using the macro SET_OP_IJK
- * a_data - cell-centered fab that will be set
- * a_box - cell-centered box where value will be set
- * val - value to set fab to
- * a_comp - component of the fab to set
- */
-#define SET_OP_IJK(val)       \
-  (           \
-                val \
-  )
-
-void
-TestImExOp::setValLoop(FArrayBox& a_data, const Box& a_box, 
-    Real a_val, int a_comp, RKAccumFAB& a_rkfab)
-{
-  CH_assert(a_data.box().contains(a_box));
-
-  CH_TIMERS("TestImExOp::setValLoop");
-  CH_TIMER("loop",t);
-
-  loop l;
-  SET_LOOP(l,a_box);
-
-  dataix d;
-  SET_DATAIX(d,a_data,a_box);
-  Real* data = a_data.dataPtr(a_comp);
-
-  CH_START(t);
-  int i,j,k,n;
-  for (k=0; k<l.size[2]; k++) {
-  for (j=0; j<l.size[1]; j++) {
-  for (i=0; i<l.size[0]; i++) {
-    int ijk = OFFSET_DATAIX(d);
-    Real opval = SET_OP_IJK(a_val);
-    data[ijk] = opval;
-
-    // update any other pointers with the operator
-    int aijk = OFFSET_DATAIX(a_rkfab.d);
-    for (n=0; n < a_rkfab.nAccum; n++)
-      a_rkfab.accum[n][aijk] += a_rkfab.scale[n]*opval;
-  } } }
-  CH_STOP(t);
-}
-
+#endif
 
 void
 TestImExOp::implicitOp(TestRhsData&             a_result,

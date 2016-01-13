@@ -74,18 +74,10 @@ struct dataix
 
 #define OFFSET_DATAIX(dataix)       \
   ( \
-    D_TERM((i+dataix.shift[0])*dataix.stride[0], \
+    D_TERM(i+dataix.shift[0], \
       + (j+dataix.shift[1])*dataix.stride[1], \
       + (k+dataix.shift[2])*dataix.stride[2]) \
   )
-
-#define OFFSET_DATAIX_II(dataix,i,j,k)       \
-  ( \
-    D_TERM((i+dataix.shift[0])*dataix.stride[0], \
-      + (j+dataix.shift[1])*dataix.stride[1], \
-      + (k+dataix.shift[2])*dataix.stride[2]) \
-  )
-
 
 #include "NamespaceFooter.H"
 #endif

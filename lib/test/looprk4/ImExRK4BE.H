@@ -12,7 +12,8 @@
 #define _ImExRK4BE_H_
 
 #include "CH_Timer.H"
-#include "RKAccum.H"
+#include "TestImExOp.H"
+#include "StencilLoopOps.H"
 
 #include "NamespaceHeader.H"
 
@@ -169,13 +170,12 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     Real nextScale = m_dt*s_aE[stage+1];
     m_stage.copy(a_state);
     // Initialize the accumulate pointers and scales
-    RKAccum rk4;
-    rk4.nAccum = 2;
-    rk4.scale[0] = nextScale;
-    rk4.scale[1] = finalScale;
-    rk4.accum[0] = &(m_stage.data());
-    rk4.accum[1] = &(m_final.data());
-    m_opImExPtr->explicitOp(m_kE, t, a_state, rk4);
+    RKAccum<2> rk4s0;
+    rk4s0.scale[0] = nextScale;
+    rk4s0.scale[1] = finalScale;
+    rk4s0.accum[0] = &(m_stage.data());
+    rk4s0.accum[1] = &(m_final.data());
+    explicitOp<2>(m_kE, t, a_state, rk4s0);
     
     // stage 1
     stage = 1;
@@ -184,12 +184,12 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     nextScale = m_dt*s_aE[stage+1];
     finalScale = m_dt*s_b[stage];
     // Initialize the accumulate pointers and scales
-    rk4.nAccum = 2;
-    rk4.scale[0] = nextScale;
-    rk4.scale[1] = finalScale;
-    rk4.accum[0] = &(m_tmp.data());
-    rk4.accum[1] = &(m_final.data());
-    m_opImExPtr->explicitOp(m_kE, t, a_state, rk4);
+    RKAccum<2> rk4s1;
+    rk4s1.scale[0] = nextScale;
+    rk4s1.scale[1] = finalScale;
+    rk4s1.accum[0] = &(m_tmp.data());
+    rk4s1.accum[1] = &(m_final.data());
+    explicitOp<2>(m_kE, t, a_state, rk4s1);
     
     // stage 2
     stage = 2;
@@ -198,12 +198,12 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     m_stage.copy(a_state);
     finalScale = m_dt*s_b[stage];
     // Initialize the accumulate pointers and scales
-    rk4.nAccum = 2;
-    rk4.scale[0] = nextScale;
-    rk4.scale[1] = finalScale;
-    rk4.accum[0] = &(m_stage.data());
-    rk4.accum[1] = &(m_final.data());
-    m_opImExPtr->explicitOp(m_kE, t, a_state, rk4);
+    RKAccum<2> rk4s2;
+    rk4s2.scale[0] = nextScale;
+    rk4s2.scale[1] = finalScale;
+    rk4s2.accum[0] = &(m_stage.data());
+    rk4s2.accum[1] = &(m_final.data());
+    explicitOp<2>(m_kE, t, a_state, rk4s2);
 
     // stage 3
     stage = 3;
@@ -211,10 +211,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     nextScale = 0; // No next stage update
     finalScale = m_dt*s_b[stage];
     // Initialize the accumulate pointers and scales
-    rk4.nAccum = 1;
-    rk4.scale[0] = finalScale;
-    rk4.accum[0] = &(m_final.data());
-    m_opImExPtr->explicitOp(m_kE, t, a_state, rk4);
+    RKAccum<1> rk4s3;
+    rk4s3.scale[0] = finalScale;
+    rk4s3.accum[0] = &(m_final.data());
+    explicitOp<1>(m_kE, t, a_state, rk4s3);
   }
 
   // Calculate the final stage update for the explicit operator

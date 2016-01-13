@@ -15,7 +15,7 @@
 #include "LevelData.H"
 #include "TestSolnData.H"
 #include "TestRhsData.H"
-#include "RKAccum.H"
+// #include "RKAccum.H"
 
 #include "NamespaceHeader.H"
 
@@ -48,13 +48,12 @@ public:
 
   Real exact(Real a_time);
 
+/*
   virtual void explicitOp(TestRhsData&             a_result,
                           Real                    a_time,
                           const TestSolnData&  a_state, 
-                          RKAccum& a_rk4);
-
-  virtual void setValLoop(FArrayBox& a_data, const Box& a_box, 
-    Real val, int a_comp, RKAccumFAB& a_rkfab);
+                          RKAccum<N>& a_rk4);
+*/
 
   virtual void implicitOp(TestRhsData&             a_result,
                           Real                    a_time,
