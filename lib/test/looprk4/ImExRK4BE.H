@@ -166,9 +166,9 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     int stage = 0;
     Real t = a_time + s_c[stage]*m_dt;
     Real finalScale = m_dt*s_b[stage];
-    m_final.copy(a_state);
+    m_final.copy(a_state); // TODO - loop copy
     Real nextScale = m_dt*s_aE[stage+1];
-    m_stage.copy(a_state);
+    m_stage.copy(a_state); // TODO - loop copy
     // Initialize the accumulate pointers and scales
     RKAccum<2> rk4s0;
     rk4s0.scale[0] = nextScale;
@@ -180,7 +180,7 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     // stage 1
     stage = 1;
     t = a_time + s_c[stage]*m_dt;
-    m_tmp.copy(a_state);
+    m_tmp.copy(a_state); // TODO - loop copy
     nextScale = m_dt*s_aE[stage+1];
     finalScale = m_dt*s_b[stage];
     // Initialize the accumulate pointers and scales
@@ -195,7 +195,7 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     stage = 2;
     t = a_time + s_c[stage]*m_dt;
     nextScale = m_dt*s_aE[stage+1];
-    m_stage.copy(a_state);
+    m_stage.copy(a_state); // TODO - loop copy
     finalScale = m_dt*s_b[stage];
     // Initialize the accumulate pointers and scales
     RKAccum<2> rk4s2;
@@ -221,7 +221,8 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
   // m_kE.copy(a_state);
   // m_kE.increment(m_kI, 1); // m_kE is tmp state for solve, phi^n + dt*expOp
   // a_state.increment(m_kI, 1); // m_kE is tmp state for solve, phi^n + dt*expOp
-  a_state.copy(m_final); // final from the RK4 integrator
+  // final from the RK4 integrator   
+  a_state.copy(m_final); // TODO - loop copy
   CH_STOP(t1);
 
 /*

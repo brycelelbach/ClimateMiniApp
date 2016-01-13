@@ -89,4 +89,18 @@ explicitOp(TestRhsData& a_result, Real a_time,
     }
 }
 
+inline void vectorizedCopy(const FArrayBox& a_from, FArrayBox& a_to)
+{
+  CH_TIMERS("vectorizedCopy");
+  CH_assert(a_from.size() == a_to.size());
+  CH_assert(a_from.nComp() == a_to.nComp());
+
+  Real const* from_p = a_from.dataPtr();
+  Real* to_p = a_to.dataPtr();
+  int const numPts = a_to.linearSize();
+  #pragma simd
+  for (int i=0; i < numPts; i++)
+    to_p[i] = from_p[i];
+}
+
 #endif
