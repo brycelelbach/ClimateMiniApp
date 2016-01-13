@@ -57,12 +57,19 @@ public:
   // Advance one step.
   void advance(Real t, X& state);
 
+  template <std::size_t Stage>
+  // Advance one stage.
+  void advanceStage(Real t, X& state);
+
 private:
   void zeroDenseCoefs(std::size_t ibox, std::true_type);
   void zeroDenseCoefs(std::size_t ibox, std::false_type);
 
-  void accumulateDenseCoefs(std::size_t ibox, std::size_t stage, std::true_type);
-  void accumulateDenseCoefs(std::size_t ibox, std::size_t stage, std::false_type);
+  template <std::size_t Stage>
+  void accumulateDenseCoefs(std::size_t ibox, std::true_type);
+
+  template <std::size_t Stage>
+  void accumulateDenseCoefs(std::size_t ibox, std::false_type);
 
 public:
   // Return current dense output coefs, 0th power first, etc.
@@ -101,87 +108,98 @@ void OMPARK4<X, Scratch, ImExOp, DenseOutput>::define(Args&&... args)
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
 void OMPARK4<X, Scratch, ImExOp, DenseOutput>::advance(Real t, X& state)
 {
-    DataIterator dit = state.dataIterator();
-    std::size_t const nbox = dit.size();
-
-    std::integral_constant<bool, DenseOutput> dense;
+    std::integral_constant<bool, DenseOutput> constexpr dense;
 
     auto& phi = m_scratch.phi;
     auto& kE  = m_scratch.kE;
     auto& kI  = m_scratch.kI;
 
-//    #pragma omp parallel
+    DataIterator dit = state.dataIterator();
+    std::size_t const nbox = dit.size();
+
+    #pragma omp parallel for schedule(static) 
+    for (std::size_t ibox = 0; ibox < nbox; ++ibox)
     {
-//        #pragma omp parallel for schedule(dynamic) nowait
-        #pragma omp parallel for schedule(dynamic) 
-        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-        {
-            // Reset the dense output coefs
-            zeroDenseCoefs(ibox, dense);
-  
-            // Set phi[0] := state, all others 0
-            phi[0][ibox].copy(state[ibox]);
+        // Reset the dense output coefs
+        zeroDenseCoefs(ibox, dense); 
 
-            for (std::size_t stage = 1; stage < s_nStages; stage++)
-                phi[stage][ibox].setVal(0.0);
-        }  
+        // Set phi[0] := state, all others 0
+        phi[0][ibox].copy(state[ibox]);
+        for (std::size_t stage = 1; stage < s_nStages; ++stage)
+            phi[stage][ibox].setVal(0.0);
+    }
 
-        // For each stage
-        for (std::size_t stage = 0; stage < s_nStages; stage++)
-        {
-            Real next_t = t + s_c[stage]*m_dt;
+    advanceStage<0>(t, state);
+    advanceStage<1>(t, state);
+    advanceStage<2>(t, state);
+    advanceStage<3>(t, state);
+    advanceStage<4>(t, state);
+    advanceStage<5>(t, state);
+}
+
+
+/*
+  Advance solution state in time, t to t + dt.
+ */
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <std::size_t Stage>
+void OMPARK4<X, Scratch, ImExOp, DenseOutput>::advanceStage(Real t, X& state)
+{
+    std::integral_constant<bool, DenseOutput> constexpr dense;
+
+    auto& phi = m_scratch.phi;
+    auto& kE  = m_scratch.kE;
+    auto& kI  = m_scratch.kI;
+
+    Real stage_t = t + s_c[Stage]*m_dt;
     
-            if (stage > 0)
-            {
-//                #pragma omp parallel for schedule(dynamic) nowait
-                #pragma omp parallel for schedule(dynamic) 
-                for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-                    // Do the solve - copy rhs from phi[stage]
-                    phi[stage][ibox].plus(phi[0][ibox]);
+    phi[Stage].exchangeSync();
 
-//                #pragma omp barrier
+    DataIterator dit = state.dataIterator();
+    std::size_t const nbox = dit.size();
 
-//                #pragma omp single
-                {          
-                    phi[stage].exchangeSync();
-                }
+    #pragma omp parallel for schedule(static) 
+    for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+    {
+        auto this_state = state[ibox];
 
-//                #pragma omp parallel for schedule(dynamic) nowait
-                #pragma omp parallel for schedule(dynamic) 
-                for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-                    // Solve in-place for phi[stage] in
-                    // (I - s_aIdiag * m_dt * FI) (phi[stage]) = phi[stage].
-                    m_opImEx.solve(next_t, stage, s_aIdiag, phi[stage][ibox]);
-            }
+        std::array<decltype(phi[Stage][ibox]), s_nStages> this_phi;
 
-//            #pragma omp barrier
+        for (std::size_t k = 0; k < s_nStages; ++k)
+            this_phi[k] = phi[k][ibox]; 
 
-//            #pragma omp single
-            {
-                phi[stage].exchangeSync();
-            }
+        auto this_kE = kE[ibox];
+        auto this_kI = kI[ibox];
 
-//            #pragma omp parallel for schedule(dynamic) nowait
-            #pragma omp parallel for schedule(dynamic) 
-            for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-            {
-                // Calculate the operators for this stage
-                m_opImEx.explicitOp(next_t, stage, kE[ibox], phi[stage][ibox]);
-                m_opImEx.implicitOp(next_t, stage, kI[ibox], phi[stage][ibox]);
-      
-                // Add the known stage operator values to future solves 
-                for (std::size_t k=stage+1; k < s_nStages; ++k)
-                {
-                    phi[k][ibox].plus(kE[ibox], m_dt*s_aE[k][stage]);
-                    phi[k][ibox].plus(kI[ibox], m_dt*s_aI[k][stage]);
-                }
-      
-                // Accumulate the final solution and accum registers
-                state[ibox].plus(kE[ibox], m_dt*s_b[stage]);
-                state[ibox].plus(kI[ibox], m_dt*s_b[stage]);
-      
-                accumulateDenseCoefs(ibox, stage, dense); 
-            }
+        // Calculate the operators for this stage
+        m_opImEx.explicitOp<Stage>(stage_t, m_dt, s_aE, s_b
+                                 , this_state, this_kE, this_phi);
+        if (!m_opImEx.implicitOpDisabled())
+            m_opImEx.implicitOp<Stage>(stage_t, this_kI, this_phi[Stage]);
+
+        // Add the known stage operator values to future solves 
+        for (std::size_t k = Stage + 1; k < s_nStages; ++k)
+        {
+            if (!m_opImEx.implicitOpDisabled())
+                this_phi[k].plus(this_kI, m_dt*s_aI[k][Stage]); 
+        }
+    
+        // Accumulate the final solution and accum registers
+        if (!m_opImEx.implicitOpDisabled())
+            this_state.plus(this_kI, m_dt*s_b[Stage]);
+    
+        accumulateDenseCoefs<Stage>(ibox, dense);
+
+        if ((Stage + 1) < s_nStages)
+        {
+            Real next_t = t + s_c[Stage+1]*m_dt;
+
+            // Do the solve - copy rhs from phi[stage]
+            this_phi[Stage+1].plus(this_phi[0]);
+
+            // Solve in-place for phi[Stage+1] in
+            // (I - s_aIdiag * m_dt * FI) (phi[Stage+1]) = phi[Stage+1].
+            m_opImEx.solve<Stage>(next_t, s_aIdiag, this_phi[Stage+1]);
         }
     }
 }
@@ -206,9 +224,9 @@ void OMPARK4<X, Scratch, ImExOp, DenseOutput>::zeroDenseCoefs(
 {}
 
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <std::size_t Stage>
 void OMPARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
     std::size_t ibox
-  , std::size_t stage
   , std::true_type
     )
 {
@@ -218,15 +236,15 @@ void OMPARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
 
     for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
     {
-        denseCoefs[icoef][ibox].plus(kE[ibox], m_dt*s_bstar[icoef][stage]);
-        denseCoefs[icoef][ibox].plus(kI[ibox], m_dt*s_bstar[icoef][stage]);
+        denseCoefs[icoef][ibox].plus(kE[ibox], m_dt*s_bstar[icoef][Stage]);
+        denseCoefs[icoef][ibox].plus(kI[ibox], m_dt*s_bstar[icoef][Stage]);
     }
 } 
 
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <std::size_t Stage>
 void OMPARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
     std::size_t ibox
-  , std::size_t stage
   , std::false_type
     )
 {}
@@ -251,7 +269,7 @@ void OMPARK4<X, Scratch, ImExOp, DenseOutput>::denseOutputCoefs(
     DataIterator dit = state.dataIterator();
     std::size_t const nbox = dit.size();
 
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(static)
     for (std::size_t ibox = 0; ibox < nbox; ++ibox)
     {
         auto& phi        = m_scratch.phi;

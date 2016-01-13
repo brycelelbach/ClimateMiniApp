@@ -57,12 +57,19 @@ public:
   // Advance one step.
   void advance(Real t, X& state);
 
+  template <std::size_t Stage>
+  // Advance one stage.
+  void advanceStage(Real t, X& state);
+
 private:
   void zeroDenseCoefs(std::true_type);
   void zeroDenseCoefs(std::false_type);
 
-  void accumulateDenseCoefs(std::size_t stage, std::true_type);
-  void accumulateDenseCoefs(std::size_t stage, std::false_type);
+  template <std::size_t Stage>
+  void accumulateDenseCoefs(std::true_type);
+
+  template <std::size_t Stage>
+  void accumulateDenseCoefs(std::false_type);
 
 public:
   // Return current dense output coefs, 0th power first, etc.
@@ -101,49 +108,68 @@ void ARK4<X, Scratch, ImExOp, DenseOutput>::define(Args&&... args)
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
 void ARK4<X, Scratch, ImExOp, DenseOutput>::advance(Real t, X& state)
 {
+  std::integral_constant<bool, DenseOutput> constexpr dense;
+
   auto& phi = m_scratch.phi;
-  auto& kE = m_scratch.kE;
-  auto& kI = m_scratch.kI;
+  auto& kE  = m_scratch.kE;
+  auto& kI  = m_scratch.kI;
 
   // Reset the dense output coefs
-  zeroDenseCoefs(std::integral_constant<bool, DenseOutput>());
+  zeroDenseCoefs(dense);
 
   // Set phi[0] := state, all others 0
   phi[0].copy(state);
-  for (std::size_t stage = 1; stage < s_nStages; stage++)
+  for (std::size_t stage = 1; stage < s_nStages; ++stage)
     phi[stage].setVal(0.0);
 
-  // For each stage
-  for (std::size_t stage = 0; stage < s_nStages; stage++)
-    {
-      Real next_t = t + s_c[stage]*m_dt;
-      if (stage > 0)
-      {
-        // Do the solve - copy rhs from phi[stage]
-        phi[stage].plus(phi[0]);
+  advanceStage<0>(t, state);
+  advanceStage<1>(t, state);
+  advanceStage<2>(t, state);
+  advanceStage<3>(t, state);
+  advanceStage<4>(t, state);
+  advanceStage<5>(t, state);
+}
 
-        // Solve in-place for phi[stage] in
-        // (I - s_aIdiag * m_dt * FI) (phi[stage]) = phi[stage].
-        m_opImEx.solve(next_t, stage, s_aIdiag, phi[stage]);
-      }
+template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <std::size_t Stage>
+void ARK4<X, Scratch, ImExOp, DenseOutput>::advanceStage(Real t, X& state)
+{
+  std::integral_constant<bool, DenseOutput> constexpr dense;
 
-      // Calculate the operators for this stage
-      m_opImEx.explicitOp(next_t, stage, kE, phi[stage]);
-      m_opImEx.implicitOp(next_t, stage, kI, phi[stage]);
+  auto& phi = m_scratch.phi;
+  auto& kE  = m_scratch.kE;
+  auto& kI  = m_scratch.kI;
 
-      // Add the known stage operator values to future solves 
-      for (std::size_t k=stage+1; k < s_nStages; ++k)
-      {
-        phi[k].plus(kE, m_dt*s_aE[k][stage]);
-        phi[k].plus(kI, m_dt*s_aI[k][stage]);
-      }
+  Real stage_t = t + s_c[Stage]*m_dt;
 
-      // Accumulate the final solution and accum registers
-      state.plus(kE, m_dt*s_b[stage]);
-      state.plus(kI, m_dt*s_b[stage]);
+  if (Stage > 0)
+  {
+    // Do the solve - copy rhs from phi[stage]
+    phi[Stage].plus(phi[0]);
 
-      accumulateDenseCoefs(stage, std::integral_constant<bool, DenseOutput>());
-    }
+    // Solve in-place for phi[stage] in
+    // (I - s_aIdiag * m_dt * FI) (phi[stage]) = phi[stage].
+    if (!m_opImEx.implicitOpDisabled())
+      m_opImEx.solve<Stage>(stage_t, s_aIdiag, phi[Stage]);
+  }
+
+  // Calculate the operators for this stage
+  m_opImEx.explicitOp<Stage>(stage_t, m_dt, s_aE, s_b, state, kE, phi);
+  if (!m_opImEx.implicitOpDisabled())
+    m_opImEx.implicitOp<Stage>(stage_t, kI, phi[Stage]);
+
+  // Add the known stage operator values to future solves 
+  for (std::size_t k = Stage + 1; k < s_nStages; ++k)
+  {
+    if (!m_opImEx.implicitOpDisabled())
+      phi[k].plus(kI, m_dt*s_aI[k][Stage]); 
+  }
+
+  // Accumulate the final solution and accum registers
+  if (!m_opImEx.implicitOpDisabled())
+    state.plus(kI, m_dt*s_b[Stage]);
+
+  accumulateDenseCoefs<Stage>(dense);
 }
 
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
@@ -158,23 +184,23 @@ void ARK4<X, Scratch, ImExOp, DenseOutput>::zeroDenseCoefs(std::false_type)
 {}
 
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <std::size_t Stage>
 void ARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
-    std::size_t stage
-  , std::true_type
-    )
+  std::true_type
+  )
 {
   for (std::size_t icoef=0; icoef < s_nDenseCoefs; ++icoef)
   {
-    m_scratch.denseCoefs[icoef].plus(m_scratch.kE, m_dt*s_bstar[icoef][stage]);
-    m_scratch.denseCoefs[icoef].plus(m_scratch.kI, m_dt*s_bstar[icoef][stage]);
+    m_scratch.denseCoefs[icoef].plus(m_scratch.kE, m_dt*s_bstar[icoef][Stage]);
+    m_scratch.denseCoefs[icoef].plus(m_scratch.kI, m_dt*s_bstar[icoef][Stage]);
   }
 } 
 
 template <class X, class Scratch, class ImExOp, bool DenseOutput>
+template <std::size_t Stage>
 void ARK4<X, Scratch, ImExOp, DenseOutput>::accumulateDenseCoefs(
-    std::size_t stage
-  , std::false_type
-    )
+  std::false_type
+  )
 {}
 
 /*
