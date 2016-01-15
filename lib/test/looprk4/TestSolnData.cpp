@@ -9,6 +9,7 @@
 #endif
 
 #include "TestSolnData.H"
+#include "StencilLoopOps.H"
 
 #include "NamespaceHeader.H"
 
@@ -64,7 +65,7 @@ TestSolnData::aliasData(
 }
 
 void
-TestSolnData::copy(const TestSolnData& a_state)
+TestSolnData::copy(const DataIterator& a_dit, const TestSolnData& a_state)
 {
   CH_TIMERS("TestSolnData::copy(TestSolnData)");
   const LevelData<FArrayBox>& srcData = a_state.data();
@@ -73,7 +74,8 @@ TestSolnData::copy(const TestSolnData& a_state)
     {
       const FArrayBox& srcDataFab = srcData[dit];
       FArrayBox& dataFab = m_data[dit];
-      dataFab.copy(srcDataFab);
+      // dataFab.copy(srcDataFab);
+      vectorizedCopy(srcDataFab, dataFab);
     }
 }
 
@@ -92,6 +94,13 @@ TestSolnData::copy(const TestRhsData& a_value)
     }
 }
 */
+
+void
+TestSolnData::exchange()
+{
+  CH_TIMERS("TestSolnData::exchange");
+  m_data.exchange();
+}
   
 void
 TestSolnData::zero()

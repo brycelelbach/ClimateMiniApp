@@ -48,7 +48,7 @@ TestImExOp::exact(Real a_time)
   // return exp(coef*a_time);
   // Real coef = s_cI + s_cE + s_cS;
   // return 1.0 + coef*a_time;
-  return 1.0 + s_cE*pow(a_time,4); // 1 + cE*t^4
+  return  pow(1.0 + s_cE*a_time,1); // (1 + cE*t)^4
 }
 
 

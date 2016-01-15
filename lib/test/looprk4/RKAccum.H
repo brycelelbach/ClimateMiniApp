@@ -5,14 +5,14 @@
 
 template<int N>
 struct RKAccum {
-  const int nAccum=N;
+  static const int nAccum=N;
   Real scale[N];
   LevelData<FArrayBox>* accum[N];
 };
 
 template<int N>
 struct RKAccumFAB {
-  const int nAccum=N;
+  static const int nAccum=N;
   Real scale[N];
   Real* accum[N];
   dataix d;

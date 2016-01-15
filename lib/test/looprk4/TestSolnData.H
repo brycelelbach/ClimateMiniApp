@@ -49,7 +49,9 @@ public:
   void aliasData(LevelData<FArrayBox>& a_data, 
       LevelData<FArrayBox>* a_accum = NULL);
 
-  void copy(const TestSolnData& a_state);
+  void copy(const DataIterator& a_dit, const TestSolnData& a_state);
+
+  void exchange();
 
   void zero();
 
