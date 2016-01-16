@@ -83,8 +83,6 @@ setScaleLoop(FArrayBox& a_op, const Box& a_box,
   for (i=0; i<l.size[0]; i++) {
     int ijk = OFFSET_DATAIX(o);
     int dijk = OFFSET_DATAIX(d);
-    Real cE = TestImExOp::s_cE;
-    Real t = a_scale; // HACK
     Real opval = a_scale*data[dijk];
     op[ijk] = opval;
 
@@ -98,39 +96,30 @@ setScaleLoop(FArrayBox& a_op, const Box& a_box,
 
 
 template<int N> void
-explicitOp(DataIterator& a_dit, TestRhsData& a_result, Real a_time, 
-    const TestSolnData&  a_state, RKAccum<N>& a_rk)
+explicitOp(const DataIterator& a_dit, TestRhsData& a_result, Real a_time, 
+    const TestSolnData& a_state, RKAccum<N>& a_rk)
 {
   CH_TIMERS("explicitOp");
-  // CH_assert(isDefined());
 
-  const LevelData<FArrayBox>& stateData = a_state.data();
-  LevelData<FArrayBox>& resultData = a_result.data();
-  const DisjointBoxLayout& layout = stateData.disjointBoxLayout();
-  DataIterator dit = layout.dataIterator();
-  for (dit.begin(); dit.ok(); ++dit)
-    {
-      const FArrayBox& stateDataFab = stateData[dit];
-      FArrayBox& resultDataFab = resultData[dit];
-      Box b = layout[dit];
-      // Stuff this box's RK temps into a local loop struct
-      RKAccumFAB<N> rkfab;
-      for (int n = 0; n < N; n++)
-      {
-        FArrayBox& fab = (*a_rk.accum[n])[dit];
-        SET_DATAIX(rkfab.d,fab,b); // NOTE: assumes size of SolnData
-        rkfab.scale[n] = a_rk.scale[n];
-        rkfab.accum[n] = fab.dataPtr(0);
-      }
-      
-      // This is just a simple test for the time integration
-      const Real cE = TestImExOp::s_cE;
-      // Real opval = 4.0*cE*pow(1.0 + cE*a_time,3); // d/dt of (1 + cE*t)^4
-      // setValLoop<N>(resultDataFab, b, opval, 0, rkfab);
-      Real scale = 1.0*cE/(1.0 + cE*a_time); // d/dt = this * phi
-      setScaleLoop<N>(resultDataFab, b, stateDataFab, scale, 0, rkfab);
-    }
+  const FArrayBox& stateDataFab = a_state.fab(a_dit);
+  FArrayBox& resultDataFab = a_result.fab(a_dit);
+  Box b = a_state.domain(a_dit);
+  // Stuff this box's RK temps into a local loop struct
+  RKAccumFAB<N> rkfab;
+  for (int n = 0; n < N; n++)
+  {
+    FArrayBox& fab = (*a_rk.accum[n]).fab(a_dit);
+    SET_DATAIX(rkfab.d,fab,b); // NOTE: assumes size of SolnData
+    rkfab.scale[n] = a_rk.scale[n];
+    rkfab.accum[n] = fab.dataPtr(0);
+  }
+  
+  // This is just a simple test for the time integration
+  const Real cE = TestImExOp::s_cE;
+  Real scale = 1.0*cE/(1.0 + cE*a_time); // d/dt = this * phi
+  setScaleLoop<N>(resultDataFab, b, stateDataFab, scale, 0, rkfab);
 }
+
 
 inline void vectorizedCopy(const FArrayBox& a_from, FArrayBox& a_to)
 {

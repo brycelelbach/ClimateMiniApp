@@ -65,6 +65,15 @@ public:
   LevelData<FArrayBox>& data()
   { return m_data; }
 
+  const FArrayBox& fab(const DataIterator& a_dit) const
+  { return m_data[a_dit]; }
+
+  FArrayBox& fab(const DataIterator& a_dit)
+  { return m_data[a_dit]; }
+
+  Box domain(const DataIterator& a_dit) const
+  { return m_data.disjointBoxLayout()[a_dit]; }
+
 protected:
 
   /// layout for this level

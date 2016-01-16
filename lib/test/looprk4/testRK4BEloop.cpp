@@ -149,7 +149,7 @@ testImExRK4BE ()
     CH_START(t2);
     Real time = 0;
     // int Nstep = pow((Real) 2,(Real) res+2);
-    int Nstep = 20;
+    int Nstep = 10;
     Real dt = basedt / (Real) Nstep;
     pout() << "Time step: " << dt << endl;
     imex.resetDt(dt);

@@ -68,32 +68,10 @@ void
 TestSolnData::copy(const DataIterator& a_dit, const TestSolnData& a_state)
 {
   CH_TIMERS("TestSolnData::copy(TestSolnData)");
-  const LevelData<FArrayBox>& srcData = a_state.data();
-  DataIterator dit = srcData.dataIterator();
-  for (dit.begin(); dit.ok(); ++dit)
-    {
-      const FArrayBox& srcDataFab = srcData[dit];
-      FArrayBox& dataFab = m_data[dit];
-      // dataFab.copy(srcDataFab);
-      vectorizedCopy(srcDataFab, dataFab);
-    }
+  const FArrayBox& srcDataFab = a_state.fab(a_dit);
+  FArrayBox& dataFab = m_data[a_dit];
+  vectorizedCopy(srcDataFab, dataFab);
 }
-
-/*
-void
-TestSolnData::copy(const TestRhsData& a_value)
-{
-  CH_TIMERS("TestSolnData::copy(TestRhsData)");
-  const LevelData<FArrayBox>& srcData = a_value.data();
-  DataIterator dit = srcData.dataIterator();
-  for (dit.begin(); dit.ok(); ++dit)
-    {
-      const FArrayBox& srcDataFab = srcData[dit];
-      FArrayBox& dataFab = m_data[dit];
-      dataFab.copy(srcDataFab);
-    }
-}
-*/
 
 void
 TestSolnData::exchange()

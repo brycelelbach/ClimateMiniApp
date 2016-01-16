@@ -172,10 +172,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     RKAccum<2> rk4s0;
     rk4s0.scale[0] = nextScale;
     rk4s0.scale[1] = finalScale;
-    rk4s0.accum[0] = &(m_stage.data());
-    rk4s0.accum[1] = &(m_final.data());
+    rk4s0.accum[0] = &m_stage;
+    rk4s0.accum[1] = &m_final;
     DataIterator dit=a_state.data().dataIterator();
-    // for (dit)
+    for (dit.begin(); dit.ok(); ++dit)
     {
       m_final.copy(dit, a_state);
       m_stage.copy(dit, a_state);
@@ -191,10 +191,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     RKAccum<2> rk4s1;
     rk4s1.scale[0] = nextScale;
     rk4s1.scale[1] = finalScale;
-    rk4s1.accum[0] = &(m_tmp.data());
-    rk4s1.accum[1] = &(m_final.data());
+    rk4s1.accum[0] = &m_tmp;
+    rk4s1.accum[1] = &m_final;
     m_stage.exchange();
-    // for (dit)
+    for (dit.begin(); dit.ok(); ++dit)
     {
       m_tmp.copy(dit, a_state);
       explicitOp<2>(dit, m_kE, t, m_stage, rk4s1);
@@ -209,10 +209,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     RKAccum<2> rk4s2;
     rk4s2.scale[0] = nextScale;
     rk4s2.scale[1] = finalScale;
-    rk4s2.accum[0] = &(m_stage.data());
-    rk4s2.accum[1] = &(m_final.data());
+    rk4s2.accum[0] = &m_stage;
+    rk4s2.accum[1] = &m_final;
     m_tmp.exchange();
-    // for (dit)
+    for (dit.begin(); dit.ok(); ++dit)
     {
       m_stage.copy(dit, a_state);
       explicitOp<2>(dit, m_kE, t, m_tmp, rk4s2);
@@ -226,9 +226,9 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     // Initialize the accumulate pointers and scales
     RKAccum<1> rk4s3;
     rk4s3.scale[0] = finalScale;
-    rk4s3.accum[0] = &(m_final.data());
+    rk4s3.accum[0] = &m_final;
     m_stage.exchange();
-    // for (dit)
+    for (dit.begin(); dit.ok(); ++dit)
     {
       explicitOp<1>(dit, m_kE, t, m_stage, rk4s3);
       a_state.copy(dit, m_final);
