@@ -94,7 +94,8 @@ testImExRK4BE ()
   CH_TIMER("calc error",t3);
   CH_START(t1);
 
-  IntVect numCells(D_DECL(128,128,32));
+  // IntVect numCells(D_DECL(128,128,32));
+  IntVect numCells(D_DECL(32,32,32));
   IntVect loVect = IntVect::Zero;
   IntVect hiVect = numCells-IntVect::Unit;
   Box domainBox(loVect, hiVect);

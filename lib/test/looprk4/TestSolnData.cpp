@@ -65,12 +65,15 @@ TestSolnData::aliasData(
 }
 
 void
-TestSolnData::copy(const DataIterator& a_dit, const TestSolnData& a_state)
+TestSolnData::copy(const pair<DataIndex,Box>& a_tileix, 
+    const TestSolnData& a_state)
 {
   CH_TIMERS("TestSolnData::copy(TestSolnData)");
-  const FArrayBox& srcDataFab = a_state.fab(a_dit);
-  FArrayBox& dataFab = m_data[a_dit];
-  vectorizedCopy(srcDataFab, dataFab);
+  DataIndex dataix=a_tileix.first;
+  const FArrayBox& srcDataFab = a_state.fab(dataix);
+  FArrayBox& dataFab = m_data[dataix];
+  // vectorizedCopy(srcDataFab, dataFab, a_tileix.second);
+  dataFab.copy(srcDataFab, a_tileix.second);
 }
 
 void

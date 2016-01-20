@@ -62,7 +62,7 @@ setScaleLoop(FArrayBox& a_op, const Box& a_box,
 {
   CH_assert(a_data.box().contains(a_box));
 
-  CH_TIMERS("TestImExOp::setValLoop");
+  CH_TIMERS("setScaleLoop");
   CH_TIMER("loop",t);
 
   loop l;
@@ -96,19 +96,21 @@ setScaleLoop(FArrayBox& a_op, const Box& a_box,
 
 
 template<int N> void
-explicitOp(const DataIterator& a_dit, TestRhsData& a_result, Real a_time, 
-    const TestSolnData& a_state, RKAccum<N>& a_rk)
+explicitOp(const pair<DataIndex,Box>& a_tile, TestRhsData& a_result, 
+    Real a_time, const TestSolnData& a_state, RKAccum<N>& a_rk)
 {
   CH_TIMERS("explicitOp");
 
-  const FArrayBox& stateDataFab = a_state.fab(a_dit);
-  FArrayBox& resultDataFab = a_result.fab(a_dit);
-  Box b = a_state.domain(a_dit);
+  DataIndex dataix = a_tile.first;
+  const FArrayBox& stateDataFab = a_state.fab(dataix);
+  FArrayBox& resultDataFab = a_result.fab(dataix);
+  // Box b = a_state.domain(a_dit);
+  Box b = a_tile.second;
   // Stuff this box's RK temps into a local loop struct
   RKAccumFAB<N> rkfab;
   for (int n = 0; n < N; n++)
   {
-    FArrayBox& fab = (*a_rk.accum[n]).fab(a_dit);
+    FArrayBox& fab = (*a_rk.accum[n]).fab(dataix);
     SET_DATAIX(rkfab.d,fab,b); // NOTE: assumes size of SolnData
     rkfab.scale[n] = a_rk.scale[n];
     rkfab.accum[n] = fab.dataPtr(0);
@@ -121,7 +123,7 @@ explicitOp(const DataIterator& a_dit, TestRhsData& a_result, Real a_time,
 }
 
 
-inline void vectorizedCopy(const FArrayBox& a_from, FArrayBox& a_to)
+inline void vectorizedCopy(const FArrayBox& a_from, FArrayBox& a_to, Box a_tile)
 {
   CH_TIMERS("vectorizedCopy");
   CH_assert(a_from.size() == a_to.size());

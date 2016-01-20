@@ -174,12 +174,14 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     rk4s0.scale[1] = finalScale;
     rk4s0.accum[0] = &m_stage;
     rk4s0.accum[1] = &m_final;
-    DataIterator dit=a_state.data().dataIterator();
-    for (dit.begin(); dit.ok(); ++dit)
+
+    DataIterator dit = a_state.data().dataIterator();
+    const Vector<pair<DataIndex,Box> > vecTiles = a_state.getTiles(dit);
+    for (int tix=0; tix < vecTiles.size(); ++tix) 
     {
-      m_final.copy(dit, a_state);
-      m_stage.copy(dit, a_state);
-      explicitOp<2>(dit, m_kE, t, a_state, rk4s0);
+      m_final.copy(vecTiles[tix], a_state);
+      m_stage.copy(vecTiles[tix], a_state);
+      explicitOp<2>(vecTiles[tix], m_kE, t, a_state, rk4s0);
     }
     
     // stage 1
@@ -194,10 +196,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     rk4s1.accum[0] = &m_tmp;
     rk4s1.accum[1] = &m_final;
     m_stage.exchange();
-    for (dit.begin(); dit.ok(); ++dit)
+    for (int tix=0; tix < vecTiles.size(); ++tix) 
     {
-      m_tmp.copy(dit, a_state);
-      explicitOp<2>(dit, m_kE, t, m_stage, rk4s1);
+      m_tmp.copy(vecTiles[tix], a_state);
+      explicitOp<2>(vecTiles[tix], m_kE, t, m_stage, rk4s1);
     }
     
     // stage 2
@@ -212,10 +214,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     rk4s2.accum[0] = &m_stage;
     rk4s2.accum[1] = &m_final;
     m_tmp.exchange();
-    for (dit.begin(); dit.ok(); ++dit)
+    for (int tix=0; tix < vecTiles.size(); ++tix) 
     {
-      m_stage.copy(dit, a_state);
-      explicitOp<2>(dit, m_kE, t, m_tmp, rk4s2);
+      m_stage.copy(vecTiles[tix], a_state);
+      explicitOp<2>(vecTiles[tix], m_kE, t, m_tmp, rk4s2);
     }
 
     // stage 3
@@ -228,10 +230,10 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
     rk4s3.scale[0] = finalScale;
     rk4s3.accum[0] = &m_final;
     m_stage.exchange();
-    for (dit.begin(); dit.ok(); ++dit)
+    for (int tix=0; tix < vecTiles.size(); ++tix) 
     {
-      explicitOp<1>(dit, m_kE, t, m_stage, rk4s3);
-      a_state.copy(dit, m_final);
+      explicitOp<1>(vecTiles[tix], m_kE, t, m_stage, rk4s3);
+      a_state.copy(vecTiles[tix], m_final);
     }
   }
 
