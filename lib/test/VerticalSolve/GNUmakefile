@@ -1,7 +1,7 @@
 # -*- Mode: Makefile -*- 
 
 MPI=FALSE
-#DEBUG=TRUE
+DEBUG=TRUE
 #OPT=FALSE
 DIM=3
 #CH_TIMER=TRUE
@@ -15,7 +15,7 @@ makefiles += verticalSolvetest
 ebase = testVerticalSolve
 
 # the location of Chombo lib dir
-CHOMBO_HOME = ../../
+CHOMBO_HOME = $(CHOMBO_LIBDIR)
 
 # names of Chombo libraries needed by this program, in order of search.
 # MOLAMRTimeDependent has dups with HOMappedConservation, so put MOL last
@@ -45,8 +45,8 @@ INPUT = inputs
 include $(CHOMBO_HOME)/mk/Make.example
 
 # additional libraries
-#LAPACKLIBS = -llapack -lblas
-#LIBFLAGS += $(LAPACKLIBS)
+LAPACKLIBS = -llapack -lblas
+LIBFLAGS += $(LAPACKLIBS)
 
 # application-specific variables
 # This is needed for multi-block AMR.
