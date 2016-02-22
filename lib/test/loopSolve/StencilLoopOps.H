@@ -180,9 +180,8 @@ implicitSolve(const pair<DataIndex,Box>& a_tile,
   LapackFactorization A;
   TestOperator::build4thOrderBanded(A, c1, c2, dx[2], N);
   // A.printBandedMatrix();
-  TestOperator::implicitSolveBanded(solnDataFab, rhsDataFab, b, A);
-  /*
-  */
+  // TestOperator::implicitSolveBanded(solnDataFab, rhsDataFab, b, A);
+  TestOperator::implicitSolveTridiag(solnDataFab, rhsDataFab, b, A);
 
 /*
   // This is just a simple test for the time integration

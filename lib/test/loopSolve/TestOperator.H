@@ -51,6 +51,9 @@ public:
   static void implicitSolveBanded(FArrayBox& a_state, 
       FArrayBox& a_rhs, Box a_box, LapackFactorization& a_AB);
 
+  static void implicitSolveTridiag(FArrayBox& a_state, 
+      FArrayBox& a_rhs, Box a_box, LapackFactorization& a_AB);
+
   static void setExact(FArrayBox& a_exact,
                        int a_kx,
                        Real a_dx,

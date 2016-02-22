@@ -205,6 +205,44 @@ applyBandedMatrix(FArrayBox& a_state, FArrayBox& a_rhs,
 }
 
 
+/// Does a banded solve for a backward Euler
+/// heat equation step: (I - coef * D_zz) state = rhs
+void 
+TestOperator::
+implicitSolveBanded(
+    FArrayBox& a_state,
+    FArrayBox& a_rhs,
+    Box a_box,
+    LapackFactorization& a_AB)
+{
+  CH_TIME("TestOperator::implicitSolveBanded");
+
+  int N = a_box.size(2); // z-direction stencil
+  assert(N == a_rhs.box().size(2));
+  Vector<Real> rhs(N);
+
+  IntVect lo = a_box.smallEnd();
+  IntVect hi = a_box.bigEnd();
+  for (int j = lo[1]; j <= hi[1]; j++)
+    for (int i = lo[0]; i <= hi[0]; i++)
+    {
+      // Copy rhs k-column into local vector
+      for (int k=0; k < N; k++)
+        rhs[k] = a_rhs(IntVect(i,j,lo[2] + k)); 
+
+      // Create a copy, because this overwrites it
+      LapackFactorization AB;
+      AB.define(a_AB);
+      LapackWrapper::factorBandMatrix(AB);
+      LapackWrapper::solveBandMatrix(AB, rhs.stdVector().data());
+
+      // Copy soln k-column from local vector
+      for (int k=0; k < N; k++)
+        a_state(IntVect(i,j,lo[2] + k)) = rhs[k]; 
+    }
+}
+
+
 /// Does a tridiagonal solve for a backward Euler
 /// heat equation step: (I - coef * D_xx) state = rhs
 void 
@@ -260,17 +298,21 @@ implicitSolve(FArrayBox& a_state,
 /// heat equation step: (I - coef * D_zz) state = rhs
 void 
 TestOperator::
-implicitSolveBanded(
+implicitSolveTridiag(
     FArrayBox& a_state,
     FArrayBox& a_rhs,
     Box a_box,
     LapackFactorization& a_AB)
 {
-  CH_TIME("TestOperator::implicitSolveBanded");
+  CH_TIME("TestOperator::implicitSolveTridiag");
 
   int N = a_box.size(2); // z-direction stencil
   assert(N == a_rhs.box().size(2));
   Vector<Real> rhs(N);
+  // Tri-diag matrix diagonals
+  Vector<Real> lower(N);
+  Vector<Real> diag(N);
+  Vector<Real> upper(N);
 
   IntVect lo = a_box.smallEnd();
   IntVect hi = a_box.bigEnd();
@@ -281,11 +323,42 @@ implicitSolveBanded(
       for (int k=0; k < N; k++)
         rhs[k] = a_rhs(IntVect(i,j,lo[2] + k)); 
 
+      // LAPACK overwrites things, so need to copy
+      for (int k=0; k < N; k++)
+        diag[k] = a_AB(k,k); // k row k col
+      for (int k=0; k < N-1; k++)
+        lower[k] = a_AB(k+1,k); // k+1 row k col
+      for (int k=0; k < N-1; k++)
+        upper[k] = a_AB(k,k+1); // k row k+1 col
+
+      // Sorry, need these for the fortran version of LAPACK
+      int info = 0;
+      int NRHS = 1;
+      int LDB = N;
+      dgtsv_(
+          // LAPACK_ROW_MAJOR, // matrix format
+          &N, // matrix order
+          &NRHS, // # of right hand sides 
+          lower.stdVector().data(), // 1st subdiagonal part
+          diag.stdVector().data(), // diagonal part
+          upper.stdVector().data(), // 1st superdiagonal part
+          rhs.stdVector().data(), // column to solve 
+          &LDB, // leading dimension of RHS
+          &info
+          );
+
+      if (info != 0)
+        pout() << "Lapack info=" << info << endl;
+      assert(info == 0);
+
+      /*
+      // This version uses a banded factorization and solve
       // Create a copy, because this overwrites it
       LapackFactorization AB;
       AB.define(a_AB);
       LapackWrapper::factorBandMatrix(AB);
       LapackWrapper::solveBandMatrix(AB, rhs.stdVector().data());
+      */
 
       // Copy soln k-column from local vector
       for (int k=0; k < N; k++)
