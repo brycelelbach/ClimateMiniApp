@@ -140,42 +140,38 @@ inline void vectorizedCopy(const FArrayBox& a_from, FArrayBox& a_to, Box a_tile)
 
 
 void
-implicitSolve(TestSolnData& a_soln, TestRhsData& a_rhs, 
-    Real a_time, Real a_dt)
-// implicitSolve(const pair<DataIndex,Box>& a_tile, TestRhsData& a_result, 
+implicitSolve(const pair<DataIndex,Box>& a_tile, 
+    TestSolnData& a_soln, TestRhsData& a_rhs, Real a_time, Real a_dt)
 {
   CH_TIMERS("implicitSolve");
 
+  /*
   LevelData<FArrayBox>& solnData = a_soln.data();
   const DisjointBoxLayout& grids = solnData.disjointBoxLayout();
   LevelData<FArrayBox>& rhsData = a_rhs.data();
-
-  Real cI = TestImExOp::s_cI;
   DataIterator dit = grids.dataIterator();
   for (dit.begin(); dit.ok(); ++dit)
   {
     FArrayBox& solnDataFab = solnData[dit];
     FArrayBox& rhsDataFab = rhsData[dit];
+  */
 
-    // Just a simple test op solve for the time integration
-    Real coef = 1.0 / (1.0 - cI*a_dt);
-    solnDataFab.copy(rhsDataFab);
-    solnDataFab.mult(coef);
-    // Real coef = m_dtscale*s_cI*m_dt;
-    // solnDataFab.plus(coef);
-
-    // Contract is to return the operator in the rhs
-    rhsDataFab.copy(solnDataFab);
-    rhsDataFab.mult(cI);
-    // rhsDataFab.setVal(s_cI);
-  }
-/*
   DataIndex dataix = a_tile.first;
-  const FArrayBox& stateDataFab = a_state.fab(dataix);
-  FArrayBox& resultDataFab = a_result.fab(dataix);
-  // Box b = a_state.domain(a_dit);
+  FArrayBox& solnDataFab = a_soln.fab(dataix);
+  FArrayBox& rhsDataFab = a_rhs.fab(dataix);
   Box b = a_tile.second;
-  
+
+  // Just a simple test op solve for the time integration
+  Real cI = TestImExOp::s_cI;
+  Real coef = 1.0 / (1.0 - cI*a_dt);
+  solnDataFab.copy(rhsDataFab, b);
+  solnDataFab.mult(coef, b);
+
+  // Contract is to return the operator in the rhs
+  rhsDataFab.copy(solnDataFab, b);
+  rhsDataFab.mult(cI, b);
+
+/*
   // This is just a simple test for the time integration
   const Real cE = TestImExOp::s_cE;
   Real scale = 1.0*cE/(1.0 + cE*a_time); // d/dt = this * phi

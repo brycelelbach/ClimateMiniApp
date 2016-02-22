@@ -81,7 +81,8 @@ Real ldfabVal(LevelData<FArrayBox>& a_data)
     Real max = a_data[dit].max(b);
     ldmax = (ldmax > max) ? ldmax : max;
   }
-  CH_assert(ldmax == ldmin);
+  Real tol = 1e-15;
+  CH_assert(abs(ldmax - ldmin) < tol);
   return ldmax;
 }
 
@@ -148,8 +149,9 @@ testImExRK4BE ()
     pout() << "Time step: " << dt << endl;
     imex.resetDt(dt);
     // Set the initial condition
-    Real phi0 = 1.0;
-    ops.setVal(data, phi0);
+    imexOp->exact(soln, time);
+    // Real phi0 = 1.0;
+    // ops.setVal(data, phi0);
     // ops.setVal(accum, 0);
     // advance nstep
     for (int step = 0; step < Nstep; ++step)

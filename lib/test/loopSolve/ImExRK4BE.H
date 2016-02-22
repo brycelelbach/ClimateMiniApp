@@ -250,9 +250,15 @@ void ImExRK4BE<Soln, Rhs, IMEXOP>::advance(Real a_time, Soln& a_state)
   CH_START(t2);
   // Implicit backward Euler solve
   Real t = a_time + m_dt;
-  m_kI.copy(a_state);
-  // implicitOp(a_state, m_kI, t, m_dt);
-  implicitSolve(a_state, m_kI, t, m_dt);
+  // m_kI.copy(a_state);
+  // implicitSolve(a_state, m_kI, t, m_dt);
+  DataIterator dit = a_state.data().dataIterator();
+  const Vector<pair<DataIndex,Box> > vecTiles = a_state.getTiles(dit);
+  for (int tix=0; tix < vecTiles.size(); ++tix) 
+  {
+    m_kI.copy(vecTiles[tix], a_state);
+    implicitSolve(vecTiles[tix], a_state, m_kI, t, m_dt);
+  }
   CH_STOP(t2);
 
 /*

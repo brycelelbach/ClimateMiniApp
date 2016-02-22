@@ -53,8 +53,28 @@ TestImExOp::exact(TestSolnData& a_exact, Real a_time)
   Real steps = a_time / m_dt;
   Real exactVal = pow(1.0 - s_cI*m_dt,-steps); // (1 / (1 - cI*dt))^steps
   LevelData<FArrayBox>& exact = a_exact.data();
-  LevelDataOps<FArrayBox> ops;
-  ops.setVal(exact, exactVal);
+  // LevelDataOps<FArrayBox> ops;
+  // ops.setVal(exact, exactVal);
+
+  DisjointBoxLayout dbl = exact.disjointBoxLayout();
+  Box domain = dbl.physDomain().domainBox();
+  RealVect dx = 1.0 / RealVect(domain.size());
+  DataIterator dit = exact.dataIterator();
+  for (dit.begin(); dit.ok(); ++dit)
+  {
+    FArrayBox& exactFab = exact[dit];
+    Box b = dbl[dit];
+    for (BoxIterator bit(b); bit.ok(); ++bit)
+    {
+      IntVect iv = bit();
+      RealVect xyz = (iv + 0.5)* dx;
+      Real kx = 2.0*M_PI;
+      Real ky = 2.0*M_PI;
+      Real kz = 1.0*M_PI;
+      exactFab(iv,0) = exactVal*
+        cos(kx*xyz[0])*cos(ky*xyz[1])*cos(kz*xyz[2]);
+    }
+  }
 }
 
 

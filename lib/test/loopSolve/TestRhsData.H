@@ -53,6 +53,9 @@ public:
 
   void copy(const TestSolnData& a_state);
 
+  void copy(const pair<DataIndex,Box>& a_tileix, 
+    const TestSolnData& a_state);
+
   void zero();
 
   void increment(const TestRhsData& a_increment,

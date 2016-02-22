@@ -92,6 +92,18 @@ TestRhsData::copy(const TestSolnData& a_state)
 }
   
 void
+TestRhsData::copy(const pair<DataIndex,Box>& a_tileix, 
+    const TestSolnData& a_state)
+{
+  CH_TIMERS("TestRhsData::copy(TestSolnData)");
+  DataIndex dataix=a_tileix.first;
+  const FArrayBox& srcDataFab = a_state.fab(dataix);
+  FArrayBox& dataFab = m_data[dataix];
+  // vectorizedCopy(srcDataFab, dataFab, a_tileix.second);
+  dataFab.copy(srcDataFab, a_tileix.second);
+}
+
+void
 TestRhsData::zero()
 {
   CH_TIMERS("TestRhsData::zero");
