@@ -8,6 +8,10 @@
 #include "RKAccum.H"
 #include "TestImExOp.H"
 
+#include "LapackFactorization.H"
+#include "LapackWrapper.H"
+#include "TestOperator.H"
+
 #include "NamespaceHeader.H"
 
 /**
@@ -145,16 +149,8 @@ implicitSolve(const pair<DataIndex,Box>& a_tile,
 {
   CH_TIMERS("implicitSolve");
 
-  /*
-  LevelData<FArrayBox>& solnData = a_soln.data();
-  const DisjointBoxLayout& grids = solnData.disjointBoxLayout();
-  LevelData<FArrayBox>& rhsData = a_rhs.data();
-  DataIterator dit = grids.dataIterator();
-  for (dit.begin(); dit.ok(); ++dit)
-  {
-    FArrayBox& solnDataFab = solnData[dit];
-    FArrayBox& rhsDataFab = rhsData[dit];
-  */
+  const DisjointBoxLayout& dbl = a_soln.data().disjointBoxLayout();
+  Box domain = dbl.physDomain().domainBox();
 
   DataIndex dataix = a_tile.first;
   FArrayBox& solnDataFab = a_soln.fab(dataix);
@@ -163,13 +159,30 @@ implicitSolve(const pair<DataIndex,Box>& a_tile,
 
   // Just a simple test op solve for the time integration
   Real cI = TestImExOp::s_cI;
-  Real coef = 1.0 / (1.0 - cI*a_dt);
-  solnDataFab.copy(rhsDataFab, b);
-  solnDataFab.mult(coef, b);
+  RealVect dx = 1.0 / RealVect(domain.size());
+  int N = domain.size(2);
+  Real kz = 1.0*M_PI;
+  // Calculate the amplification factor for this wave number
+  Real gamma = cI*2.0*(cos(kz*dx[2]) - 1.0)/(dx[2]*dx[2]);
+  // pout() << " Update coef gamma*dt: " << gamma << endl;
+  Real coef = 1.0 / (1.0 - gamma*a_dt);
+
+  // solnDataFab.copy(rhsDataFab, b);
+  // solnDataFab.mult(coef, b);
 
   // Contract is to return the operator in the rhs
-  rhsDataFab.copy(solnDataFab, b);
-  rhsDataFab.mult(cI, b);
+  // rhsDataFab.copy(solnDataFab, b);
+  // rhsDataFab.mult(cI, b);
+
+  // These values are for creating a 2nd-order (I - dt*cI*L)
+  Real c1 = 1;
+  Real c2 = -cI*a_dt;
+  LapackFactorization A;
+  TestOperator::build4thOrderBanded(A, c1, c2, dx[2], N);
+  // A.printBandedMatrix();
+  TestOperator::implicitSolveBanded(solnDataFab, rhsDataFab, b, A);
+  /*
+  */
 
 /*
   // This is just a simple test for the time integration

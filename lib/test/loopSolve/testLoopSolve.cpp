@@ -42,6 +42,8 @@ testImExRK4BE();
 void
 parseTestOptions(int argc ,char* argv[]) ;
 
+Real err_tol = 2e-15;
+
 int
 main(int argc ,char* argv[])
 {
@@ -81,9 +83,15 @@ Real ldfabVal(LevelData<FArrayBox>& a_data)
     Real max = a_data[dit].max(b);
     ldmax = (ldmax > max) ? ldmax : max;
   }
-  Real tol = 1e-15;
-  CH_assert(abs(ldmax - ldmin) < tol);
-  return ldmax;
+
+  if (abs(ldmax - ldmin) > err_tol)
+  {
+    pout() << "Min/max values of error diff more than tolerance: "
+      << err_tol << endl
+      << "  min: " << ldmin << ", max: " << ldmax << endl;
+  }
+
+  return max(abs(ldmax),abs(ldmin));
 }
 
 int
@@ -95,7 +103,7 @@ testImExRK4BE ()
   CH_TIMER("calc error",t3);
   CH_START(t1);
 
-  IntVect numCells(D_DECL(128,128,32));
+  IntVect numCells(D_DECL(64,64,20));
   // IntVect numCells(D_DECL(32,32,32));
   IntVect loVect = IntVect::Zero;
   IntVect hiVect = numCells-IntVect::Unit;
@@ -137,7 +145,6 @@ testImExRK4BE ()
   RefCountedPtr<TestImExOp> imexOp = imex.getImExOp();
   LevelDataOps<FArrayBox> ops;
   bool passes = true;
-  Real err_tol = 1e-15;
   CH_STOP(t1);
   for (int res=0; res < Nres; ++res)
   {

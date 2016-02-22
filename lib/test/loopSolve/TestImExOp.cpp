@@ -15,7 +15,7 @@
 #include "NamespaceHeader.H"
 
 // const Real TestImExOp::s_cI = -0.003;
-const Real TestImExOp::s_cI = -0.3;
+const Real TestImExOp::s_cI = 0.3;
 const Real TestImExOp::s_cE = -0.0;
 // const Real TestImExOp::s_cS = -0.001;
 const Real TestImExOp::s_cS = 0.0;
@@ -49,16 +49,21 @@ TestImExOp::exact(TestSolnData& a_exact, Real a_time)
   // return 1.0 + coef*a_time;
   // return  pow(1.0 + s_cI*a_time,1); // (1 + cI*t)^1
 
-  // How many steps have we taken?
-  Real steps = a_time / m_dt;
-  Real exactVal = pow(1.0 - s_cI*m_dt,-steps); // (1 / (1 - cI*dt))^steps
+  // Calculate the cos() exact solution scaling for this many steps
   LevelData<FArrayBox>& exact = a_exact.data();
-  // LevelDataOps<FArrayBox> ops;
-  // ops.setVal(exact, exactVal);
-
   DisjointBoxLayout dbl = exact.disjointBoxLayout();
   Box domain = dbl.physDomain().domainBox();
   RealVect dx = 1.0 / RealVect(domain.size());
+  Real kx = 2.0*M_PI;
+  Real ky = 2.0*M_PI;
+  Real kz = 1.0*M_PI;
+  // Calculate the amplification factor for this wave number
+  Real gamma = s_cI*2.0*(cos(kz*dx[2]) - 1.0)/(dx[2]*dx[2]);
+
+  // How many steps have we taken?
+  Real steps = a_time / m_dt;
+  Real exactScale = pow(1.0 - gamma*m_dt,-steps); // (1 / (1 - g*dt))^steps
+
   DataIterator dit = exact.dataIterator();
   for (dit.begin(); dit.ok(); ++dit)
   {
@@ -67,11 +72,8 @@ TestImExOp::exact(TestSolnData& a_exact, Real a_time)
     for (BoxIterator bit(b); bit.ok(); ++bit)
     {
       IntVect iv = bit();
-      RealVect xyz = (iv + 0.5)* dx;
-      Real kx = 2.0*M_PI;
-      Real ky = 2.0*M_PI;
-      Real kz = 1.0*M_PI;
-      exactFab(iv,0) = exactVal*
+      RealVect xyz = (RealVect(iv) + 0.5)* dx;
+      exactFab(iv,0) = exactScale*
         cos(kx*xyz[0])*cos(ky*xyz[1])*cos(kz*xyz[2]);
     }
   }
