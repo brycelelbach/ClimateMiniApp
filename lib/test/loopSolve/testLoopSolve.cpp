@@ -20,10 +20,9 @@ using std::endl;
 #include "CH_Timer.H"
 
 // ImExRK4BE test classes
-#include "ImExRK4BE.H"
+#include "ImExBE.H"
 
-#include "TestRhsData.H"
-#include "TestSolnData.H"
+#include "TestData.H"
 #include "TestImExOp.H"
 #include "FABView.H"
 #include "FABView.H"
@@ -37,7 +36,7 @@ static const char* indent2 = "      " ;
 
 /// Prototypes:
 int
-testImExRK4BE();
+testImExBE();
 
 void
 parseTestOptions(int argc ,char* argv[]) ;
@@ -52,7 +51,7 @@ main(int argc ,char* argv[])
 #endif
   pout () << indent2 << "Beginning " << pgmname << " ..." << endl ;
 
-  int status = testImExRK4BE();
+  int status = testImExBE();
 
   if ( status == 0 )
     pout() << indent << pgmname << " passed." << endl ;
@@ -95,16 +94,15 @@ Real ldfabVal(LevelData<FArrayBox>& a_data)
 }
 
 int
-testImExRK4BE ()
+testImExBE ()
 {
-  CH_TIMERS("testImExRK4BE");
+  CH_TIMERS("testImExBE");
   CH_TIMER("setup",t1);
   CH_TIMER("integrate",t2);
   CH_TIMER("calc error",t3);
   CH_START(t1);
 
-  IntVect numCells(D_DECL(64,64,20));
-  // IntVect numCells(D_DECL(32,32,32));
+  IntVect numCells(D_DECL(32,32,20));
   IntVect loVect = IntVect::Zero;
   IntVect hiVect = numCells-IntVect::Unit;
   Box domainBox(loVect, hiVect);
@@ -121,112 +119,45 @@ testImExRK4BE ()
   IntVect nGhosts(D_DECL(4,4,0));
   LevelData<FArrayBox> data(dbl,1,nGhosts);
   LevelData<FArrayBox> exactLDF(dbl,1,IntVect::Zero);
-  TestSolnData soln;
+  TestData soln;
   soln.aliasData(data);
-  TestSolnData exact;
+  TestData exact;
   exact.aliasData(exactLDF);
 
-  // Do a convergence study, across 3 time step sizes
+  Real time = 0;
+  int Nstep = 10;
   Real basedt = sqrt(.5);
-  // Real Nres = 5;
-  Real Nres = 1;
-  Vector<Real> errors(Nres,0);
-  Vector<Real> denseErrs(Nres,0);
+  Real dt = basedt / (Real) Nstep;
 
-  // Exact solution is exp((cE + cI + cS)*t)
-  // So that:
-  //   explicit op = cE * phi;
-  //   implicit op = cI * phi;
-  //   split explicit op = cS * phi;
-
-  bool denseOutput = false;
-  ImExRK4BE<TestSolnData, TestRhsData, TestImExOp> imex;
-  imex.define(soln, basedt, denseOutput); 
+  ImExBE<TestData, TestImExOp> imex;
+  imex.define(soln, basedt); 
   RefCountedPtr<TestImExOp> imexOp = imex.getImExOp();
   LevelDataOps<FArrayBox> ops;
   bool passes = true;
+
+  pout() << "Time step: " << dt << endl;
+  imex.resetDt(dt);
+  // Set the initial condition
+  imexOp->exact(soln, time);
   CH_STOP(t1);
-  for (int res=0; res < Nres; ++res)
+
+  CH_START(t2);
+  // Advance Nstep
+  for (int step = 0; step < Nstep; ++step)
   {
-    CH_START(t2);
-    Real time = 0;
-    // int Nstep = pow((Real) 2,(Real) res+3);
-    int Nstep = 10;
-    Real dt = basedt / (Real) Nstep;
-    pout() << "Time step: " << dt << endl;
-    imex.resetDt(dt);
-    // Set the initial condition
-    imexOp->exact(soln, time);
-    // Real phi0 = 1.0;
-    // ops.setVal(data, phi0);
-    // ops.setVal(accum, 0);
-    // advance nstep
-    for (int step = 0; step < Nstep; ++step)
-    {
-      imex.advance(time, soln);
-      time += dt;
-    }
-    CH_STOP(t2);
-    CH_START(t3);
-    imexOp->exact(exact, time);
-    ops.incr(exactLDF, data, -1.0);
-    Real error = abs(ldfabVal(exactLDF));
-    pout() << "Soln error at time " << time << " = " << error << endl;
-    errors[res] = error;
-    passes = (error <= err_tol) && passes;
-    CH_STOP(t3);
-
-    // Real accumDiff = ldfabVal(accum);
-    // pout() << "Accumulated RHS = " << accumDiff <<
-    // " , difference from soln change = " << (accumDiff - (val - phi0)) << endl;
-
-#if 0
-    // Test dense output for the last time step
-    Real theta = 1 - 1/sqrt(2);
-    // Real theta = 1;
-    Real tint = time - (1-theta)*dt;
-    exact = imexOp->exact(tint);
-    pout() << "  exact value " << exact << endl;
-    // Vector<TestRhsData*> coefs = imex->denseOutputCoefs();
-
-    // Compute time-interpolated value in soln
-    // soln.zero();
-    // soln.increment(*denseCoefs[0]);
-    
-    pout() << "  exact value at old time " <<  imexOp.exact(time - dt) << endl;
-    for (int icoef = 0; icoef < coefs.size(); ++icoef)
-    {
-      Real coefVal = ldfabVal(coefs[icoef]->data());
-      pout() << "  coef[" << icoef << "] = " << coefVal << endl;
-      Real factor = pow(theta, icoef+1) - 1;
-      soln.increment(*coefs[icoef],factor);
-    }
-    val = ldfabVal(data);
-    error = exact - val;
-    denseErrs[res] = error;
-    pout() << "Dense output at time " << tint << " = " << 
-      val << ", error = " << error << endl;
-#endif
+    imex.advance(time, soln);
+    time += dt;
   }
+  CH_STOP(t2);
 
-#if 0
-  pout() << "Orders of convergence: " << endl;
-  bool passes = true;
-  // For this particular test, rates are > 4-3-2-1
-  for (int res=1; res < Nres; ++res)
-  {
-    Real ratio = errors[res] / errors[res-1];
-    Real solnrate = (-log(ratio) / log(2));
-    pout() << "  soln: " << solnrate << endl;
-    passes = (solnrate > (4.8-res)) && passes;
-    /*
-    ratio = denseErrs[res] / denseErrs[res-1];
-    Real denserate = (-log(ratio) / log(2));
-    pout() << "  dense output: " << denserate << endl;
-    rate = min(solnrate, denserate);
-    */
-  }
-#endif
+  CH_START(t3);
+  // Calculate the error
+  imexOp->exact(exact, time);
+  ops.incr(exactLDF, data, -1.0);
+  Real error = abs(ldfabVal(exactLDF));
+  pout() << "Soln error at time " << time << " = " << error << endl;
+  passes = (error <= err_tol) && passes;
+  CH_STOP(t3);
 
   return (passes) ? 0 : 1;
 }

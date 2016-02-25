@@ -13,24 +13,15 @@
 
 #include "FArrayBox.H"
 #include "LevelData.H"
-#include "TestSolnData.H"
-#include "TestRhsData.H"
-// #include "RKAccum.H"
+#include "TestData.H"
+#include "LapackFactorization.H"
 
 #include "NamespaceHeader.H"
-
-// Exact solution is exp((cE + cI + cS)*t)
-// So that:
-//   explicit op = cE * phi;
-//   implicit op = cI * phi;
-//   split explicit op = cS * phi;
 
 class TestImExOp
 {
 public:
-  static const Real s_cE;
   static const Real s_cI;
-  static const Real s_cS;
 
   /// Default constructor
   TestImExOp();
@@ -38,7 +29,7 @@ public:
   /// Destructor
   virtual ~TestImExOp();
 
-  virtual void define(const TestSolnData&   a_state,
+  virtual void define(const TestData&   a_state,
                       Real a_dt,
                       Real a_dtscale);
 
@@ -46,26 +37,16 @@ public:
 
   virtual void resetDt(Real a_dt);
 
-  void exact(TestSolnData& a_exact, Real a_time);
+  void exact(TestData& a_exact, Real a_time);
 
-/*
-  virtual void explicitOp(TestRhsData&             a_result,
-                          Real                    a_time,
-                          const TestSolnData&  a_state, 
-                          RKAccum<N>& a_rk4);
-*/
+  void implicitSolve(const pair<DataIndex,Box>& a_tile, 
+    TestData& a_soln, TestData& a_rhs, Real a_time, Real a_dt);
 
-  virtual void implicitOp(TestRhsData&             a_result,
-                          Real                    a_time,
-                          const TestSolnData&  a_state);
+  void buildTridiagonal(LapackFactorization& a_A,
+    Real a_c1, Real a_c2, Real& a_dx, int a_N);
 
-  virtual void solve(TestSolnData&   a_soln,
-                     TestRhsData&   a_rhs,
-                     Real               a_time);
-
-  virtual void splitSourceOp(TestRhsData& a_rhs,
-                             Real a_time,
-                             TestSolnData&   a_soln);
+  void implicitSolveTridiag(FArrayBox& a_state, FArrayBox& a_rhs,
+    Box a_box, LapackFactorization& a_AB);
 
 protected:
 

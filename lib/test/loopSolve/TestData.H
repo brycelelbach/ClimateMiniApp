@@ -8,21 +8,19 @@
  */
 #endif
 
-#ifndef _TESTSOLNDATA_H_
-#define _TESTSOLNDATA_H_
+#ifndef _TESTDATA_H_
+#define _TESTDATA_H_
 
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "LevelFluxRegister.H"
 #include "RealVect.H"
-#include "TestRhsData.H"
 
 #include "NamespaceHeader.H"
 
 // forward declaration
-class TestRhsData;
 
-class TestSolnData
+class TestData
 {
 public:
 
@@ -30,10 +28,10 @@ public:
   /**
      Object requires define() to be called before all other functions.
   */
-  TestSolnData();
+  TestData();
 
   /// Destructor
-  virtual ~TestSolnData();
+  virtual ~TestData();
 
   /// Actual constructor.
   void define(/// box layout at this level
@@ -44,18 +42,18 @@ public:
               const IntVect&              a_ghostVect
               );
 
-  void define(const TestSolnData& a_state);
+  void define(const TestData& a_state);
 
   void aliasData(LevelData<FArrayBox>& a_data, 
       LevelData<FArrayBox>* a_accum = NULL);
 
-  void copy(const pair<DataIndex,Box>& a_tile, const TestSolnData& a_state);
+  void copy(const pair<DataIndex,Box>& a_tile, const TestData& a_state);
 
   void exchange();
 
   void zero();
 
-  void increment(const TestRhsData& a_increment,
+  void increment(const TestData& a_increment,
                  Real a_factor = 1.,
                  bool a_updateFluxReg = false);
 
@@ -112,8 +110,8 @@ protected:
 private:
 
   // Disallowed for all the usual reasons
-  void operator=(const TestSolnData&);
-  TestSolnData(const TestSolnData&);
+  void operator=(const TestData&);
+  TestData(const TestData&);
 };
 
 #include "NamespaceFooter.H"

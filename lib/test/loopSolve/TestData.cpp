@@ -8,23 +8,22 @@
  */
 #endif
 
-#include "TestSolnData.H"
-// #include "StencilLoopOps.H"
+#include "TestData.H"
 
 #include "NamespaceHeader.H"
 
-TestSolnData::TestSolnData()
+TestData::TestData()
 {
   m_isDefined = false;
   m_accum = NULL;
 }
 
-TestSolnData::~TestSolnData()
+TestData::~TestData()
 {
 }
 
 void
-TestSolnData::define(/// box layout at this level
+TestData::define(/// box layout at this level
                         const DisjointBoxLayout&    a_layout,
                         /// number of conserved components
                         const int                   a_nComp,
@@ -40,7 +39,7 @@ TestSolnData::define(/// box layout at this level
 }
 
 void
-TestSolnData::define(const TestSolnData& a_state)
+TestData::define(const TestData& a_state)
 {
   const LevelData<FArrayBox>& srcData = a_state.data();
   m_grids = srcData.disjointBoxLayout();
@@ -52,7 +51,7 @@ TestSolnData::define(const TestSolnData& a_state)
 
 /// Constructor that aliases an incoming LevelData<FArrayBox>
 void
-TestSolnData::aliasData(
+TestData::aliasData(
     LevelData<FArrayBox>& a_data,
     LevelData<FArrayBox>* a_accum)
 {
@@ -65,10 +64,10 @@ TestSolnData::aliasData(
 }
 
 void
-TestSolnData::copy(const pair<DataIndex,Box>& a_tileix, 
-    const TestSolnData& a_state)
+TestData::copy(const pair<DataIndex,Box>& a_tileix, 
+    const TestData& a_state)
 {
-  CH_TIMERS("TestSolnData::copy(TestSolnData)");
+  CH_TIMERS("TestData::copy(TestData)");
   DataIndex dataix=a_tileix.first;
   const FArrayBox& srcDataFab = a_state.fab(dataix);
   FArrayBox& dataFab = m_data[dataix];
@@ -77,16 +76,16 @@ TestSolnData::copy(const pair<DataIndex,Box>& a_tileix,
 }
 
 void
-TestSolnData::exchange()
+TestData::exchange()
 {
-  CH_TIMERS("TestSolnData::exchange");
+  CH_TIMERS("TestData::exchange");
   m_data.exchange();
 }
   
 void
-TestSolnData::zero()
+TestData::zero()
 {
-  CH_TIMERS("TestSolnData::zero");
+  CH_TIMERS("TestData::zero");
   DataIterator dit = m_data.dataIterator();
   for (dit.begin(); dit.ok(); ++dit)
     {
@@ -96,11 +95,11 @@ TestSolnData::zero()
 }
 
 void
-TestSolnData::increment(const TestRhsData& a_rhs,
+TestData::increment(const TestData& a_rhs,
                       Real a_factor,
                       bool a_updateFluxReg)
 {
-  CH_TIMERS("TestSolnData::increment");
+  CH_TIMERS("TestData::increment");
   CH_assert(m_isDefined);
   const LevelData<FArrayBox>& rhsData = a_rhs.data();
   DataIterator dit = rhsData.dataIterator();
