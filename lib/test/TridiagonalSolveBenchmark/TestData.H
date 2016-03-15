@@ -11,128 +11,90 @@
 #ifndef _TESTDATA_H_
 #define _TESTDATA_H_
 
+#include <cassert>
+
+#include "VectorizedFABOps.H"
 #include "FArrayBox.H"
 #include "LevelData.H"
-#include "LevelFluxRegister.H"
-#include "RealVect.H"
 
 #include "NamespaceHeader.H"
 
-// forward declaration
-
-class TestData
+struct TestData
 {
-public:
-
-  /// Default constructor
-  /**
-     Object requires define() to be called before all other functions.
-  */
-  TestData();
-
-  /// Destructor
-  virtual ~TestData();
-
-  /// Actual constructor.
-  void define(/// box layout at this level
-              const DisjointBoxLayout&    a_layout,
-              /// number of conserved components
-              const int                   a_nComp,
-              /// ghost vector
-              const IntVect&              a_ghostVect
-              );
-
-  void define(const TestData& a_state);
-
-  void aliasData(LevelData<FArrayBox>& a_data,
-                 LevelData<FArrayBox>& a_matrix_a,
-                 LevelData<FArrayBox>& a_matrix_b,
-                 LevelData<FArrayBox>& a_matrix_c
-                );
-
-  void exchange();
-
-  void zero();
-
-  const LevelData<FArrayBox>& data() const
-  { return m_data; }
-  LevelData<FArrayBox>& data()
-  { return m_data; }
-  const FArrayBox& data(DataIndex a_dataix) const
-  { return m_data[a_dataix]; }
-  FArrayBox& data(DataIndex a_dataix)
-  { return m_data[a_dataix]; }
-
-  const LevelData<FArrayBox>& A() const
-  { return m_matrix_a; }
-  LevelData<FArrayBox>& A()
-  { return m_matrix_a; }
-  const FArrayBox& A(DataIndex a_dataix) const
-  { return m_matrix_a[a_dataix]; }
-  FArrayBox& A(DataIndex a_dataix)
-  { return m_matrix_a[a_dataix]; }
-
-  const LevelData<FArrayBox>& B() const
-  { return m_matrix_b; }
-  LevelData<FArrayBox>& B()
-  { return m_matrix_b; }
-  const FArrayBox& B(DataIndex a_dataix) const
-  { return m_matrix_b[a_dataix]; }
-  FArrayBox& B(DataIndex a_dataix)
-  { return m_matrix_b[a_dataix]; }
-
-  const LevelData<FArrayBox>& C() const
-  { return m_matrix_c; }
-  LevelData<FArrayBox>& C()
-  { return m_matrix_c; }
-  const FArrayBox& C(DataIndex a_dataix) const
-  { return m_matrix_c[a_dataix]; }
-  FArrayBox& C(DataIndex a_dataix)
-  { return m_matrix_c[a_dataix]; }
-
-  Box domain(DataIndex a_dataix) const
-  { return m_data.disjointBoxLayout()[a_dataix]; }
-
-  Vector<std::pair<DataIndex,Box> > getTiles(DataIterator& a_dit) const
-  {
-    Vector<std::pair<DataIndex,Box> > retval;
-    for (a_dit.begin(); a_dit.ok(); ++a_dit)
+    TestData(
+        DisjointBoxLayout const& a_layout
+      , int a_nComp
+      , IntVect a_ghostVect
+      , std::uint64_t a_tile_width
+        )
+      : m_tile_width(a_tile_width)
+      , m_tiles()
     {
-      // FIXME - hardwired 2 boxes per dit. Need to tile here
-      Box b = domain(a_dit());
-      int chop = b.smallEnd(1) + b.size(1) / 2;
-      Box blo = b.chop(1, chop); // b is bhi after chop
-      retval.push_back(std::pair<DataIndex,Box>(a_dit(), blo)); 
-      retval.push_back(std::pair<DataIndex,Box>(a_dit(), b)); 
+        U.define(a_layout, a_nComp, a_ghostVect);
+        A.define(a_layout, a_nComp, IntVect::Zero);
+        B.define(a_layout, a_nComp, IntVect::Zero);
+        C.define(a_layout, a_nComp, IntVect::Zero);
+        makeTiles();
     }
-    return retval;
-  }
 
-protected:
+    void exchange()
+    {
+        U.exchange();
+    }
 
-  /// layout for this level
-  DisjointBoxLayout m_grids;
+    void plus(TestData const& a_rhs, Real a_factor)
+    {
+        DataIterator dit = U.dataIterator();
+        std::size_t const nbox = dit.size();
 
-  /// number of components
-  int m_nComp;
+        for (std::size_t ibox = 0; ibox < nbox; ++ibox)
+        {
+            vectorizedPlus(a_rhs.U[dit[ibox]], U[dit[ibox]], a_factor);
+        }
+    }
 
-  /// data on this level
-  LevelData<FArrayBox> m_data;
+    Box domain() const
+    {
+        return U.disjointBoxLayout().physDomain().domainBox();
+    }
 
-  LevelData<FArrayBox> m_matrix_a;
-  LevelData<FArrayBox> m_matrix_b;
-  LevelData<FArrayBox> m_matrix_c;
+    std::vector<std::pair<DataIndex, Box> > const& tiles() const
+    {
+        return m_tiles;
+    }
 
-  /// ghost vector
-  IntVect m_ghostVect;
+    LevelData<FArrayBox> U;
 
-private:
+    LevelData<FArrayBox> A;
+    LevelData<FArrayBox> B;
+    LevelData<FArrayBox> C;
 
-  // Disallowed for all the usual reasons
-  void operator=(const TestData&);
-  TestData(const TestData&);
+  private:
+    void makeTiles() 
+    {
+        DataIterator dit = U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            // FIXME - hardwired 2 boxes per dit. Need to tile here
+            Box b = U.disjointBoxLayout()[dit()];
+
+            assert(0 == (b.size()[1] % m_tile_width));
+
+            for (int i = b.smallEnd(1); i <= b.bigEnd(1);)
+            { 
+                Box blo = b;
+                // b is "bhi" after chop.
+                b = blo.chop(1, i += m_tile_width); 
+                m_tiles.push_back(std::pair<DataIndex,Box>(dit(), blo));
+            }
+        }
+    }
+
+    std::uint64_t m_tile_width;
+    std::vector<std::pair<DataIndex, Box> > m_tiles;
 };
 
 #include "NamespaceFooter.H"
 
 #endif
+

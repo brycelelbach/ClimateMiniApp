@@ -6,6 +6,8 @@
 # included makefiles need an absolute path
 CHOMBO_HOME := $(shell pwd)/../..
 
+makefiles+=lib_test_testLoopSolve
+
 ebase := testLoopSolve
 
 LibNames := AMRElliptic AMRTools BoxTools

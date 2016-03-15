@@ -14,53 +14,66 @@
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "TestData.H"
-#include "LapackFactorization.H"
 
 #include "NamespaceHeader.H"
 
-class TestImExOp
+struct TestImExOp
 {
-public:
-  static const Real s_cI;
+    static constexpr Real cI = 0.3;
+    static constexpr Real kx = 2.0 * M_PI;
+    static constexpr Real ky = 2.0 * M_PI;
+    static constexpr Real kz = 1.0 * M_PI;
 
-  /// Default constructor
-  TestImExOp();
+    TestImExOp(Real a_dt)
+      : m_dt(a_dt)
+    {}
 
-  /// Destructor
-  virtual ~TestImExOp();
+    void exact(TestData& a_exact, Real a_time) const;
 
-  virtual void define(const TestData&   a_state,
-                      Real a_dt,
-                      Real a_dtscale);
+    Real advance(TestData& a_state, Real a_time) const
+    {
+        // Implicit backward Euler solve
+        Real t = a_time + m_dt;
 
-  virtual void resetDt(Real a_dt);
+        a_state.exchange();
 
-  void exact(TestData& a_exact, Real a_time);
+        std::vector<std::pair<DataIndex, Box> > const& tiles = a_state.tiles();
 
-  void implicitSolve(const std::pair<DataIndex,Box>& a_tile, 
-    TestData& a_soln, Real a_time, Real a_dt);
+        #pragma omp parallel for schedule(static) 
+        for (int tix = 0; tix < tiles.size(); ++tix) 
+        {
+            implicitSolve(tiles[tix], a_state, t);
+        }
 
-  void buildTridiagonal(
-    FArrayBox& a_A, FArrayBox& a_B, FArrayBox& a_C,
-    Box a_box, Real a_c1, Real a_c2, Real a_dx);
+        return t;
+    }
 
-  void implicitSolveTridiag(
-    FArrayBox& a_A,
-    FArrayBox& a_B,
-    FArrayBox& a_C,
-    FArrayBox& a_U,
-    Box a_box);
+    void implicitSolve(
+        std::pair<DataIndex, Box> const& a_tile
+      , TestData& a_state
+      , Real a_time
+        ) const;
 
-protected:
+    void buildTridiagonal(
+        FArrayBox& a_A
+      , FArrayBox& a_B
+      , FArrayBox& a_C
+      , Box a_box
+      , Real a_dx
+      , Real a_c1
+      , Real a_c2
+        ) const;
 
-  Real m_dt;
+    void implicitSolveTridiag(
+        FArrayBox& a_A
+      , FArrayBox& a_B
+      , FArrayBox& a_C
+      , FArrayBox& a_U
+      , Box a_box
+        ) const;
 
-  Real m_dtscale;
-
-private:
-  // Disallowed for all the usual reasons
-  void operator=(const TestImExOp&);
-  TestImExOp(const TestImExOp&);
+  private:
+    Real m_dt;
 };
 
 #include "NamespaceFooter.H"
