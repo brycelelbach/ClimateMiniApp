@@ -8,6 +8,7 @@
  */
 #endif
 
+#include "BoxIterator.H"
 #include "TestImExOp.H"
 #include "LevelDataOps.H"
 #include "LapackFactorization.H"
@@ -86,8 +87,8 @@ TestImExOp::resetDt(Real a_dt)
 
 
 void
-TestImExOp::implicitSolve(const pair<DataIndex,Box>& a_tile, 
-    TestData& a_soln, TestData& a_rhs, Real a_time, Real a_dt)
+TestImExOp::implicitSolve(const std::pair<DataIndex,Box>& a_tile, 
+    TestData& a_soln, Real a_time, Real a_dt)
 {
   CH_TIMERS("implicitSolve");
 
@@ -96,7 +97,6 @@ TestImExOp::implicitSolve(const pair<DataIndex,Box>& a_tile,
 
   DataIndex dataix = a_tile.first;
   FArrayBox& solnDataFab = a_soln.fab(dataix);
-  FArrayBox& rhsDataFab = a_rhs.fab(dataix);
   Box b = a_tile.second;
 
   // Just a simple test op solve for the time integration
@@ -109,7 +109,7 @@ TestImExOp::implicitSolve(const pair<DataIndex,Box>& a_tile,
   Real c2 = -cI*a_dt;
   LapackFactorization A;
   buildTridiagonal(A, c1, c2, dx[2], N);
-  implicitSolveTridiag(solnDataFab, rhsDataFab, b, A);
+  implicitSolveTridiag(solnDataFab, b, A);
 }
 
 
@@ -144,6 +144,29 @@ buildTridiagonal(LapackFactorization& a_A,
   a_A(ncol-1,ncol-1) = a_c1 + bc*coef;
 }
 
+void tridiagonal_solve_native(
+    std::vector<double>& a, // Lower band
+    std::vector<double>& b, // Diagonal
+    std::vector<double>& c, // Upper band
+    std::vector<double>& u  // Solution
+    )
+{
+    auto const nx = u.size();
+
+    for (int i = 1; i < nx; i++)
+    {
+        double m = a[i-1]/b[i-1];
+        b[i] -= m*c[i-1];
+        u[i] -= m*u[i-1];
+    }
+
+    // solve for last x value
+    u[nx-1] = u[nx-1]/b[nx-1];
+ 
+    // solve for remaining x values by back substitution
+    for(int i = nx - 2; i >= 0; i--)
+        u[i] = (u[i] - c[i]*u[i+1])/b[i];
+}
 
 /// Does a tridiagonal solve for a 2nd-order backward Euler
 /// heat equation step: (I - coef * D_zz) state = rhs
@@ -151,14 +174,14 @@ void
 TestImExOp::
 implicitSolveTridiag(
     FArrayBox& a_state,
-    FArrayBox& a_rhs,
     Box a_box,
     LapackFactorization& a_AB)
 {
   CH_TIME("TestImExOp::implicitSolveTridiag");
 
   int N = a_box.size(2); // z-direction stencil
-  assert(N == a_rhs.box().size(2));
+  assert(0 == a_box.smallEnd()[2]); // no ghost zones in the z-direction
+  assert(N == a_state.box().size(2));
   Vector<Real> rhs(N);
   // Tri-diag matrix diagonals
   Vector<Real> lower(N);
@@ -172,7 +195,7 @@ implicitSolveTridiag(
     {
       // Copy rhs k-column into local vector
       for (int k=0; k < N; k++)
-        rhs[k] = a_rhs(IntVect(i,j,lo[2] + k)); 
+        rhs[k] = a_state(IntVect(i,j,lo[2] + k)); 
 
       // LAPACK overwrites things, so need to copy
       for (int k=0; k < N; k++)
@@ -182,6 +205,7 @@ implicitSolveTridiag(
       for (int k=0; k < N-1; k++)
         upper[k] = a_AB(k,k+1); // k row k+1 col
 
+/*
       // Sorry, need these for the fortran version of LAPACK
       int info = 0;
       int NRHS = 1;
@@ -190,7 +214,7 @@ implicitSolveTridiag(
           // LAPACK_ROW_MAJOR, // matrix format
           &N, // matrix order
           &NRHS, // # of right hand sides 
-          lower.stdVector().data(), // 1st subdiagonal part
+          lower.stdVector().data() + 1, // 1st subdiagonal part
           diag.stdVector().data(), // diagonal part
           upper.stdVector().data(), // 1st superdiagonal part
           rhs.stdVector().data(), // column to solve 
@@ -201,6 +225,14 @@ implicitSolveTridiag(
       if (info != 0)
         pout() << "Lapack info=" << info << endl;
       assert(info == 0);
+*/
+
+      tridiagonal_solve_native(
+        lower.stdVector(),
+        diag.stdVector(),
+        upper.stdVector(),
+        rhs.stdVector()
+      ); 
 
       // Copy soln k-column from local vector
       for (int k=0; k < N; k++)

@@ -8,9 +8,12 @@
  */
 #endif
 
+#include <cmath>
+#include <algorithm>
+#include <iostream>
 
 #include "parstream.H"
-using std::endl;
+
 #include "FArrayBox.H"
 #include "LevelData.H"
 #include "LevelDataOps.H"
@@ -49,14 +52,14 @@ main(int argc ,char* argv[])
 #ifdef CH_MPI
   MPI_Init (&argc, &argv);
 #endif
-  pout () << indent2 << "Beginning " << pgmname << " ..." << endl ;
+  std::cout << indent2 << "Beginning " << pgmname << " ..." << endl ;
 
   int status = testImExBE();
 
   if ( status == 0 )
-    pout() << indent << pgmname << " passed." << endl ;
+    std::cout << indent << pgmname << " passed." << endl ;
   else
-    pout() << indent << pgmname << " failed with return code " << status << endl ;
+    std::cout << indent << pgmname << " failed with return code " << status << endl ;
 
 #ifdef CH_MPI
   CH_TIMER_REPORT();
@@ -83,14 +86,14 @@ Real ldfabVal(LevelData<FArrayBox>& a_data)
     ldmax = (ldmax > max) ? ldmax : max;
   }
 
-  if (abs(ldmax - ldmin) > err_tol)
+  if (std::fabs(ldmax - ldmin) > err_tol)
   {
-    pout() << "Min/max values of error diff more than tolerance: "
+    std::cout << "Min/max values of error diff more than tolerance: "
       << err_tol << endl
       << "  min: " << ldmin << ", max: " << ldmax << endl;
   }
 
-  return max(abs(ldmax),abs(ldmin));
+  return std::max(std::fabs(ldmax), std::fabs(ldmin));
 }
 
 int
@@ -135,7 +138,7 @@ testImExBE ()
   LevelDataOps<FArrayBox> ops;
   bool passes = true;
 
-  pout() << "Time step: " << dt << endl;
+  std::cout << "Time step: " << dt << endl;
   imex.resetDt(dt);
   // Set the initial condition
   imexOp->exact(soln, time);
@@ -154,8 +157,8 @@ testImExBE ()
   // Calculate the error
   imexOp->exact(exact, time);
   ops.incr(exactLDF, data, -1.0);
-  Real error = abs(ldfabVal(exactLDF));
-  pout() << "Soln error at time " << time << " = " << error << endl;
+  Real error = std::fabs(ldfabVal(exactLDF));
+  std::cout << "Soln error at time " << time << " = " << error << endl;
   passes = (error <= err_tol) && passes;
   CH_STOP(t3);
 

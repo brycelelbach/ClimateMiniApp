@@ -39,13 +39,13 @@ public:
 
   void exact(TestData& a_exact, Real a_time);
 
-  void implicitSolve(const pair<DataIndex,Box>& a_tile, 
-    TestData& a_soln, TestData& a_rhs, Real a_time, Real a_dt);
+  void implicitSolve(const std::pair<DataIndex,Box>& a_tile, 
+    TestData& a_soln, Real a_time, Real a_dt);
 
   void buildTridiagonal(LapackFactorization& a_A,
     Real a_c1, Real a_c2, Real& a_dx, int a_N);
 
-  void implicitSolveTridiag(FArrayBox& a_state, FArrayBox& a_rhs,
+  void implicitSolveTridiag(FArrayBox& a_state, 
     Box a_box, LapackFactorization& a_AB);
 
 protected:

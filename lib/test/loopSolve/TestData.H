@@ -44,18 +44,13 @@ public:
 
   void define(const TestData& a_state);
 
-  void aliasData(LevelData<FArrayBox>& a_data, 
-      LevelData<FArrayBox>* a_accum = NULL);
+  void aliasData(LevelData<FArrayBox>& a_data);
 
-  void copy(const pair<DataIndex,Box>& a_tile, const TestData& a_state);
+  void copy(const std::pair<DataIndex,Box>& a_tile, const TestData& a_state);
 
   void exchange();
 
   void zero();
-
-  void increment(const TestData& a_increment,
-                 Real a_factor = 1.,
-                 bool a_updateFluxReg = false);
 
   const LevelData<FArrayBox>& data() const
   { return m_data; }
@@ -72,17 +67,17 @@ public:
   Box domain(DataIndex a_dataix) const
   { return m_data.disjointBoxLayout()[a_dataix]; }
 
-  Vector<pair<DataIndex,Box> > getTiles(DataIterator& a_dit) const
+  Vector<std::pair<DataIndex,Box> > getTiles(DataIterator& a_dit) const
   {
-    Vector<pair<DataIndex,Box> > retval;
+    Vector<std::pair<DataIndex,Box> > retval;
     for (a_dit.begin(); a_dit.ok(); ++a_dit)
     {
       // FIXME - hardwired 2 boxes per dit. Need to tile here
       Box b = domain(a_dit());
       int chop = b.smallEnd(0) + b.size(0) / 2;
       Box blo = b.chop(0, chop); // b is bhi after chop
-      retval.push_back(pair<DataIndex,Box>(a_dit(), blo)); 
-      retval.push_back(pair<DataIndex,Box>(a_dit(), b)); 
+      retval.push_back(std::pair<DataIndex,Box>(a_dit(), blo)); 
+      retval.push_back(std::pair<DataIndex,Box>(a_dit(), b)); 
     }
     return retval;
   }
@@ -98,8 +93,10 @@ protected:
   /// data on this level
   LevelData<FArrayBox> m_data;
 
-  /// extra data to accumulate fluxes
-  LevelData<FArrayBox>* m_accum;
+  std::vector<Real> m_matrix_a;
+  std::vector<Real> m_matrix_b;
+  std::vector<Real> m_matrix_c;
+  std::vector<Real> m_matrix_rhs;
 
   /// ghost vector
   IntVect m_ghostVect;

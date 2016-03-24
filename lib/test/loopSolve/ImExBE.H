@@ -45,7 +45,6 @@ protected:
   bool m_isDefined;
   Real m_dt;
   Real m_time;
-  Soln m_kI;
   RefCountedPtr<IMEXOP> m_opImExPtr;
 
 private:
@@ -61,9 +60,6 @@ void ImExBE<Soln, IMEXOP>::define(
   CH_TIME("ImExBE::define");
 
   m_dt = a_dt;
-
-  // define dX
-  m_kI.define(a_state);
 
   // define opImEx
   if (m_opImExPtr.isNull())
@@ -112,11 +108,10 @@ void ImExBE<Soln, IMEXOP>::advance(Real a_time, Soln& a_state)
   // Implicit backward Euler solve
   Real t = a_time + m_dt;
   DataIterator dit = a_state.data().dataIterator();
-  const Vector<pair<DataIndex,Box> > vecTiles = a_state.getTiles(dit);
+  const Vector<std::pair<DataIndex,Box> > vecTiles = a_state.getTiles(dit);
   for (int tix=0; tix < vecTiles.size(); ++tix) 
   {
-    m_kI.copy(vecTiles[tix], a_state);
-    m_opImExPtr->implicitSolve(vecTiles[tix], a_state, m_kI, t, m_dt);
+    m_opImExPtr->implicitSolve(vecTiles[tix], a_state, t, m_dt);
   }
 
   m_time = a_time;
