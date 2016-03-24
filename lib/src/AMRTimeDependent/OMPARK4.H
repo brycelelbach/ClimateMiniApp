@@ -137,7 +137,6 @@ void OMPARK4<X, Scratch, ImExOp, DenseOutput>::advance(Real t, X& state)
     advanceStage<5>(t, state);
 }
 
-
 /*
   Advance solution state in time, t to t + dt.
  */
