@@ -32,51 +32,10 @@ int reportMPIStats()
   return 0;
 }
 
-Vector<int> pids;
+#ifdef CH_MPI
 
-#ifndef CH_MPI
-
-int procID()
-{
-  return 0;
-}
-
-// reset this to fool serial code into thinking its parallel
-int num_procs = 1 ;
-
-int GetRank(int pid)
-{
-  return 0;
-}
-
-int GetPID(int rank)
-{
-  CH_assert(rank == 0);
-  return getpid();
-}
-
-unsigned int numProc()
-{
-  return num_procs;
-}
-
-#else // CH_MPI version
-
-int GetPID(int rank)
-{
-  if (rank<0) return -1;
-  if (rank>=pids.size()) return -2;
-  return pids[rank];
-}
-
-int GetRank(int pid)
-{
-  for (int i=0; i<pids.size(); ++i)
-    {
-      if (pids[i]== pid) return i;
-    }
-  return -1;
-}
+// hopefully static copy of opaque handles
+MPI_Comm Chombo_MPI::comm = MPI_COMM_WORLD;
 
 // this is a global variable which indicates whether
 // or not an MPI command should be used to deduce rank.
@@ -112,12 +71,78 @@ unsigned int numProc()
   return ret;
 }
 
-// hopefully static copy of opaque handles
-MPI_Comm Chombo_MPI::comm = MPI_COMM_WORLD;
+Vector<int> pids;
 
-#endif // CH_MPI
+int GetPID(int rank)
+{
+  if (rank<0) return -1;
+  if (rank>=pids.size()) return -2;
+  return pids[rank];
+}
 
-/// these should work independent of MPI's existence
+int GetRank(int pid)
+{
+  for (int i=0; i<pids.size(); ++i)
+    {
+      if (pids[i]== pid) return i;
+    }
+  return -1;
+}
+
+#elif defined(CH_HPX)
+
+#include <hpx/hpx_fwd.hpp>
+
+int procID()
+{
+  return hpx::get_locality_id();
+}
+
+unsigned int numProc()
+{
+  return hpx::get_initial_num_localities();
+}
+
+int GetPID(int rank)
+{
+  CH_assert(rank == 0);
+  return getpid();
+}
+
+int GetRank(int pid)
+{
+  return 0;
+}
+
+#else // serial
+
+int procID()
+{
+  return 0;
+}
+
+// reset this to fool serial code into thinking its parallel
+int num_procs = 1 ;
+
+unsigned int numProc()
+{
+  return num_procs;
+}
+
+int GetPID(int rank)
+{
+  CH_assert(rank == 0);
+  return getpid();
+}
+
+int GetRank(int pid)
+{
+  return 0;
+}
+
+#endif
+
+// these should work independent of MPI's existence
 template < >
 void linearIn<float>(float& a_outputT, const void* const a_inBuf)
 {
