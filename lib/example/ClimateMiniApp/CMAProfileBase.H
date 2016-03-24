@@ -27,6 +27,12 @@ template <typename Derived>
 struct profile_base 
 {
   public:
+    profile_base()
+    // {{{
+      : config()
+    {}
+    // }}}
+
     profile_base(configuration config_)
     // {{{
       : config(config_)
@@ -148,7 +154,7 @@ struct profile_base
             || is_boundary(UPPER_Z, z);
     } // }}}
 
-    configuration const config;
+    configuration config;
 
   private:
     Derived const& derived() const

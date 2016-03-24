@@ -40,6 +40,18 @@
 namespace climate_mini_app
 {
 
+enum {
+    PS_TAG_ANONYMOUS = 0,
+    PS_TAG_STATE,
+    PS_TAG_ANALYTIC, // I think this is unneeded as because never exchange this.
+    PS_TAG_PHI0,
+    PS_TAG_PHI1,
+    PS_TAG_PHI2,
+    PS_TAG_PHI3,
+    PS_TAG_PHI4,
+    PS_TAG_PHI5
+};
+
 #if !defined(CH_HPX)
 /// Creates FArrayBoxes suitable for storing fluxes for the given direction.
 struct FluxFABDataFactory : DataFactory<FArrayBox>
@@ -60,7 +72,49 @@ struct FluxFABDataFactory : DataFactory<FArrayBox>
 };
 #endif
 
-struct sub_problem_state;
+typedef std::pair<DataIndex const, Box> tile;
+
+typedef std::multimap<DataIndex, Box> tile_set;
+
+struct tile_range
+{
+    tile_range() = default;
+
+    tile_range(tile_range const&) = default;
+    tile_range(tile_range&&) = default;
+    tile_range& operator=(tile_range const&) = default;
+    tile_range& operator=(tile_range&&) = default;
+
+    tile_range(tile_set::const_iterator b, tile_set::const_iterator e)
+    // {{{
+      : begin_(b)
+      , end_(e)
+    {} // }}}
+
+    tile_range(std::pair<tile_set::const_iterator, tile_set::const_iterator> r)
+    // {{{
+      : begin_(r.first)
+      , end_(r.second)
+    {} // }}}
+
+    tile_set::const_iterator begin() const
+    { // {{{
+        return begin_;
+    } // }}}
+
+    tile_set::const_iterator end() const
+    { // {{{
+        return end_;
+    } // }}}
+
+  private:
+    tile_set::const_iterator begin_;
+    tile_set::const_iterator end_;
+};
+
+struct problem_state_fab;
+
+struct problem_state_tile;
 
 struct problem_state
 {
@@ -70,12 +124,19 @@ struct problem_state
       , FY()
       , FZ()
       , dit_()
+      , tiles_()
       #if defined(CH_HPX)
       , epoch_()
       #endif
     {} // }}}
 
-    problem_state(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
+    problem_state(
+        DisjointBoxLayout const& dbl
+      , int comps
+      , IntVect ghost
+      , std::uint64_t tile_width
+      , std::size_t tag = PS_TAG_ANONYMOUS
+        )
     // {{{
       : U()
       , FY()
@@ -85,14 +146,20 @@ struct problem_state
       , epoch_()
       #endif
     { 
-        define(dbl, comps, ghost);
+        define(dbl, comps, ghost, tile_width, tag);
     } // }}}
 
-    void define(DisjointBoxLayout const& dbl, int comps, IntVect ghost)
+    void define(
+        DisjointBoxLayout const& dbl
+      , int comps
+      , IntVect ghost
+      , std::uint64_t tile_width
+      , std::size_t tag = PS_TAG_ANONYMOUS
+        )
     { // {{{
-        U.define(dbl, comps, ghost);
-
         #if defined(CH_HPX)
+            U.define(dbl, comps, ghost, tag);
+
             auto defineFY =
                 [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
                 {
@@ -111,8 +178,8 @@ struct problem_state
                     ld[di].define(b, ld.nComp());
                 }; 
 
-            FY.define(dbl, comps, ghost, defineFY);
-            FZ.define(dbl, comps, ghost, defineFZ);
+            FY.define(dbl, comps, ghost, PS_TAG_ANONYMOUS, defineFY);
+            FZ.define(dbl, comps, ghost, PS_TAG_ANONYMOUS, defineFZ);
             
             epoch_.define(dbl);
     
@@ -123,6 +190,8 @@ struct problem_state
                 epoch_[dit()] = 0;
             }
         #else
+            U.define(dbl, comps, ghost);
+
             FluxFABDataFactory fluxFactoryY(1), fluxFactoryZ(2);
     
             FY.define(dbl, comps, ghost, fluxFactoryY);
@@ -130,9 +199,11 @@ struct problem_state
         #endif
 
         dit_ = U.dataIterator();
+
+        make_tiles(tile_width);
     } // }}}
 
-    sub_problem_state operator[](std::size_t ibox);
+    problem_state_fab operator[](std::size_t ibox);
 
     DataIterator dataIterator()
     { // {{{
@@ -148,8 +219,8 @@ struct problem_state
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].copy(X.U[dit[ibox]]);
-            FY[dit[ibox]].copy(X.FY[dit[ibox]]);
-            FZ[dit[ibox]].copy(X.FZ[dit[ibox]]);
+//            FY[dit[ibox]].copy(X.FY[dit[ibox]]);
+//            FZ[dit[ibox]].copy(X.FZ[dit[ibox]]);
         }
     } // }}}
 
@@ -214,9 +285,23 @@ struct problem_state
         #endif
     } // }}}
 
-    friend struct sub_problem_state;
+    tile_range tiles() const
+    { // {{{
+        return tile_range(tiles_.begin(), tiles_.end());
+    } // }}}
+
+    tile_range tiles(DataIndex di) const
+    { // {{{
+        return tile_range(tiles_.equal_range(di));
+    } // }}}
+
+    friend struct problem_state_fab;
+
+    friend struct problem_state_tile;
 
   public:
+    // FIXME FIXME FIXME: Make these private and create accessors for
+    // interface compatiblity with problem_state_*
 #if defined(CH_HPX)
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FY;
@@ -228,48 +313,76 @@ struct problem_state
 #endif
 
   private:
+    void make_tiles(std::uint64_t tile_width) 
+    {
+        DataIterator dit = U.dataIterator();
+        for (dit.begin(); dit.ok(); ++dit)
+        {
+            Box b = U.disjointBoxLayout()[dit()];
+
+            assert(0 == (b.size()[1] % tile_width));
+
+            for (int i = b.smallEnd(1); i <= b.bigEnd(1);)
+            { 
+                Box blo = b;
+                // b is "bhi" after chop.
+                b = blo.chop(1, i += tile_width); 
+                tiles_.emplace(dit(), blo);
+            }
+        }
+    }
+
     DataIterator dit_; // Workaround for RefCountedPtr being not thread-safe.
+
+    tile_set tiles_;
 
 #if defined(CH_HPX)
     LayoutData<std::size_t> epoch_;
 #endif
 };
 
-struct sub_problem_state
+struct problem_state_fab
 {
-    sub_problem_state()
+    problem_state_fab()
     // {{{
       : ps_(0)
       , di_()
+      , tr_()
     {} // }}}
 
-    sub_problem_state(problem_state& ps, DataIndex di)
+    problem_state_fab(problem_state& ps, DataIndex di)
     // {{{
       : ps_(&ps)
       , di_(di)
-    {} // }}}
+      , tr_(ps.tiles(di))
+    {
+        assert(tr_.begin() != tr_.end());
+    } // }}}
 
-    sub_problem_state(sub_problem_state const& other)
+    problem_state_fab(problem_state_fab const& other) = default; 
+/*
     // {{{
       : ps_(other.ps_)
       , di_(other.di_)
+      , tr_(other.tr_)
     {} // }}}
+*/
 
-    sub_problem_state& operator=(sub_problem_state const& other)
+    problem_state_fab& operator=(problem_state_fab const& other) = default;
+/*
     { // {{{
         ps_ = other.ps_;
         di_ = other.di_;
+        tr_ = other.tr_;
         return *this;
     } // }}}
+*/
 
-    void copy(sub_problem_state const& X)
+    void copy(problem_state_fab const& X)
     { // {{{
         vectorizedCopy(X.U(), U());
-        vectorizedCopy(X.FY(), FY());
-        vectorizedCopy(X.FZ(), FZ());
-//        U().copy(X.U());
-//        FY().copy(X.FY());
-//        FZ().copy(X.FZ());
+        //vectorizedCopy(X.FY(), FY());
+        //vectorizedCopy(X.FZ(), FZ());
     } // }}}
 
     void setVal(Real val)
@@ -279,62 +392,14 @@ struct sub_problem_state
         FZ().setVal(val);
     } // }}}
 
-    void plus(sub_problem_state const& X, Real factor)
+    void plus(problem_state_fab const& X, Real factor)
     { // {{{
-        auto&       dest = U();
-        auto const& src  = X.U();
-
-        vectorizedPlus(src, dest, factor);
-/*
-        assert(dest.box() == src.box());
-        assert(dest.nComp() == src.nComp());
-
-        for (auto n = 0; n < dest.nComp(); ++n)
-        {
-            Real* __restrict__       dest_p = dest.dataPtr(n);
-            Real const* __restrict__ src_p  = src.dataPtr(n);
-
-            IntVect const lower = dest.smallEnd();
-            IntVect const upper = dest.bigEnd(); 
-
-            auto const size = (upper[0]-lower[0]+1)
-                            * (upper[1]-lower[1]+1)
-                            * (upper[2]-lower[2]+1);
-
-            #pragma simd
-            for (auto i = 0; i < size; ++i)
-                dest_p[i] += factor * src_p[i];
-        }
-*/
+        vectorizedPlus(X.U(), U(), factor);
     } // }}}
 
-    void plus(sub_problem_state const& X)
+    void plus(problem_state_fab const& X)
     { // {{{
-        auto&       dest = U();
-        auto const& src  = X.U();
-
-        vectorizedPlus(src, dest);
-/*
-        assert(dest.box() == src.box());
-        assert(dest.nComp() == src.nComp());
-
-        for (auto n = 0; n < dest.nComp(); ++n)
-        {
-            Real* __restrict__       dest_p = dest.dataPtr(n);
-            Real const* __restrict__ src_p  = src.dataPtr(n);
-
-            IntVect const lower = dest.smallEnd();
-            IntVect const upper = dest.bigEnd(); 
-
-            auto const size = (upper[0]-lower[0]+1)
-                            * (upper[1]-lower[1]+1)
-                            * (upper[2]-lower[2]+1);
-
-            #pragma simd
-            for (auto i = 0; i < size; ++i)
-                dest_p[i] += src_p[i];
-        }
-*/
+        vectorizedPlus(X.U(), U());
     } // }}}
 
 #if defined(CH_HPX)
@@ -350,6 +415,7 @@ struct sub_problem_state
         LocalExchangeSync(ps_->epoch_[di_]++, di_, ps_->U);
     } // }}}
 
+/*
     // FIXME FIXME FIXME
     void exchangeFluxSync()
     { // {{{
@@ -358,7 +424,13 @@ struct sub_problem_state
         auto ffz = LocalExchangeAsync(ps_->epoch_[di_]++, di_, ps_->FZ);
         hpx::lcos::when_all(ffy, ffz).get();
     } // }}}
+*/
 #endif
+
+    tile_range tiles() const
+    { // {{{
+        return tr_; 
+    } // }}}
 
     FArrayBox& U()
     { // {{{
@@ -399,15 +471,16 @@ struct sub_problem_state
   private:
     problem_state* ps_;
     DataIndex di_;
+    tile_range tr_;
 };
 
-sub_problem_state problem_state::operator[](std::size_t ibox)
+problem_state_fab problem_state::operator[](std::size_t ibox)
 { // {{{
     std::size_t const nbox = dit_.size();
 
     assert(ibox <= nbox);
 
-    return sub_problem_state(*this, dit_[ibox]);
+    return problem_state_fab(*this, dit_[ibox]);
 } // }}}
 
 }

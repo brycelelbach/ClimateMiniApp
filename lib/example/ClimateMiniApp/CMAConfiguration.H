@@ -21,6 +21,7 @@
 
 #include "IntVect.H"
 #include "StreamCSV.H"
+#include "BoostSerialization.H"
 
 namespace climate_mini_app
 {
@@ -38,56 +39,46 @@ enum boundary_type
     UPPER_Z
 };
 
-enum ProblemType
-{
-    Problem_Invalid             = -1,
-    Problem_AdvectionDiffusion  = 1,
-    Problem_Last                = Problem_AdvectionDiffusion
-};
-
-inline std::ostream& operator<<(std::ostream& os, ProblemType problem)
-{ // {{{
-    switch (problem)
-    {
-        default:
-        case Problem_Invalid:
-            os << "Invalid";
-            break;
-        case Problem_AdvectionDiffusion:
-            os << "Advection-Diffusion";
-            break;
-    }
-    return os;
-} // }}}
-
 struct configuration
 {
     ///////////////////////////////////////////////////////////////////////////
     // Parameters.
 
-    ProblemType const problem;
+    std::uint64_t nh; ///< "Horizontal" extent (y and z dimensions) per core.
+    std::uint64_t nv; ///< "Vertical" extent (x dimension) per core.
 
-    std::uint64_t const nh; ///< "Horizontal" extent (y and z dimensions) per core.
-    std::uint64_t const nv; ///< "Vertical" extent (x dimension) per core.
+    std::uint64_t max_box_size;
 
-    std::uint64_t const max_box_size;
+    std::uint64_t tile_width;
 
-    IntVect const ghost_vector;
+    IntVect ghost_vector;
 
-    bool const header;  ///< Print header for CSV timing data.
-    bool const verbose; ///< Print status updates.
+    bool header;  ///< Print header for CSV timing data.
+    bool verbose; ///< Print status updates.
 
 #if defined(CH_USE_HDF5)
-    bool const output; ///< Generate HDF5 output.
+    bool output; ///< Generate HDF5 output.
 #endif    
 
     ///////////////////////////////////////////////////////////////////////////
+    configuration()
+      : nh()
+      , nv()
+      , max_box_size()
+      , tile_width()
+      , ghost_vector()
+      , header()
+      , verbose()
+      #if defined(CH_USE_HDF5)
+      , output()
+      #endif
+    {}
 
     configuration(
-        ProblemType problem_
-      , std::uint64_t nh_
+        std::uint64_t nh_
       , std::uint64_t nv_
       , std::uint64_t max_box_size_
+      , std::uint64_t tile_width_
       , IntVect ghost_vector_
       , bool header_
       , bool verbose_
@@ -95,11 +86,11 @@ struct configuration
       , bool output_
       #endif
         )
-      : problem(problem_)
-      , nh(nh_)
+      : nh(nh_)
       , nv(nv_)
       , max_box_size(max_box_size_)
       , ghost_vector(ghost_vector_)
+      , tile_width(tile_width_)
       , header(header_)
       , verbose(verbose_)
       #if defined(CH_USE_HDF5)
@@ -109,16 +100,31 @@ struct configuration
 
     std::string print_csv_header() const
     { // {{{
-        return "Problem,"
-               "Horizontal Extent (nh),"
+        return "Horizontal Extent (nh),"
                "Vertical Extent (nv),"
-               "Max Box Size (mbs)";
+               "Max Box Size (mbs)",
+               "Tile Width (tw)";
     } // }}}
 
-    CSVTuple<ProblemType, std::uint64_t, std::uint64_t, std::uint64_t>
+    CSVTuple<std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t>
     print_csv() const
     { // {{{
-        return StreamCSV(problem, nh, nv, max_box_size); 
+        return StreamCSV(nh, nv, max_box_size, tile_width); 
+    } // }}}
+
+    template <typename Archive>
+    void serialize(Archive& ar, unsigned)
+    { // {{{
+        ar & nh;
+        ar & nv;
+        ar & max_box_size;
+        ar & tile_width;
+        ar & ghost_vector;
+        ar & header;
+        ar & verbose;
+        #if defined(CH_USE_HDF5)
+        ar & output;
+        #endif
     } // }}}
 }; 
 

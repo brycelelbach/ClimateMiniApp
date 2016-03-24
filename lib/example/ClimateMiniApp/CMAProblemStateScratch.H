@@ -28,16 +28,17 @@ struct problem_state_scratch<true>
         DisjointBoxLayout const& dbl
       , int comps
       , IntVect ghost
+      , std::uint64_t tile_width
         )
     {  
         for (std::size_t i = 0; i < phi.size(); ++i)
-            phi[i].define(dbl, comps, ghost); 
+            phi[i].define(dbl, comps, ghost, tile_width); 
 
         for (std::size_t i = 0; i < denseCoefs.size(); ++i)
-            denseCoefs[i].define(dbl, comps, ghost);
+            denseCoefs[i].define(dbl, comps, ghost, tile_width);
 
-        kE.define(dbl, comps, ghost);
-        kI.define(dbl, comps, ghost);
+        kE.define(dbl, comps, ghost, tile_width);
+        kI.define(dbl, comps, ghost, tile_width);
     }
 };
 
@@ -54,31 +55,32 @@ struct problem_state_scratch<false>
         DisjointBoxLayout const& dbl
       , int comps
       , IntVect ghost
+      , std::uint64_t tile_width
         )
     {  
         for (std::size_t i = 0; i < phi.size(); ++i)
-            phi[i].define(dbl, comps, ghost); 
+            phi[i].define(dbl, comps, ghost, tile_width); 
 
-        kE.define(dbl, comps, ghost);
-        kI.define(dbl, comps, ghost);
+        kE.define(dbl, comps, ghost, tile_width);
+        kI.define(dbl, comps, ghost, tile_width);
     }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <bool DenseOutput>
-struct sub_problem_state_scratch;
+struct problem_state_fab_scratch;
 
 template <>
-struct sub_problem_state_scratch<true> 
+struct problem_state_fab_scratch<true> 
 {
-    std::array<sub_problem_state, ARK4Sizes::s_nStages>
+    std::array<problem_state_fab, ARK4Sizes::s_nStages>
         phi;
-    std::array<sub_problem_state, ARK4Sizes::s_nDenseCoefs>
+    std::array<problem_state_fab, ARK4Sizes::s_nDenseCoefs>
         denseCoefs;
 
-    sub_problem_state kE;
-    sub_problem_state kI;
+    problem_state_fab kE;
+    problem_state_fab kI;
 
     void define(
         DataIndex di
@@ -89,24 +91,24 @@ struct sub_problem_state_scratch<true>
         )
     {  
         for (std::size_t i = 0; i < phi.size(); ++i)
-            phi[i] = sub_problem_state(phi_[i], di);
+            phi[i] = problem_state_fab(phi_[i], di);
 
         for (std::size_t i = 0; i < denseCoefs.size(); ++i)
-            denseCoefs[i] = sub_problem_state(denseCoefs_[i], di);
+            denseCoefs[i] = problem_state_fab(denseCoefs_[i], di);
 
-        kE = sub_problem_state(kE_, di);
-        kI = sub_problem_state(kI_, di);
+        kE = problem_state_fab(kE_, di);
+        kI = problem_state_fab(kI_, di);
     }
 };
 
 template <>
-struct sub_problem_state_scratch<false> 
+struct problem_state_fab_scratch<false> 
 {
-    std::array<sub_problem_state, ARK4Sizes::s_nStages>
+    std::array<problem_state_fab, ARK4Sizes::s_nStages>
         phi;
 
-    sub_problem_state kE;
-    sub_problem_state kI;
+    problem_state_fab kE;
+    problem_state_fab kI;
 
     void define(
         DataIndex di
@@ -116,10 +118,10 @@ struct sub_problem_state_scratch<false>
         )
     {  
         for (std::size_t i = 0; i < phi.size(); ++i)
-            phi[i] = sub_problem_state(phi_[i], di);
+            phi[i] = problem_state_fab(phi_[i], di);
 
-        kE = sub_problem_state(kE_, di);
-        kI = sub_problem_state(kI_, di);
+        kE = problem_state_fab(kE_, di);
+        kI = problem_state_fab(kI_, di);
     }
 };
 

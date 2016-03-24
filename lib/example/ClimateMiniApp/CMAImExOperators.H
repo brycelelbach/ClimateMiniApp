@@ -75,7 +75,7 @@ struct imex_per_box_operators
 
   public:
 /*
-    void horizontalFlux(sub_problem_state& phi_) const
+    void horizontalFlux(problem_state_fab& phi_) const
     { // {{{
         auto const& phi = phi_.U();
 
@@ -103,11 +103,11 @@ struct imex_per_box_operators
     { // {{{
         if (explicitOpDisabled())
         {
-            kE_.U().setVal(0.0);
+            //kE_.U().setVal(0.0);
             return;
         }
 
-        // For HPX, we operate on sub_problem_states (e.g. FArrayBox
+        // For HPX, we operate on problem_state_fabs (e.g. FArrayBox
         // granularity). For MPI, these exchanges are done on problem_states
         // (e.g. LevelData granularity). 
         #if defined(CH_HPX)
@@ -117,55 +117,61 @@ struct imex_per_box_operators
         //horizontalFlux(phi_);
 
         auto& state = state_.U();
-        auto& kE    = kE_.U();
+//        auto& kE    = kE_.U();
         auto& phi   = phi_[Stage].U();
         auto& FY    = phi_[Stage].FY();
         auto& FZ    = phi_[Stage].FZ();
 
-        IntVect const lower_kE  = kE.smallEnd();  // FIXME: Better names.
-        IntVect const upper_kE  = kE.bigEnd();    // FIXME: Better names.
+//        IntVect const lower_kE  = kE.smallEnd();  // FIXME: Better names.
+//        IntVect const upper_kE  = kE.bigEnd();    // FIXME: Better names.
 
-        IntVect const lower_phi = phi.smallEnd(); // FIXME: Better names.
-        IntVect const upper_phi = phi.bigEnd();   // FIXME: Better names.
+        Box const b = phi.box();
+
+        IntVect const lower_phi = b.smallEnd(); // FIXME: Better names.
+        IntVect const upper_phi = b.bigEnd();   // FIXME: Better names.
  
-        IntVect const lower_FY  = FY.smallEnd();  // FIXME: Better names.
-        IntVect const upper_FY  = FY.bigEnd();    // FIXME: Better names.
+        IntVect const lower_FY  = surroundingNodes(b, 1).smallEnd();  // FIXME: Better names.
+        IntVect const upper_FY  = surroundingNodes(b, 1).bigEnd();    // FIXME: Better names.
 
-        IntVect const lower_FZ  = FZ.smallEnd();  // FIXME: Better names.
-        IntVect const upper_FZ  = FZ.bigEnd();    // FIXME: Better names.
+        IntVect const lower_FZ  = surroundingNodes(b, 2).smallEnd();  // FIXME: Better names.
+        IntVect const upper_FZ  = surroundingNodes(b, 2).bigEnd();    // FIXME: Better names.
 
-        IntVect phys_lower_phi = phi.smallEnd();
-        IntVect phys_upper_phi = phi.bigEnd(); 
+        IntVect phys_lower_phi = lower_phi;
+        IntVect phys_upper_phi = upper_phi; 
 
         phys_lower_phi.shift(profile.config.ghost_vector);
         phys_upper_phi.shift(-1*profile.config.ghost_vector);
 
-        IntVect phys_lower_FY = FY.smallEnd();
-        IntVect phys_upper_FY = FY.bigEnd(); 
+        IntVect phys_lower_FY = lower_FY;
+        IntVect phys_upper_FY = upper_FY; 
 
         phys_lower_FY.shift(0, profile.ghostVect()[0]);
         phys_upper_FY.shift(0, -1*profile.ghostVect()[0]);
-        phys_lower_FY.shift(1, 1);
-//        phys_lower_FY.shift(1, profile.ghostVect()[1]);
-//        phys_upper_FY.shift(1, -1*profile.ghostVect()[1]);
+//        phys_lower_FY.shift(1, 1);
+////        phys_lower_FY.shift(1, profile.ghostVect()[1]);
+////        phys_upper_FY.shift(1, -1*profile.ghostVect()[1]);
+        phys_lower_FY.shift(1, profile.ghostVect()[1]);
+        phys_upper_FY.shift(1, -2);
         phys_lower_FY.shift(2, profile.ghostVect()[2]);
         phys_upper_FY.shift(2, -1*profile.ghostVect()[2]);
 
-        IntVect phys_lower_FZ = FZ.smallEnd();
-        IntVect phys_upper_FZ = FZ.bigEnd(); 
+        IntVect phys_lower_FZ = lower_FZ;
+        IntVect phys_upper_FZ = upper_FZ; 
 
         phys_lower_FZ.shift(0, profile.ghostVect()[0]);
         phys_upper_FZ.shift(0, -1*profile.ghostVect()[0]);
         phys_lower_FZ.shift(1, profile.ghostVect()[1]);
         phys_upper_FZ.shift(1, -1*profile.ghostVect()[1]);
-        phys_lower_FZ.shift(2, 1);
-//        phys_lower_FZ.shift(2, profile.ghostVect()[2]);
-//        phys_upper_FZ.shift(2, -1*profile.ghostVect()[2]);
+//        phys_lower_FZ.shift(2, 1);
+////        phys_lower_FZ.shift(2, profile.ghostVect()[2]);
+////        phys_upper_FZ.shift(2, -1*profile.ghostVect()[2]);
+        phys_lower_FZ.shift(2, profile.ghostVect()[2]);
+        phys_upper_FZ.shift(2, -2);
 
         ///////////////////////////////////////////////////////////////////////
 
         Real* __restrict__ pstate = state.dataPtr(0); 
-        Real* __restrict__ pke    = kE.dataPtr(0); 
+//        Real* __restrict__ pke    = kE.dataPtr(0); 
         Real* __restrict__ pfy    = FY.dataPtr(0);
         Real* __restrict__ pfz    = FZ.dataPtr(0);
 
@@ -178,8 +184,8 @@ struct imex_per_box_operators
 
         // len0 is the extent of i and the stride of j.
         // len1 is the extent of j. len0*len1 is the stride of k.
-        auto const len0_kE  = (upper_kE[0]-lower_kE[0]+1);
-        auto const len1_kE  = (upper_kE[1]-lower_kE[1]+1);
+//        auto const len0_kE  = (upper_kE[0]-lower_kE[0]+1);
+//        auto const len1_kE  = (upper_kE[1]-lower_kE[1]+1);
 
         auto const len0_phi = (upper_phi[0]-lower_phi[0]+1);
         auto const len1_phi = (upper_phi[1]-lower_phi[1]+1);
@@ -299,14 +305,14 @@ struct imex_per_box_operators
                     auto const idx_FY =
                         i-lower_FY[0] + len0_FY*(dif1_FY + len1_FY*dif2_FY);
 
-                    Real kE_here = profile.horizontal_stencil_1d<1>
+                    Real phi_here = profile.horizontal_stencil_1d<1>
                         (pfy, idx_FY, len0_FY, inv_dh_c);
 
                     #pragma unroll
                     for (std::size_t k = Stage + 1; k < TotalStages; ++k)
-                        pphi[k][idx_phi] += kE_here * dt*s_aE[k][Stage];
+                        pphi[k][idx_phi] += phi_here * dt*s_aE[k][Stage];
 
-                    pstate[idx_phi] += kE_here * dt*s_b[Stage];
+                    pstate[idx_phi] += phi_here * dt*s_b[Stage];
                 }
 
                 #pragma simd
@@ -326,14 +332,14 @@ struct imex_per_box_operators
                     auto const idx_FZ =
                         i-lower_FZ[0] + len0_FZ*(dif1_FZ + len1_FZ*dif2_FZ);
 
-                    Real kE_here = profile.horizontal_stencil_1d<2>
+                    Real phi_here = profile.horizontal_stencil_1d<2>
                         (pfz, idx_FZ, len0_FZ*len1_FZ, inv_dh_c);
 
                     #pragma unroll
                     for (std::size_t k = Stage + 1; k < TotalStages; ++k)
-                        pphi[k][idx_phi] += kE_here * dt*s_aE[k][Stage];
+                        pphi[k][idx_phi] += phi_here * dt*s_aE[k][Stage];
 
-                    pstate[idx_phi] += kE_here * dt*s_b[Stage];
+                    pstate[idx_phi] += phi_here * dt*s_b[Stage];
                 }
             }
         }
@@ -431,12 +437,13 @@ struct imex_per_box_operators
 
         Box b(lower, upper);
 
+        LapackFactorization A;
+        profile.define_vertical_operator(A, b);
+
         //#pragma omp parallel for schedule(static)
         for (auto j = lower[1]; j <= upper[1]; ++j)
             for (auto k = lower[2]; k <= upper[2]; ++k)
             {
-                LapackFactorization A;
-
                 profile.build_vertical_operator_for_apply(A, b);
 
                 profile.apply_vertical_operator(j, k, A, b, kI, phi);
@@ -453,7 +460,7 @@ struct imex_per_box_operators
         if (implicitOpDisabled())
             return;
 
-        // For HPX, we operate on sub_problem_states (e.g. FArrayBox
+        // For HPX, we operate on problem_state_fabs (e.g. FArrayBox
         // granularity). For MPI, these exchanges are done on problem_states
         // (e.g. LevelData granularity). 
         //#if defined(CH_HPX)
@@ -470,12 +477,13 @@ struct imex_per_box_operators
 
         Box b(lower, upper);
 
+        LapackFactorization A;
+        profile.define_vertical_operator(A, b);
+
         //#pragma omp parallel for schedule(static)
         for (auto j = lower[1]; j <= upper[1]; ++j)
             for (auto k = lower[2]; k <= upper[2]; ++k)
             {
-                LapackFactorization A;
-
                 profile.build_vertical_operator_for_solve(A, b, dtscale);
 
                 profile.vertical_solve(j, k, A, b, phi);
@@ -521,7 +529,7 @@ struct imex_per_ld_operators
         ) const
     { // {{{
         // If we're using MPI, we do the exchange at problem_state (e.g.
-        // LevelData) granularity, and the exchange at the sub_problem_state
+        // LevelData) granularity, and the exchange at the problem_state_fab
         // level (e.g. FArrayBox granularity) is #ifdef'd out. 
 /*
         #if !defined(CH_HPX)
@@ -535,9 +543,9 @@ struct imex_per_ld_operators
         //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            sub_problem_state sub_state(state_, dit[ibox]);
-            sub_problem_state sub_kE(kE_, dit[ibox]);
-            sub_problem_state sub_phi(phi_, dit[ibox]);
+            problem_state_fab sub_state(state_, dit[ibox]);
+            problem_state_fab sub_kE(kE_, dit[ibox]);
+            problem_state_fab sub_phi(phi_, dit[ibox]);
 
             imex_per_box_operators<Profile> sub_imex(profile);
 
@@ -559,8 +567,8 @@ struct imex_per_ld_operators
         //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            sub_problem_state sub_phi(phi_, dit[ibox]);
-            sub_problem_state sub_kI(kI_, dit[ibox]);
+            problem_state_fab sub_phi(phi_, dit[ibox]);
+            problem_state_fab sub_kI(kI_, dit[ibox]);
 
             imex_per_box_operators<Profile> sub_imex(profile);
 
@@ -576,7 +584,7 @@ struct imex_per_ld_operators
         ) const
     { // {{{
         // If we're using MPI, we do the exchange at problem_state (e.g.
-        // LevelData) granularity, and the exchange at the sub_problem_state
+        // LevelData) granularity, and the exchange at the problem_state_fab
         // level (FArrayBox granularity) is #ifdef'd out. 
 /*
         #if !defined(CH_HPX)
@@ -590,7 +598,7 @@ struct imex_per_ld_operators
         //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
-            sub_problem_state sub_phi(phi_, dit[ibox]);
+            problem_state_fab sub_phi(phi_, dit[ibox]);
 
             imex_per_box_operators<Profile> sub_imex(profile);
 

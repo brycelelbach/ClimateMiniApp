@@ -13,8 +13,12 @@
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <mpi.h>
+
 #if defined(CH_HPX)
     #include <hpx/config.hpp>
+    #include <hpx/lcos/barrier.hpp>
+    #include <hpx/runtime/actions/plain_action.hpp>
 #endif
 
 #include <boost/format.hpp>
@@ -40,6 +44,7 @@
 
 #if defined(CH_HPX)
     #include "HPXDriver.H"
+    #include "AsyncLevelDataRegistry.H"
 #endif
 
 #include "CMAProblemStateScratch.H"
@@ -48,24 +53,24 @@
 // FIXME: Move this to ALD
 #if defined(CH_HPX)
 template <typename LD, typename F>
-void visit(LD& soln, F f)
+void visit(LD& state, F f)
 {
     std::vector<hpx::future<void> > futures;
-    DataIterator dit = soln.dataIterator();
+    DataIterator dit = state.dataIterator();
 
     for (dit.begin(); dit.ok(); ++dit)
     { 
         auto F = 
             [&](DataIndex di)
             {
-                auto& subsoln = soln[di];
-                IntVect lower = subsoln.smallEnd();
-                IntVect upper = subsoln.bigEnd(); 
+                auto& substate = state[di];
+                IntVect lower = substate.smallEnd();
+                IntVect upper = substate.bigEnd(); 
 
                 for (auto k = lower[2]; k <= upper[2]; ++k)
                     for (auto j = lower[1]; j <= upper[1]; ++j)
                         for (auto i = lower[0]; i <= upper[0]; ++i)
-                            f(subsoln(IntVect(i, j, k)), IntVect(i, j, k));
+                            f(substate(IntVect(i, j, k)), IntVect(i, j, k));
             };
 
         futures.emplace_back(hpx::async(F, dit()));
@@ -75,22 +80,22 @@ void visit(LD& soln, F f)
 }
 #else
 template <typename LD, typename F>
-void visit(LD& soln, F f)
+void visit(LD& state, F f)
 {
-    DataIterator dit = soln.dataIterator();
+    DataIterator dit = state.dataIterator();
     std::size_t const nbox = dit.size();
 
     #pragma omp parallel for schedule(static)
     for (std::size_t ibox = 0; ibox < nbox; ++ibox)
     {
-        auto& subsoln = soln[dit[ibox]];
-        IntVect lower = subsoln.smallEnd();
-        IntVect upper = subsoln.bigEnd(); 
+        auto& substate = state[dit[ibox]];
+        IntVect lower = substate.smallEnd();
+        IntVect upper = substate.bigEnd(); 
 
         for (auto k = lower[2]; k <= upper[2]; ++k)
             for (auto j = lower[1]; j <= upper[1]; ++j)
                 for (auto i = lower[0]; i <= upper[0]; ++i)
-                    f(subsoln(IntVect(i, j, k)), IntVect(i, j, k));
+                    f(substate(IntVect(i, j, k)), IntVect(i, j, k));
     }
 }
 #endif
@@ -118,7 +123,7 @@ std::string format_filename(std::string const& fmt, Args&&... args)
 template <typename Profile, typename... Args>
 void output(
     Profile const& profile
-  , AsyncLevelData<FArrayBox>& data
+  , AsyncLevelData<FArrayBox>& state
   , std::string const& name
   , Real time  
   , std::string const& fmt
@@ -128,19 +133,19 @@ void output(
     std::string file = format_filename(fmt, fmt_args...);
 
     Vector<DisjointBoxLayout> level_dbl;
-    level_dbl.push_back(data.disjointBoxLayout());
+    level_dbl.push_back(state.disjointBoxLayout());
 
     Vector<std::string> names;
     names.push_back(name);
 
     Vector<LevelData<FArrayBox>*> level;
     level.push_back(new LevelData<FArrayBox>);
-    level.back()->define(level_dbl[0], names.size(), data.ghostVect());
+    level.back()->define(level_dbl[0], names.size(), state.ghostVect());
 
-    DataIterator dit = data.dataIterator();
+    DataIterator dit = state.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
     {
-        auto& src  = data[dit()];
+        auto& src  = state[dit()];
         auto& dest = (*level[0])[dit()];
 
         // Alias the src.
@@ -176,7 +181,7 @@ void output(
 template <typename Profile, typename... Args>
 void output(
     Profile const& profile
-  , LevelData<FArrayBox>& data
+  , LevelData<FArrayBox>& state
   , std::string const& name
   , Real time  
   , std::string const& fmt
@@ -186,7 +191,7 @@ void output(
     std::string file = format_filename(fmt, fmt_args...);
 
     Vector<DisjointBoxLayout> level_dbl;
-    level_dbl.push_back(data.disjointBoxLayout());
+    level_dbl.push_back(state.disjointBoxLayout());
 
     Vector<std::string> names;
     names.push_back(name);
@@ -195,7 +200,7 @@ void output(
     ref_ratios.push_back(IntVect(2, 2, 2));
     
     Vector<LevelData<FArrayBox>*> level;
-    level.push_back(&data); 
+    level.push_back(&state); 
 
     RealVect dp(
         profile.dp()[0]
@@ -216,34 +221,83 @@ void output(
       , 1 // levels
         );
 }
+#endif
 
 template <typename Profile>
-void compareAndOutput(
+std::pair<Real, Real> compareAndOutput(
     Profile const& profile
-  , climate_mini_app::problem_state& data
+  , climate_mini_app::problem_state& state
+  , climate_mini_app::problem_state& analytic
   , Real time
   , std::size_t step
     )
 { 
-    DisjointBoxLayout const& dbl = data.U.disjointBoxLayout();
+    DisjointBoxLayout const& dbl = state.U.disjointBoxLayout();
 
-    data.exchangeSync();
+    state.exchangeSync();
 
-    output(profile, data.U, "phi", time, "phi.%06u.hdf5", step); 
+    #if defined(CH_USE_HDF5) 
+        if (profile.config.output)
+            output(profile, state.U, "phi", time, "phi.%06u.hdf5", step); 
+    #endif
 
-    climate_mini_app::problem_state analytic(dbl, 1, data.U.ghostVect());
     visit(analytic.U,
         [&profile, time](Real& val, IntVect here)
         { val = profile.analytic_solution(here, time); }
     );
 
-    output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
+    #if defined(CH_USE_HDF5) 
+        if (profile.config.output)
+            output(profile, analytic.U, "phi", time, "analytic.%06u.hdf5", step); 
+    #endif
 
-    DataIterator dit = data.U.dataIterator();
 
+    // Compute the error, store it in analytic and find the min/max error.
+    Real min_error = 1.0e300, max_error = -1.0e300;
+    DataIterator dit = state.U.dataIterator();
     for (dit.begin(); dit.ok(); ++dit)
-        analytic.U[dit()].plus(data.U[dit()], -1.0);
-    output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
+    {
+        analytic.U[dit()].plus(state.U[dit()], -1.0);
+        min_error = std::min(min_error, analytic.U[dit()].min());
+        max_error = std::max(max_error, analytic.U[dit()].max());
+    }
+
+    #if defined(CH_USE_HDF5) 
+        if (profile.config.output)
+            output(profile, analytic.U, "phi", time, "error.%06u.hdf5", step); 
+    #endif
+
+    return std::pair<Real, Real>(min_error, max_error);
+}
+
+#if defined(CH_HPX)
+void registration_barrier()
+{
+    if (numProc() == 1)
+        return;
+
+    using hpx::lcos::barrier;
+
+    char const* const barrier_name = "/cma/barrier/registration";
+
+    hpx::id_type here = hpx::find_here();
+
+    if (hpx::find_root_locality() == here)
+    {
+        // Create the barrier, register it with AGAS
+        hpx::lcos::barrier b = hpx::lcos::barrier::create(here, numProc());
+        hpx::agas::register_name_sync(barrier_name, b.get_gid());
+        b.wait();
+        hpx::agas::unregister_name_sync(barrier_name);
+    }
+
+    else
+    {
+        hpx::id_type id = hpx::agas::on_symbol_namespace_event(
+                barrier_name, hpx::agas::symbol_ns_bind, true).get();
+        hpx::lcos::barrier b(id);
+        b.wait();
+    }
 }
 #endif
 
@@ -257,22 +311,24 @@ void stepLoop(
 
     climate_mini_app::configuration const& config = profile.config;
 
-    #if !defined(CH_HPX)
-        auto const procid = procID();
-    #else
-        auto constexpr procid = 0;
-    #endif
+    auto const procid = procID();
 
     if (config.verbose && (0 == procid))
-        std::cout << "Starting HPX/Chombo Climate Mini-App...\n"
+        std::cout << "Starting Chombo Climate Mini-App...\n"
                   << std::flush; 
 
     if (config.header && (0 == procid))
         std::cout << config.print_csv_header() << "," 
                   << profile.print_csv_header() << ","
-                  << "Boxes,Steps (ns),Simulation Time (nt),"
-                     "Localities,PUs,"
-                     "Initialization Wall Time [s],Solver Wall Time [s]\n"
+                  << "Boxes,"
+                     "Steps (ns),"
+                     "Simulation Time (nt),"
+                     "Localities,"
+                     "PUs,"
+                     "Minimum Error,"
+                     "Maximum Error,"
+                     "Initialization Wall Time [s],"
+                     "Solver Wall Time [s]\n"
                   << std::flush;
 
     ProblemDomain base_domain = profile.problem_domain(); 
@@ -285,32 +341,65 @@ void stepLoop(
     Vector<int> procs(boxes.size(), 0);
     LoadBalance(procs, boxes);
 
+    if (config.verbose && (0 == procid))
+    {
+        std::cout << "PROC ASSIGNMENT:\n";
+
+        for (auto i = 0; i < boxes.size(); ++i) 
+            std::cout << "  " << boxes[i] << " -> " << procs[i] << "\n";
+    }
+
     DisjointBoxLayout dbl(boxes, procs, base_domain);
 
-    climate_mini_app::problem_state data(dbl, 1, config.ghost_vector);
+    climate_mini_app::problem_state
+        state(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_STATE);
 
-    visit(data.U,
+    #if defined(CH_HPX)
+        RegisterALDSync(&(state.U));
+    #endif
+
+    visit(state.U,
         [&profile](Real& val, IntVect here)
         { val = profile.initial_state(here); }
     );
 
+    climate_mini_app::problem_state
+        analytic(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_ANALYTIC);
+
+    #if defined(CH_HPX)
+        RegisterALDSync(&(analytic.U));
+    #endif
+
     #if defined(CH_HPX)
         typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
         typedef ARK4<
-            climate_mini_app::sub_problem_state
-          , climate_mini_app::sub_problem_state_scratch<false>
+            climate_mini_app::problem_state_fab
+          , climate_mini_app::problem_state_fab_scratch<false>
           , imexop
           , false
         > ark_type;
     
         std::array<climate_mini_app::problem_state, ark_type::s_nStages> phi;
     
-        for (climate_mini_app::problem_state& ps : phi)
-            ps.define(dbl, 1, config.ghost_vector);
+        phi[0].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI0);
+        phi[1].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI1);
+        phi[2].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI2);
+        phi[3].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI3);
+        phi[4].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI4);
+        phi[5].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI5);
+
+        RegisterALDSync(&(phi[0].U));
+        RegisterALDSync(&(phi[1].U));
+        RegisterALDSync(&(phi[2].U));
+        RegisterALDSync(&(phi[3].U));
+        RegisterALDSync(&(phi[4].U));
+        RegisterALDSync(&(phi[5].U));
  
         // FIXME: Can we remove flux, ghost zones?
-        climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector);
-        climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector);
+        climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector, config.tile_width);
+        climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector, config.tile_width);
+
+        registration_barrier();
     #else
         typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
         typedef OMPARK4<
@@ -321,38 +410,8 @@ void stepLoop(
         > ark_type;
   
         ark_type ark(imexop(profile), profile.dt()); 
-        ark.define(dbl, 1, config.ghost_vector);
+        ark.define(dbl, 1, config.ghost_vector, config.tile_width);
     #endif
-
-    #if defined(CH_USE_HDF5) && defined(CH_DUMP_SOURCE_TERM)
-        if (config.output)
-        {
-            climate_mini_app::problem_state src(dbl, 1, config.ghost_vector);
-            visit(src.U,
-                [&profile](Real& val, IntVect here)
-                { val = profile.source_term(here, 0.0); }
-            );
-            output(profile, src.U, "phi", 0.0, "source.hdf5"); 
-        }
-    #endif 
-
-#if 0
-    // Ensure that Intel MKL functions have been dynamically loaded.
-    {
-        Box b(IntVect(0, 0, 0), IntVect(4, 0, 0));
-
-        FArrayBox kI(b, 1);  kI.setVal(0.0);
-        FArrayBox phi(b, 1); phi.setVal(0.0);
-
-        LapackFactorization A;
-
-        profile.build_vertical_operator_for_apply(A, b);
-        profile.apply_vertical_operator(0, 0, A, b, kI, phi);
-
-        profile.build_vertical_operator_for_solve(A, b, 1.0);
-        profile.vertical_solve(0, 0, A, b, phi);
-    }
-#endif
 
     std::size_t step = 0;
 
@@ -364,12 +423,12 @@ void stepLoop(
 
     while ((time < nt) && (std::fabs(nt-time) > 1e-14))
     {
-        DataIterator dit = data.U.dataIterator();
+        DataIterator dit = state.U.dataIterator();
 
-        #if defined(CH_USE_HDF5)
+        #if defined(CH_USE_HDF5) 
             if (config.output)
-                compareAndOutput(profile, data, time, step);
-        #endif 
+                compareAndOutput(profile, state, analytic, time, step);
+        #endif
 
         ++step;
 
@@ -394,12 +453,12 @@ void stepLoop(
                 auto advance =  
                     [&](DataIndex di)
                     {
-                        climate_mini_app::sub_problem_state subdata(data, di);
+                        climate_mini_app::problem_state_fab substate(state, di);
     
                         ark_type ark(imexop(profile), dt); 
                         ark.define(di, phi, kE, kI);
     
-                        ark.advance(time, subdata);
+                        ark.advance(time, substate);
                     };
     
                 futures.emplace_back(hpx::async(advance, dit()));
@@ -407,7 +466,7 @@ void stepLoop(
     
             hpx::lcos::when_all(futures).get();
         #else
-            ark.advance(time, data);
+            ark.advance(time, state);
         #endif
 
         #if defined(CH_USE_HDF5) && defined(CH_DUMP_FLUXES)
@@ -430,13 +489,17 @@ void stepLoop(
         time += dt;
     } 
 
+    std::uint64_t localities = numProc(); 
     #if defined(CH_HPX)
-        std::uint64_t localities = numProc(); 
-        std::uint64_t pus = hpx::get_num_worker_threads() * localities; 
+        std::uint64_t pus = hpx::get_os_thread_count() * localities; 
     #else
-        std::uint64_t localities = numProc();
         std::uint64_t pus = omp_get_max_threads() * localities;
     #endif
+
+    //MPI_Barrier(Chombo_MPI::comm);
+
+    std::pair<Real, Real> min_max_error
+        = compareAndOutput(profile, state, analytic, time, step);
 
     if (0 == procid)
         std::cout << config.print_csv() << "," 
@@ -446,15 +509,17 @@ void stepLoop(
                   << nt << ","
                   << localities << ","
                   << pus << ","
+                  << min_max_error.first << ","
+                  << min_max_error.second << ","
                   << init_elapsed << "," 
                   << clock.elapsed() << "\n"
                   << std::flush;
-
-    #if defined(CH_USE_HDF5)
-        if (config.output)
-            compareAndOutput(profile, data, time, step);
-    #endif
 }
+
+#if defined(CH_HPX)
+HPX_PLAIN_ACTION(stepLoop<climate_mini_app::advection_diffusion_profile>
+               , cma_step_loop_action);
+#endif
 
 using boost::program_options::variables_map;
 
@@ -480,30 +545,14 @@ int chombo_main(variables_map& vm)
         return 1;
     } 
 
-    std::string const problem_str = vm["problem"].as<std::string>();
-
-    climate_mini_app::ProblemType problem = climate_mini_app::Problem_Invalid;    
-
-    if ("advection-diffusion" == problem_str)
-        problem = climate_mini_app::Problem_AdvectionDiffusion;
-    else
-    {
-        char const* fmt = "ERROR: Invalid argument provided to "
-                          "--problem (=%s), current problem(s): "
-                          "'advection-diffusion'\n"; 
-        std::cout << (boost::format(fmt) % problem_str)
-                  << std::flush;
-        return 1;
-    }
-
     ///////////////////////////////////////////////////////////////////////////
     // Configuration
 
     climate_mini_app::configuration config(
-        /*problem: type of problem                 =*/problem
-        /*nh: y and z (horizontal) extent per core =*/,vm["nh"].as<std::uint64_t>()
-        /*nv: x (vertical) extent per core         =*/,vm["nv"].as<std::uint64_t>()
+        /*nh: y and z (horizontal) extent          =*/ vm["nh"].as<std::uint64_t>()
+        /*nv: x (vertical) extent                  =*/,vm["nv"].as<std::uint64_t>()
         /*max_box_size                             =*/,vm["mbs"].as<std::uint64_t>()
+        /*tw: width in y dimension of each tile    =*/,vm["tw"].as<std::uint64_t>()
         #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
         /*ghost_vector                             =*/,IntVect::Unit
         #else
@@ -516,56 +565,76 @@ int chombo_main(variables_map& vm)
         #endif
     );
 
-    if (climate_mini_app::Problem_AdvectionDiffusion == config.problem)
+    typedef climate_mini_app::advection_diffusion_profile profile_type;
+
+    profile_type profile(config,
+        /*cx=*/vm["cx"].as<Real>(),
+        /*cy=*/vm["cy"].as<Real>(),
+        /*cz=*/vm["cz"].as<Real>(),
+
+        // diffusion coefficients
+        /*kx=*/vm["kx"].as<Real>(),
+
+        // velocity components
+        /*ky=*/vm["vy"].as<Real>(), 
+        /*kz=*/vm["vz"].as<Real>()
+    ); 
+
+    Real nt = vm["nt"].as<Real>();
+
+    // Correct nt if --ns was specified.
+    if (vm.count("ns"))
     {
-        typedef climate_mini_app::advection_diffusion_profile profile_type;
-
-        profile_type profile(config,
-            /*cx=*/vm["cx"].as<Real>(),
-            /*cy=*/vm["cy"].as<Real>(),
-            /*cz=*/vm["cz"].as<Real>(),
-
-            // diffusion coefficients
-            /*kx=*/vm["kx"].as<Real>(),
-
-            // velocity components
-            /*ky=*/vm["vy"].as<Real>(), 
-            /*kz=*/vm["vz"].as<Real>()
-        ); 
-
-        Real nt = vm["nt"].as<Real>();
-
-        // Correct nt if --ns was specified.
-        if (vm.count("ns"))
-        {
-            // We want a multiplier slightly smaller than the desired
-            // timestep count.
-            Real ns = Real(vm["ns"].as<std::uint64_t>()-1)+0.8;
-            nt = profile.dt()*ns; 
-        }
-
-        stepLoop(profile, nt);
+        // We want a multiplier slightly smaller than the desired
+        // timestep count.
+        Real ns = Real(vm["ns"].as<std::uint64_t>()-1)+0.8;
+        nt = profile.dt()*ns; 
     }
 
-    // Invalid problem type.
-    else
-        assert(false);
+    #if defined(CH_HPX)
+    {
+        auto clients = CreateAsyncLevelDataRegistry<FArrayBox>();
+
+        assert(clients.size() == numProc());
+
+        std::vector<hpx::future<void> > futures;
+        futures.reserve(clients.size());
+
+        for (std::size_t i = 0; i < clients.size(); ++i)
+        {
+            auto gid = hpx::naming::get_locality_from_id(clients[i].get_gid());
+            std::cout << "Creating client on " << gid << "\n";
+            futures.emplace_back(
+                hpx::async<cma_step_loop_action>(gid, profile, nt));
+        }
+
+        std::cout << "Created " << futures.size() << " clients\n";
+
+        for (hpx::future<void>& f : futures)
+            f.get();
+//        hpx::lcos::when_all(futures).get();
+    }
+    #else
+        stepLoop(profile, nt);
+    #endif
 
     return 0;
 }
 
 int main(int argc, char** argv)
 {
+    { 
+        int flag = 0;
+        MPI_Initialized(&flag);
+        std::cout << "MPI_Initialized() == " << flag
+                  << " at start of main()" << std::endl;
+    }
+
     boost::program_options::options_description cmdline(
         "HPX/Chombo AMR Climate Mini-App"
         );
 
     cmdline.add_options()
-        ( "problem"
-        , boost::program_options::value<std::string>()->
-            default_value("advection-diffusion")
-        , "type of problem (options: advection-diffusion)") 
-
         ( "nt"
         , boost::program_options::value<Real>()->
             default_value(0.5, "0.5")  
@@ -585,6 +654,10 @@ int main(int argc, char** argv)
         , boost::program_options::value<std::uint64_t>()->
             default_value(30)
         , "max box size")
+        ( "tw"
+        , boost::program_options::value<std::uint64_t>()->
+            default_value(2)
+        , "width in y dimension of each tile")
 
         ( "cx"
         , boost::program_options::value<Real>()->
@@ -624,10 +697,23 @@ int main(int argc, char** argv)
         #endif
         ; 
 
+    { 
+        int flag = 0;
+        MPI_Initialized(&flag);
+        std::cout << "MPI_Initialized() == " << flag
+                  << " after program options" << std::endl;
+    }
+
     #if defined(CH_HPX)
         return init(chombo_main, cmdline, argc, argv); // Doesn't return
     #else
-        MPI_Init(&argc, &argv);
+        int requested_threading_model = MPI_THREAD_FUNNELED;
+        int actual_threading_model = -1;
+
+        MPI_Init_thread(&argc, &argv
+                      , requested_threading_model, &actual_threading_model);
+
+        assert(requested_threading_model == actual_threading_model);
 
         cmdline.add_options()
             ( "threads,t"

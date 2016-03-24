@@ -28,6 +28,13 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
 {
     typedef profile_base<advection_diffusion_profile> base_type;
 
+    advection_diffusion_profile()
+    // {{{
+      : base_type()
+      , cx(), cy(), cz()
+      , kx(), vy(), vz()
+    {} // }}}
+
     advection_diffusion_profile(
         configuration config_
       , Real cx_, Real cy_, Real cz_
@@ -103,38 +110,30 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
       , Integral step 
         ) const
     { // {{{
+//        static_assert((1 == Dir) || (2 == Dir)
+//                    , "Illegal Dir, should be 1 or 2");
+//        return (1 == Dir ? vy : vz) * 0.5 * (p[idx-step] + p[idx]);
+
         static_assert((1 == Dir) || (2 == Dir)
                     , "Illegal Dir, should be 1 or 2");
-        return (1 == Dir ? vy : vz) * 0.5 * (p[idx-step] + p[idx]);
 
-/* {{{
         auto const v = (1 == Dir ? vy : vz);
         auto constexpr denom = 1.0/60.0;
 
-        auto const f0 = ( 37.0 * (p[idx]        + p[idx-step]  )
-                        - 8    * (p[idx+step]   + p[idx-2*step])
-                        +        (p[idx+2*step] + p[idx-3*step])
-                        );
-
-        auto const f1 = ( 10.0 * (p[idx+step]   - p[idx]       )
-                        - 5.0  * (p[idx+2*step] - p[idx-step]  )
-                        +        (p[idx+3*step] - p[idx-2*step])
-                        );
-
-        return v * denom * f0 - std::fabs(v) * denom * f1;
-}}} */
+        return -v * denom * ( 2.0  * p[idx-3*step]
+                            - 13.0 * p[idx-2*step]
+                            + 47.0 * p[idx-step]
+                            + 27.0 * p[idx]
+                            - 3.0  * p[idx+step] );
     } // }}}
 
     Real inverse_dh_c() const
     { // {{{
         Real const dh = dp()[1]; 
 
-        #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
-            return (-1.0/dh);
-        #else
-            Real constexpr c = (-1.0/60.0);
-            return c*(1.0/dh); 
-        #endif
+// FIXME FIXME FIXME
+//            Real constexpr c = (-1.0/60.0);
+        return (1.0/dh); 
     } // }}}
 
 /*
@@ -222,11 +221,14 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         static_assert((1 == Dir) || (2 == Dir)
                     , "Illegal Dir, should be 1 or 2");
 
+        return inv_dh_c * (p[idx+step] - p[idx]);
+/*
         return inv_dh_c
              * ( 3.0*p[idx-2*step] - 30.0*p[idx-1*step]
                - 20.0*p[idx]
                + 60.0*p[idx+1*step] - 15.0*p[idx+2*step] + 2.0*p[idx+3*step]
                );
+*/
     } // }}}
 
     void build_vertical_operator_for_solve(
@@ -250,6 +252,19 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         build_vertical_operator(A, b, c1, c2);
     } // }}}
 
+    void define_vertical_operator(
+        LapackFactorization& A
+      , Box b
+        ) const
+    { // {{{
+        std::uint64_t const size = b.size()[0];
+
+        int const KU = 3;
+        int const KL = 3;
+
+        A.define(size, KL, KU);
+    } // }}}
+
     void build_vertical_operator(
         LapackFactorization& A
       , Box b
@@ -266,7 +281,6 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         int const KU = 3;
         int const KL = 3;
 
-        A.define(size, KL, KU);
         A.setZero();
         
         int ncol = A.numCols();
@@ -395,15 +409,27 @@ struct advection_diffusion_profile : profile_base<advection_diffusion_profile>
         return StreamCSV(kx, vy, vz);
     } // }}}
 
+    template <typename Archive>
+    void serialize(Archive& ar, unsigned)
+    { // {{{
+        ar & config;
+        ar & cx;
+        ar & cy;
+        ar & cz;
+        ar & kx;
+        ar & vy;
+        ar & vz;
+    } // }}}
+
   private:
-    Real const cx;
-    Real const cy;
-    Real const cz;
+    Real cx;
+    Real cy;
+    Real cz;
 
   public:
-    Real const kx;
-    Real const vy;
-    Real const vz;
+    Real kx;
+    Real vy;
+    Real vz;
 };
 
 }
