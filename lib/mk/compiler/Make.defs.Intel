@@ -126,7 +126,7 @@ ifeq ($(cxxname),icc)
   # disable warnings:
   ifeq (0,$(shell test $(_iccmajorver) -ge 9 ; echo $$?))
     defcxxcomflags += -sox
-    defcxxdbgflags += -debug -ftrapuv -Wno-unknown-pragmas
+    defcxxdbgflags += -debug -Wno-unknown-pragmas
     #defcxxoptflags += 
   endif
 
@@ -184,26 +184,12 @@ ifeq ($(fname),ifc)
   else
     deffcomflags = -FI -u
   endif
-  deffdbgflags = -g
+  deffdbgflags = -g0
   deffoptflags = -O3
   ifneq ($(findstring athlon,$(unamea)),athlon)
     # vectorize for Pentium III and later except on EMT versions
     ifeq ($(findstring i686,$(arch)),i686)
       deffoptflags += -tpp6 -xK
-    endif
-  endif
-
-  # run-time checking causes segfaults on compilers older than v7
-  # TJL - Change: moving from csh to sh...
-  # ifeq (0,$(shell test $(_ifcmajorver) -ge 7 ; echo $$status))
-  ifeq (0,$(shell test $(_ifcmajorver) -ge 7 ; echo $$?))
-    # not all run-time checks are implemented on v8.0, 8.1
-    ifeq ($(_ifcmajorver),8)
-      # -CS to check array shapes and -CA to check points not implemented
-      deffdbgflags += -CB -CU -CV
-    else
-      # do all run-time checks
-      deffdbgflags += -C
     endif
   endif
 
@@ -214,8 +200,6 @@ ifeq ($(fname),ifc)
   # -ftrapuv initializes stack variables to a flag value
   ifeq (0,$(shell test $(_ifcmajorver) -ge 9 ; echo $$?))
     deffcomflags += -sox
-    deffdbgflags += -debug -ftrapuv
-    deffoptflags +=
   endif
 
 

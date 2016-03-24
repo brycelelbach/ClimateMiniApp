@@ -25,11 +25,7 @@ ifeq ($(TARGET),MIC)
     XTRAFFLAGS += -mmic
 endif
 
-HDF5_DIR=/global/homes/w/wash/development/hdf5-1.8.7/HPX_INSTALL
-HDFMPIINCFLAGS=-I$(HDF5_DIR)/include
-HDFMPILIBFLAGS=-Wl,-rpath=$(HDF5_DIR)/lib -L$(HDF5_DIR)/lib -lhdf5 -lz
-HDFINCFLAGS=$(HDFMPIINCFLAGS)
-HDFLIBFLAGS=$(HDFMPILIBFLAGS)
-
-## To run on Stampede, then you would do:
-#include $(CHOMBO_HOME)/mk/local/Make.defs.stampede.cpu_only
+HDFINCFLAGS=-I$(HDF5_DIR)/include/hdf5-hpx
+HDFLIBFLAGS=-Wl,-rpath=$(HDF5_DIR)/lib/hdf5-hpx -L$(HDF5_DIR)/lib/hdf5-hpx -lhdf5 -lz
+HDFMPIINCFLAGS=$(HDFINCFLAGS)
+HDFMPILIBFLAGS=$(HDFLIBFLAGS)

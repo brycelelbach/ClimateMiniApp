@@ -3,7 +3,7 @@
 makefiles+=local/Make.defs.ftn
 
 ifeq ($(system),CRAY)
-  deffdbgflags = -g
+  deffdbgflags = -g0
   deffoptflags = -O 3 -e o
   # Or to be even more agressive
   ## deffoptflags = -V -F -O inline3,scalar3,vector3,stream3,task0 -rm

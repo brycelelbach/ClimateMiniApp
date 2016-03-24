@@ -21,7 +21,7 @@ ifeq ($(findstring IRIX,$(system)),IRIX)
   ##    (1468) REMARK: Inline function  cannot be explicitly instantiated.
   ##    (1552) variable set but never referenced
   ##    (3201) The parameter "X" was never referenced
-  basecxxflags = -64 -J4 -fullwarn -trapuv -LANG:std -LANG:ansi-for-init-scope=ON \
+  basecxxflags = -64 -J4 -fullwarn -LANG:std -LANG:ansi-for-init-scope=ON \
   -DEBUG:suppress=1009,1047,1110,1116,1169,1174,1209,1375,1424,1460,1468,1506,1552,3201,3625,3649 \
    -diag_suppress 1009,1047,1110,1116,1169,1174,1209,1375,1424,1460,1468,1506,1552,3201,3625,3649
 
