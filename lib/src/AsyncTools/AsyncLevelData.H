@@ -47,6 +47,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     DisjointBoxLayout m_disjointBoxLayout;
     std::size_t       m_nComp;
     IntVect           m_ghost;
+    std::size_t       m_tag;
     AsyncCopier       m_exchangeCopier;
 
   public:
@@ -54,27 +55,40 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
       : m_disjointBoxLayout()
       , m_nComp(0)
       , m_ghost()
+      , m_tag(0)
       , m_exchangeCopier()
     {}
+
+    AsyncLevelData(
+        DisjointBoxLayout const& dbl
+      , std::size_t nComp
+      , IntVect ghost = IntVect::Zero
+      , std::size_t tag = 0
+        )
+    {
+        define(dbl, nComp, ghost, tag);
+    }
 
     template <typename F>
     AsyncLevelData(
         DisjointBoxLayout const& dbl
       , std::size_t nComp
       , IntVect ghost
+      , std::size_t tag
       , F&& defineElement
         )
     {
-        define(dbl, nComp, ghost, std::forward<F>(defineElement));
+        define(dbl, nComp, ghost, tag, std::forward<F>(defineElement));
     }
 
-    AsyncLevelData(
+    void define(
         DisjointBoxLayout const& dbl
       , std::size_t nComp
       , IntVect ghost = IntVect::Zero
+      , std::size_t tag = 0
         )
     {
-        define(dbl, nComp, ghost);
+        define(dbl, nComp, ghost, tag, defineFAB<T>);
     }
 
     template <typename F>
@@ -82,6 +96,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
         DisjointBoxLayout const& dbl
       , std::size_t nComp 
       , IntVect ghost
+      , std::size_t tag
       , F&& defineElement
         )
     {
@@ -90,6 +105,7 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
         m_disjointBoxLayout = dbl;
         m_nComp = nComp;
         m_ghost = ghost;
+        m_tag = tag;
 
         this->base_type::define(dbl);
 
@@ -98,15 +114,6 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
         m_exchangeCopier.exchangeDefine(dbl, ghost, dbl.getLocalProcID()); 
 
         installRegions();
-    }
-
-    void define(
-        DisjointBoxLayout const& dbl
-      , std::size_t nComp
-      , IntVect ghost = IntVect::Zero
-        )
-    {
-        define(dbl, nComp, ghost, defineFAB<T>);
     }
 
     std::size_t nComp() const
@@ -164,6 +171,11 @@ struct AsyncLevelData : LayoutData<DataflowBox<T> >
     IntVect ghostVect() const
     {
         return m_ghost;
+    }
+
+    std::size_t tag() const
+    {
+        return m_tag;
     }
 };
 

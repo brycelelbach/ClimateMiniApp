@@ -59,7 +59,8 @@ std::vector<hpx::future<void> > call_everywhere(
     calls.reserve(localities().size());
 
     for (boost::uint64_t i = 0; i < localities().size(); ++i)
-        calls.emplace_back(hpx::async<chombo_call_here_action>(localities()[i], f));
+        calls.emplace_back(
+            hpx::async<chombo_call_here_action>(localities()[i], f));
 
     return calls;
 }

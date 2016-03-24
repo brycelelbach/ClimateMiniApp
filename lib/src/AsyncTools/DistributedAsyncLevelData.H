@@ -17,6 +17,7 @@
 #define CHOMBO_50E1AEAC_4E1D_4F10_8A0B_F08E6FED219C
 
 #include <hpx/runtime/components/server/managed_component_base.hpp>
+#include <hpx/runtime/components/stubs/runtime_support.hpp>
 #include <hpx/runtime/components/client_base.hpp>
 #include <hpx/runtime/naming/name.hpp>
 
@@ -28,6 +29,9 @@
 
 template <typename T>
 struct AsyncLevelDataServer;
+
+template <typename T>
+struct AsyncLevelDataClient;
 
 template <typename T, typename enable = void>
 struct AsyncLevelData_traits;
@@ -102,6 +106,65 @@ struct AsyncLevelDataServer
     typedef typename AsyncLevelData_traits<T>::mesh_type mesh_type;
 
     AsyncLevelData<T> local_data;
+    std::vector<AsyncLevelDataClient<T> > clients;
+
+    template <typename F>
+    void define(
+        DisjointBoxLayout const& dbl
+      , std::size_t nComp 
+      , IntVect ghost
+      , F&& defineElement
+        )
+    {
+        local_data.define(dbl, nComp, ghost, defineElement);
+    }    
+
+    void define(
+        DisjointBoxLayout const& dbl
+      , std::size_t nComp
+      , IntVect ghost = IntVect::Zero
+        )
+    {
+        local_data.define(dbl, nComp, ghost);
+    }
+
+    std::size_t nComp() const
+    {
+        return local_data.nComp();
+    }
+
+    Interval interval() const
+    {
+        return local_data.interval();
+    }
+
+    DisjointBoxLayout const& disjointBoxLayout() const
+    {
+        return local_data.disjointBoxLayout() 
+    }
+
+    AsyncCopier const& exchangeCopier() const
+    {
+        return local_data.exchangeCopier();
+    }
+
+    IntVect ghostVect() const
+    {
+        return local_data.ghostVect();
+    }
+
+    ///////////////////////////////////////////////////////////////////////////
+    void setClients(
+        std::vector<AsyncLevelDataClient<T> > const& clients_
+        )
+    { // {{{
+        assert(clients.empty());
+        clients = clients_;
+    } // }}}
+
+    HPX_DEFINE_COMPONENT_ACTION(this_type,
+                                setClients,
+                                setClients_action); 
 
     ///////////////////////////////////////////////////////////////////////////
     template <typename X>
@@ -279,6 +342,35 @@ template <typename T>
 struct AsyncLevelDataClient
   : hpx::components::client_base<AsyncLevelDataClient<T>, AsyncLevelDataServer<T> >
 {
+    typedef hpx::components::client_base<
+        AsyncLevelDataClient<T>, AsyncLevelDataServer<T>
+    > base_type;
+
+    AsyncLevelDataClient()
+      : base_type()
+    {}
+
+    AsyncLevelDataClient(hpx::future<hpx::id_type>&& id)
+      : base_type(std::move(id))
+    {}
+
+    ///////////////////////////////////////////////////////////////////////////
+    hpx::future<void> setClientsAsync(
+        std::vector<AsyncLevelDataClient<T> > const& clients_
+        )
+    { // {{{
+        typedef typename AsyncLevelDataServer<T>::setClients_action
+            action;
+        return hpx::async<action>(this->get_gid(), clients_);
+    } // }}}
+
+    void setClients(
+        std::vector<AsyncLevelDataClient<T> > const& clients_
+        )
+    { // {{{
+        setClientsAsync(f).get();
+    } // }}}
+
     ///////////////////////////////////////////////////////////////////////////
     template <typename X>
     hpx::future<X> applyAsync(
@@ -295,15 +387,15 @@ struct AsyncLevelDataClient
         typename AsyncLevelData_signature<T, X>::gridwise const& f
         )
     { // {{{
-        return applyAsync(f);
+        return applyAsync(f).get();
     } // }}}
 
     ///////////////////////////////////////////////////////////////////////////
-    void applyElementsAsync(
+    hpx::future<void> applyElementsAsync(
         typename AsyncLevelData_signature<T, void>::elementwise const& f
         )
     { // {{{
-        typedef typename AsyncLevelDataServer<T>::applyElements
+        typedef typename AsyncLevelDataServer<T>::applyElements_action
             action;
         return hpx::async<action>(this->get_gid(), f);
     } // }}}
@@ -312,9 +404,53 @@ struct AsyncLevelDataClient
         typename AsyncLevelData_signature<T, void>::elementwise const& f
         )
     { // {{{
-        return applyElementsAsync(f);
+        applyElementsAsync(f).get();
     } // }}}
 };
+
+template <typename T>
+std::vector<AsyncLevelDataClient<T> > CreateDistributedAsyncLevelData(
+    char const* basename
+    )
+{ // {{{
+    hpx::components::component_type type =
+        hpx::components::get_component_type<AsyncLevelDataServer<T> >();
+    
+    // Find all localities supporting the component 
+    std::vector<hpx::id_type> localities = hpx::find_all_localities(type);
+
+    assert(!localities.empty());
+   
+    // Asynchronously deploy the component on every locality.
+    // FIXME: Sadly, distributing factory doesn't support constructor args
+    // yet, so we have to do this by hand.
+    std::vector<AsyncLevelDataClient<T> > clients;
+    clients.reserve(localities.size());
+
+    for (std::size_t i = 0; i < localities.size(); ++i)
+    {
+        using hpx::components::stubs::runtime_support;
+        // Create the component, passing any relevant global information.
+        clients.emplace_back(
+            runtime_support::create_component_async<AsyncLevelDataServer<T> >
+                (localities[i]));
+    }
+
+    // Send everyone the list of clients.
+    std::vector<hpx::future<void> > futures;
+    futures.reserve(localities.size());
+
+    for (std::size_t i = 0; i < clients.size(); ++i)
+    {
+        futures.emplace_back(clients[i].setClientsAsync(clients));
+        hpx::register_id_with_basename(basename, clients[i].get_gid(), 
+            hpx::naming::get_locality_id_from_id(clients[i].get_gid())); 
+    }
+
+    hpx::lcos::when_all(futures).get();
+
+    return clients;
+} // }}}
 
 #include "NamespaceFooter.H"
 
@@ -342,6 +478,10 @@ struct AsyncLevelDataClient
 // version must be used if the type T is not alphanumeric (e.g. if it's a
 // template, or namespace qualified). 
 #define HPX_CHOMBO_REGISTER_ALD_DECLARATION_2(T, name)                      \
+    HPX_REGISTER_ACTION_DECLARATION(                                        \
+        CH_XD::AsyncLevelDataServer<T>::setClients_action,                  \
+        chombo_AsyncLevelDataServer_setClients_ ## name                     \
+    );                                                                      \
     HPX_REGISTER_ACTION_DECLARATION_TEMPLATE(                               \
         (template <typename X>),                                            \
         (CH_XD::AsyncLevelDataServer<T>::apply_action<X>)                   \
@@ -352,6 +492,6 @@ struct AsyncLevelDataClient
     );                                                                      \
     /**/
 
-HPX_CHOMBO_REGISTER_ALD_DECLARATION(CH_XD::FArrayBox, FArrayBox); 
+HPX_CHOMBO_REGISTER_ALD_DECLARATION(CH_XD::FArrayBox, FArrayBox);
 
 #endif // CHOMBO_50E1AEAC_4E1D_4F10_8A0B_F08E6FED219C

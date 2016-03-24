@@ -13,6 +13,8 @@
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ////////////////////////////////////////////////////////////////////////////////
 
+#include <mpi.h>
+
 #include <hpx/hpx_fwd.hpp>
 #include <hpx/hpx_init.hpp>
 #include <hpx/runtime.hpp>
@@ -100,7 +102,6 @@ int runtime_main(main_type const& f, variables_map& vm)
     return result;
 }
 
-// Note: THIS CALL WILL NOT RETURN.
 int init(
     main_type const& f,
     boost::program_options::options_description cmdline,
@@ -109,7 +110,6 @@ int init(
     )
 {
 #if defined(DEBUG)
-    // For great justice (lack of Octopus ASCII art is saddening).
     std::cout << "Launching HPX runtime\n" << std::flush;
 #endif
 
@@ -118,13 +118,11 @@ int init(
     main_type Lf(std::bind(&runtime_main, f, std::placeholders::_1)); 
     int result = hpx::init(Lf, cmdline, argc, argv, cfg); 
 
-#if !defined(BOOST_MSVC)
-    // We call C99 _Exit to work around problems with 3rd-party libraries using
-    // atexit (HDF5 and visit) and blowing things up.  
-    ::_Exit(result);
-#else
-    return result;
+#if defined(DEBUG)
+    std::cout << "HPX runtime has shutdown\n" << std::flush;
 #endif
+
+    return result;
 }
 
 #include "NamespaceFooter.H"

@@ -19,8 +19,11 @@
 #include <hpx/async.hpp>
 #include <hpx/lcos/when_all.hpp>
 
+#include "BoostSerialization.H"
+
 #include "AsyncCopier.H"
 #include "AsyncLevelData.H"
+#include "AsyncLevelDataRegistry.H"
 #include "DisjointBoxLayout.H"
 #include "Ranges.H"
 
@@ -44,9 +47,80 @@
 // FIXME: LDOperator is virtual and awful.
 
 // FIXME: Change comps to be Intervals.
+template <typename T>
+struct StoreRegion
+{
+  private:
+    std::size_t epoch;
+    std::size_t ct;
+    int index_into_boxes;
+    int index_into_data; 
+    Interval to_comps;
+    Box to_region;
+    typename DataflowBox<T>::buffer data;
+ 
+  public:
+    StoreRegion()
+      : epoch(0), ct(0), index_into_boxes(0), index_into_data(0)
+      , to_comps(), to_region(), data()
+    {}
+
+    StoreRegion(
+        std::size_t epoch_
+      , std::size_t ct_
+      , AsyncSendInstructions asi_
+      , Interval to_comps_
+      , Box to_region_
+      , typename DataflowBox<T>::buffer&& data_
+        )
+      : epoch(epoch_), ct(ct_)
+      , index_into_boxes(asi_.toIndex.intCode())
+      , index_into_data(asi_.toIndex.datInd())
+      , to_comps(to_comps_), to_region(to_region_)
+      , data(data_)
+    {}
+
+    StoreRegion(StoreRegion const& rhs)
+      : epoch(rhs.epoch), ct(rhs.ct)
+      , index_into_boxes(rhs.index_into_boxes)
+      , index_into_data(rhs.index_into_data)
+      , to_comps(rhs.to_comps), to_region(rhs.to_region)
+      , data(rhs.data)
+    {}
+
+    StoreRegion(StoreRegion&& rhs)
+      : epoch(rhs.epoch), ct(rhs.ct)
+      , index_into_boxes(rhs.index_into_boxes)
+      , index_into_data(rhs.index_into_data)
+      , to_comps(rhs.to_comps), to_region(rhs.to_region)
+      , data(std::move(rhs.data))
+    {}
+
+    template <typename Archive>
+    void serialize(Archive& ar, unsigned)
+    {
+        ar & epoch;
+        ar & ct;
+        ar & index_into_boxes;
+        ar & index_into_data;
+        ar & to_comps;
+        ar & to_region;
+        ar & data;
+    }
+
+    void operator()(AsyncLevelData<T>& ald) 
+    {
+        // Rebuild index.
+        DataIndex const di = ald.disjointBoxLayout().localizeDataIndex(
+            index_into_boxes, index_into_data
+        ); 
+
+        ald[di].store(epoch, ct, to_comps, to_region, std::move(data));
+    }
+};
 
 template <typename T>
-void LocalPack(
+hpx::future<void> LocalPack(
     std::size_t epoch
   , std::size_t ct 
   , AsyncSendInstructions asi 
@@ -70,10 +144,10 @@ void LocalPack(
 
     CH_assert(from_size == to_size);
 
-    typename DataflowBox<T>::buffer buf(from_size);
-    void* b = reinterpret_cast<void*>(buf.data());
+    typename DataflowBox<T>::buffer data(from_size);
+    void* d = reinterpret_cast<void*>(data.data());
 
-    op.linearOut(from_ld[asi.fromIndex], b, asi.fromRegion, from_comps);
+    op.linearOut(from_ld[asi.fromIndex], d, asi.fromRegion, from_comps);
 
 //    to_ld[asi.toIndex].copy(
 //        from_ld[asi.fromIndex]
@@ -81,7 +155,27 @@ void LocalPack(
 //      , asi.toRegion,   /* starting comp */ to_comp
 //      , num_comp);
 
-    to_ld[asi.toIndex].store(epoch, ct, to_comps, asi.toRegion, std::move(buf)); 
+//    to_ld[asi.toIndex].store(epoch, ct, to_comps, asi.toRegion, std::move(data)); 
+
+    unsigned const toProcID = to_ld.disjointBoxLayout().procID(asi.toIndex);
+
+    if (procID() == toProcID)
+    {
+        to_ld[asi.toIndex].store(
+            epoch, ct, to_comps, asi.toRegion, std::move(data)
+        ); 
+
+        return hpx::lcos::make_ready_future();
+    }
+
+    else
+    {
+        StoreRegion<T>
+            sr(epoch, ct, asi, to_comps, asi.toRegion, std::move(data));
+        hpx::util::function<void(AsyncLevelData<T>&)> f(sr);
+
+        return ApplyALDAsync(toProcID, to_ld.tag(), std::move(f)); 
+    }
 }
 
 template <typename T>
@@ -122,8 +216,8 @@ hpx::future<void> LocalSendCopyAsync(
     AsyncSendInstructions key(di);
     for (AsyncSendInstructions const& asi : asRange(smp.equal_range(key))) 
     {
-        unsigned fromProcID = dbl_from.procID(asi.fromIndex);
-        unsigned toProcID   = dbl_to.procID(asi.toIndex);
+        unsigned const fromProcID = dbl_from.procID(asi.fromIndex);
+        unsigned const toProcID   = dbl_to.procID(asi.toIndex);
 
         CH_assert(toProcID == fromProcID);
 

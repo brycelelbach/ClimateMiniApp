@@ -16,8 +16,6 @@
 #if !defined(CHOMBO_06FC5144_B4C1_4E16_9EC4_E00DD2FEDFB1)
 #define CHOMBO_06FC5144_B4C1_4E16_9EC4_E00DD2FEDFB1
 
-// init is the bootstrap procedure for launching HPX+Chombo applications.
-
 #include <boost/program_options.hpp>
 
 #include "NamespaceHeader.H"
@@ -35,8 +33,6 @@ int runtime_main(
 /// \brief Bootstrap Chombo's HPX services on all supported localities, and
 /// invoke supplied \a f as application main.
 ///
-/// \note This function will not return on UNIX platforms.
-///
 /// Remote-Parallel Operations:   Yes 
 /// Local-Parallel Operations:    Yes 
 /// Concurrency Control:          Futures 
@@ -48,9 +44,6 @@ int init(
     int argc, char** argv,
     std::vector<std::string> const& cfg = std::vector<std::string>()
     )
-#if !defined(BOOST_MSVC) && defined(__GNUC__)
-    __attribute__ ((noreturn))
-#endif
     ;
 
 /// \brief Bootstrap the Chombo's HPX services on all supported localities, and
