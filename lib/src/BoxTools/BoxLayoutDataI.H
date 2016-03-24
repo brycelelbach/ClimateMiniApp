@@ -17,7 +17,10 @@
 #include <list>
 #include "CH_OpenMP.H"
 #include "parstream.H"
-#include "memtrack.H"
+#ifdef CH_USE_MEMORY_TRACKING
+  #include "memtrack.H"
+#endif
+
 #include "Misc.H"
 #include "CH_Timer.H"
 #include "NamespaceHeader.H"
@@ -51,7 +54,6 @@ inline void BoxLayoutData<T>::setVector(const BoxLayoutData<T>& da,
     {
       DataIterator it=this->dataIterator();
       int nbox=it.size();
-      //#pragma omp parallel for
       for(int box=0; box<nbox; box++)
 	{
 	  this->m_vector[it[box].datInd()]->copy( this->box(it[box]), destComps,
@@ -129,7 +131,7 @@ template<class T>
 BoxLayoutData<T>::~BoxLayoutData()
 {
   CH_TIME("~BoxLayoutData");
-  completePendingSends();
+  //completePendingSends();
 }
 
 template<class T>
@@ -207,7 +209,6 @@ template<class T>
 inline void BoxLayoutData<T>::apply(void (*a_func)(const Box& box, int comps, T& t))
 {
   DataIterator it(this->dataIterator()); int nbox=it.size();
-  //#pragma omp parallel for
   for(int i=0; i<nbox; i++)
 
     {
@@ -304,7 +305,7 @@ void BoxLayoutData<T>::makeItSoLocalCopy(const Interval&   a_srcComps,
   CH_TIME("local copying");
   CopyIterator it(a_copier, CopyIterator::LOCAL);  int items=it.size();
 #ifdef CH_MPI
-  #pragma omp parallel for schedule(dynamic)
+  ///#pragma omp parallel for schedule(dynamic)
 #endif
   for (int n=0; n<items; n++)
     {
@@ -568,13 +569,23 @@ void BoxLayoutData<T>::allocateBuffers(const BoxLayoutData<T>& a_src,
         }
     }
 
-  // allocate send and receveive buffer space.
+  // allocate send and receive buffer space.
 
   if (sendBufferSize > m_buff->m_sendcapacity)
     {
+#ifdef CH_USE_MEMORY_TRACKING
       freeMT((m_buff->m_sendbuffer));
+#else
+//      std::cout << procID() << " free and realloc send " << m_buff->m_sendbuffer << std::endl;
+      free((m_buff->m_sendbuffer));
+#endif
       if (s_verbosity > 0) pout()<<"malloc send buffer "<<sendBufferSize<<std::endl;
+#ifdef CH_USE_MEMORY_TRACKING
       (m_buff->m_sendbuffer) = mallocMT(sendBufferSize);
+#else
+      (m_buff->m_sendbuffer) = malloc(sendBufferSize);
+//      std::cout << procID() << " malloc send " << m_buff->m_sendbuffer << std::endl;
+#endif
       if ((m_buff->m_sendbuffer) == NULL)
         {
           MayDay::Error("Out of memory in BoxLayoutData::allocatebuffers");
@@ -584,9 +595,19 @@ void BoxLayoutData<T>::allocateBuffers(const BoxLayoutData<T>& a_src,
 
   if (recBufferSize > m_buff->m_reccapacity)
     {
+#ifdef CH_USE_MEMORY_TRACKING
       freeMT(m_buff->m_recbuffer);
+#else
+//      std::cout << procID() << " free and realloc recv " << m_buff->m_recbuffer << std::endl;
+      free(m_buff->m_recbuffer);
+#endif
       if (s_verbosity > 0) pout()<<"malloc receive buffer "<<recBufferSize<<std::endl;
+#ifdef CH_USE_MEMORY_TRACKING
       m_buff->m_recbuffer = mallocMT(recBufferSize);
+#else
+      m_buff->m_recbuffer = malloc(recBufferSize);
+//      std::cout << procID() << " malloc recv " << m_buff->m_recbuffer << std::endl;
+#endif
       if (m_buff->m_recbuffer == NULL)
         {
           MayDay::Error("Out of memory in BoxLayoutData::allocatebuffers");
@@ -635,7 +656,7 @@ void BoxLayoutData<T>::writeSendDataFromMeIntoBuffers(const BoxLayoutData<T>& a_
                                                   const LDOperator<T>& a_op) const
 {
   CH_TIME("write Data to buffers");
-  #pragma omp parallel for schedule(dynamic)
+  ///#pragma omp parallel for schedule(dynamic)
   for (unsigned int i=0; i<m_buff->m_fromMe.size(); ++i)
     {
       const CopierBuffer::bufEntry& entry = m_buff->m_fromMe[i];
@@ -790,7 +811,7 @@ void BoxLayoutData<T>::unpackReceivesToMe(BoxLayoutData<T>& a_dest,
       {
         //hell if I know what to do about failed messaging here
       }
-    #pragma omp parallel for schedule(dynamic)
+    ///#pragma omp parallel for schedule(dynamic)
     for (unsigned int i=0; i<m_buff->m_toMe.size(); ++i)
       {
         const CopierBuffer::bufEntry& entry = m_buff->m_toMe[i];
@@ -822,7 +843,7 @@ void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr
       {
         //hell if I know what to do about failed messaging here
       }
-    #pragma omp parallel for schedule(dynamic)
+    ///#pragma omp parallel for schedule(dynamic)
     for (unsigned int i=0; i<m_buff->m_toMe.size(); ++i)
       {
         const CopierBuffer::bufEntry& entry = m_buff->m_toMe[i];
@@ -880,7 +901,7 @@ void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
     // perform local copy
   CopyIterator it(a_copier, CopyIterator::LOCAL); int items=it.size();
 #ifdef CH_MPI
-  #pragma omp parallel for schedule(dynamic)
+  ///#pragma omp parallel for schedule(dynamic)
 #endif
   for (int i=0; i<items; i++)
     {

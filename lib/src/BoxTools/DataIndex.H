@@ -91,13 +91,6 @@ public:
     pout() << "(" << m_index << "," << m_datInd << ")" << endl;
   }
 
-  /// Not for the faint-of-heart, only use if you know what you're doing. Sets
-  /// the layout ID of the DataIndex.
-  void setLayoutID(const int* a_layoutID)
-  {
-    m_layoutIntPtr = a_layoutID;
-  }
-
 private:
   friend class DataIterator;
   friend class LayoutIterator;

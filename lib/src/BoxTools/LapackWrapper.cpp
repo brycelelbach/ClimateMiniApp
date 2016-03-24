@@ -15,6 +15,35 @@
 
 #include "NamespaceHeader.H"
 
+/* Form y := A*x */
+int chombo_dgbmv(
+    int m
+  , int n
+  , int kl
+  , int ku
+  , double* a
+  , int lda
+  , double* x
+  , double* y
+    )
+{
+  if (m == 0 || n == 0)
+    return 0;
+
+  for (int i = 0; i < m; ++i) 
+    y[i] = 0.;
+
+  for (int j = 0; j < n; ++j) {
+    if (x[j] != 0.) {
+      #pragma simd
+      for (int i = std::max(0, j - ku); i < std::min(m, j + 1 + kl); ++i) {
+        y[i] += x[j] * a[(ku - j + i) + j * lda];
+      }
+    }
+  }
+
+  return 0;
+}
 
 void LapackWrapper::applyBandMatrix(Real* const in, Real* const out, 
     LapackFactorization& A)
@@ -28,13 +57,16 @@ void LapackWrapper::applyBandMatrix(Real* const in, Real* const out,
     int KL = A.numLower();
     int KU = 2*A.numUpper(); // FIXME - 2x seems to be necessary?
     int LDA = A.numRows();
-    int INFO;
+    int INFO = 0;
 
     // Call the banded matrix multiply routine
     Real alpha = 1;
     Real beta = 0;
-    dgbmv_(&TRANS, &M, &N, &KL, &KU, &alpha, A.luPtr(), &LDA, in, 
-        &INCX, &beta, out, &INCY);
+
+//    dgbmv_(&TRANS, &M, &N, &KL, &KU, &alpha, A.luPtr(), &LDA, in, 
+//        &INCX, &beta, out, &INCY);
+
+    chombo_dgbmv(M, N, KL, KU, A.luPtr(), LDA, in, out); 
 }
 
 void LapackWrapper::factorBandMatrix(LapackFactorization& A)
@@ -45,7 +77,7 @@ void LapackWrapper::factorBandMatrix(LapackFactorization& A)
 
     int KL = A.numLower();
     int KU = A.numUpper();
-    int INFO;
+    int INFO = 0;
 
     // Factorization
     // dgtf2 is the unblocked version of dgbtrf
@@ -57,13 +89,12 @@ void LapackWrapper::factorBandMatrix(LapackFactorization& A)
 
 void LapackWrapper::solveBandMatrix(LapackFactorization& A, Real* const inout)
 {
-    // - check that the sizes of A, B are compatible
     int LDAB = A.numRows();
     int N = A.numCols(); // square matrix in compact band format
 
     int KL = A.numLower();
     int KU = A.numUpper();
-    int INFO;
+    int INFO = 0;
 
     // Solve using factorization
     char TRANS = 'N';

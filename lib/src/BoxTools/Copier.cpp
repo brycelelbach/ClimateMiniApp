@@ -16,8 +16,11 @@
 #include "NeighborIterator.H"
 #include "SPMD.H"
 #include "CH_Timer.H"
-#include "memtrack.H"
 #include "parstream.H"
+
+#ifdef CH_USE_MEMORY_TRACKING
+  #include "memtrack.H"
+#endif
 
 #include <vector>
 #include "NamespaceHeader.H"
@@ -33,8 +36,21 @@ CopierBuffer::~CopierBuffer()
 
 void CopierBuffer::clear()
 {
+#ifdef CH_USE_MEMORY_TRACKING
   if (m_sendbuffer != NULL) freeMT(m_sendbuffer);
   if (m_recbuffer  != NULL) freeMT(m_recbuffer);
+#else
+  if (m_sendbuffer != NULL)
+  {
+//    std::cout << procID() << " free send: " << m_sendbuffer << std::endl;
+    free(m_sendbuffer);
+  }
+  if (m_recbuffer  != NULL)
+  {
+//    std::cout << procID() << " free recv: " << m_recbuffer << std::endl;
+    free(m_recbuffer);
+  }
+#endif
   m_sendbuffer = NULL;
   m_recbuffer  = NULL;
   m_sendcapacity = 0;
@@ -46,6 +62,7 @@ Copier::Copier(const DisjointBoxLayout& a_level,
                const BoxLayout& a_dest,
                bool a_exchange,
                IntVect a_shift)
+  : m_buffers(), m_isDefined(false)
 {
   const ProblemDomain& domain = a_level.physDomain();
   define(a_level, a_dest, domain, IntVect::Zero, a_exchange, a_shift);
@@ -56,6 +73,7 @@ Copier::Copier(const DisjointBoxLayout& a_level,
                const ProblemDomain& a_domain,
                bool a_exchange,
                IntVect a_shift)
+  : m_buffers(), m_isDefined(false)
 {
   define(a_level, a_dest, a_domain, IntVect::Zero, a_exchange, a_shift);
 }
@@ -65,6 +83,7 @@ Copier::Copier(const DisjointBoxLayout& a_level,
                const IntVect& a_destGhost,
                bool a_exchange,
                IntVect a_shift)
+  : m_buffers(), m_isDefined(false)
 {
   const ProblemDomain domain = a_level.physDomain();
   define(a_level, a_dest, domain, a_destGhost, a_exchange, a_shift);
@@ -76,6 +95,7 @@ Copier::Copier(const DisjointBoxLayout& a_level,
                const IntVect& a_destGhost,
                bool a_exchange,
                IntVect a_shift)
+  : m_buffers(), m_isDefined(false)
 {
   define(a_level, a_dest, a_domain, a_destGhost, a_exchange, a_shift);
 }

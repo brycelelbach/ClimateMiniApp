@@ -136,7 +136,7 @@ class Copier
 public:
 
   ///null constructor, copy constructor and operator= can be compiler defined.
-  Copier():m_isDefined(false)
+  Copier():m_buffers(), m_isDefined(false)
   {}
 
   Copier(const Copier& a_rhs);

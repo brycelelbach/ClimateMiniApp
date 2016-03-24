@@ -630,12 +630,14 @@ public:
 #if defined(CH_MPI) || defined(CH_HPX)
   int getLocalProcID() const;
 
+#if defined(CH_HPX)
   /// Use with caution. This function constructs a compatible DataIndex for
   /// this BoxLayout based on a DataIndex from another BoxLayout. There is no
   /// gurantee that the new DataIndex will be valid; if it is invalid, things
   /// will blow up.  
-#if defined(CH_HPX)
-  DataIndex localizeDataIndex(DataIndex idx) const;
+  DataIndex localizeDataIndex(DataIndex a_idx) const;
+
+  DataIndex localizeDataIndex(int a_indexIntoBox, int a_indexIntoData) const;
 #endif
 
 #endif
@@ -747,10 +749,15 @@ BoxLayout::getLocalProcID() const
   
 #if defined(CH_HPX)
 inline DataIndex
-BoxLayout::localizeDataIndex(DataIndex idx) const
+BoxLayout::localizeDataIndex(DataIndex a_idx) const
 {
-  idx.setLayoutID(m_layout);
-  return idx;
+  return DataIndex(a_idx.m_index, a_idx.m_datInd, m_layout);
+}
+
+inline DataIndex
+BoxLayout::localizeDataIndex(int a_indexIntoBox, int a_indexIntoData) const
+{
+  return DataIndex(a_indexIntoBox, a_indexIntoData, m_layout);
 }
 #endif
 
