@@ -45,7 +45,7 @@ int chombo_dgbmv(
   return 0;
 }
 
-void LapackWrapper::applyBandMatrix(Real* const in, Real* const out, 
+void LapackWrapper::applyBandMatrix(Real* in, Real* out, 
     LapackFactorization& A)
 {
     // Sorry, need these for the fortran version of LAPACK
@@ -87,7 +87,7 @@ void LapackWrapper::factorBandMatrix(LapackFactorization& A)
 }
 
 
-void LapackWrapper::solveBandMatrix(LapackFactorization& A, Real* const inout)
+void LapackWrapper::solveBandMatrix(LapackFactorization& A, Real* inout)
 {
     int LDAB = A.numRows();
     int N = A.numCols(); // square matrix in compact band format
