@@ -25,12 +25,11 @@
 
 #if !defined(CH_HPX)
     #include <boost/program_options.hpp>
-
-    #include <omp.h>
 #endif
 
 #include <fenv.h>
 
+#include "OpenMP.H"
 #include "AMRIO.H"
 #include "BRMeshRefine.H"
 #include "LoadBalance.H"
@@ -85,7 +84,7 @@ void visit(LD& state, F f)
     DataIterator dit = state.dataIterator();
     std::size_t const nbox = dit.size();
 
-    #pragma omp parallel for schedule(static)
+    CH_PRAGMA_OMP(parallel for schedule(static))
     for (std::size_t ibox = 0; ibox < nbox; ++ibox)
     {
         auto& substate = state[dit[ibox]];
@@ -317,20 +316,6 @@ void stepLoop(
         std::cout << "Starting Chombo Climate Mini-App...\n"
                   << std::flush; 
 
-    if (config.header && (0 == procid))
-        std::cout << config.print_csv_header() << "," 
-                  << profile.print_csv_header() << ","
-                  << "Boxes,"
-                     "Steps (ns),"
-                     "Simulation Time (nt),"
-                     "Localities,"
-                     "PUs,"
-                     "Minimum Error,"
-                     "Maximum Error,"
-                     "Initialization Wall Time [s],"
-                     "Solver Wall Time [s]\n"
-                  << std::flush;
-
     ProblemDomain base_domain = profile.problem_domain(); 
 
     Vector<Box> boxes;
@@ -343,7 +328,7 @@ void stepLoop(
 
     if (config.verbose && (0 == procid))
     {
-        std::cout << "PROC ASSIGNMENT:\n";
+        std::cout << "Processor Assignment:\n";
 
         for (auto i = 0; i < boxes.size(); ++i) 
             std::cout << "  " << boxes[i] << " -> " << procs[i] << "\n";
@@ -352,7 +337,7 @@ void stepLoop(
     DisjointBoxLayout dbl(boxes, procs, base_domain);
 
     climate_mini_app::problem_state
-        state(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_STATE);
+        state(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_STATE);
 
     #if defined(CH_HPX)
         RegisterALDSync(&(state.U));
@@ -364,29 +349,28 @@ void stepLoop(
     );
 
     climate_mini_app::problem_state
-        analytic(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_ANALYTIC);
+        analytic(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_ANALYTIC);
 
     #if defined(CH_HPX)
         RegisterALDSync(&(analytic.U));
     #endif
 
     #if defined(CH_HPX)
-        typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
         typedef ARK4<
             climate_mini_app::problem_state_fab
           , climate_mini_app::problem_state_fab_scratch<false>
-          , imexop
+          , Profile
           , false
         > ark_type;
     
         std::array<climate_mini_app::problem_state, ark_type::s_nStages> phi;
     
-        phi[0].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI0);
-        phi[1].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI1);
-        phi[2].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI2);
-        phi[3].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI3);
-        phi[4].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI4);
-        phi[5].define(dbl, 1, config.ghost_vector, config.tile_width, climate_mini_app::PS_TAG_PHI5);
+        phi[0].define(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_PHI0);
+        phi[1].define(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_PHI1);
+        phi[2].define(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_PHI2);
+        phi[3].define(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_PHI3);
+        phi[4].define(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_PHI4);
+        phi[5].define(dbl, 1, profile.ghostVect(), config.tile_width, climate_mini_app::PS_TAG_PHI5);
 
         RegisterALDSync(&(phi[0].U));
         RegisterALDSync(&(phi[1].U));
@@ -395,22 +379,21 @@ void stepLoop(
         RegisterALDSync(&(phi[4].U));
         RegisterALDSync(&(phi[5].U));
  
-        // FIXME: Can we remove flux, ghost zones?
-        climate_mini_app::problem_state kE(dbl, 1, config.ghost_vector, config.tile_width);
-        climate_mini_app::problem_state kI(dbl, 1, config.ghost_vector, config.tile_width);
+        // FIXME: Remove these.
+        climate_mini_app::problem_state kE(dbl, 1, profile.ghostVect(), config.tile_width);
+        climate_mini_app::problem_state kI(dbl, 1, profile.ghostVect(), config.tile_width);
 
         registration_barrier();
     #else
-        typedef climate_mini_app::imex_per_box_operators<Profile> imexop;
         typedef OMPARK4<
             climate_mini_app::problem_state
           , climate_mini_app::problem_state_scratch<false>
-          , imexop
+          , Profile
           , false
         > ark_type;
   
-        ark_type ark(imexop(profile), profile.dt()); 
-        ark.define(dbl, 1, config.ghost_vector, config.tile_width);
+        ark_type ark(profile, profile.dt()); 
+        ark.define(dbl, 1, profile.ghostVect(), config.tile_width);
     #endif
 
     std::size_t step = 0;
@@ -455,7 +438,7 @@ void stepLoop(
                     {
                         climate_mini_app::problem_state_fab substate(state, di);
     
-                        ark_type ark(imexop(profile), dt); 
+                        ark_type ark(profile, dt); 
                         ark.define(di, phi, kE, kI);
     
                         ark.advance(time, substate);
@@ -496,12 +479,25 @@ void stepLoop(
         std::uint64_t pus = omp_get_max_threads() * localities;
     #endif
 
-    //MPI_Barrier(Chombo_MPI::comm);
-
     std::pair<Real, Real> min_max_error
         = compareAndOutput(profile, state, analytic, time, step);
 
     if (0 == procid)
+    {
+        if (config.header)
+            std::cout << config.print_csv_header() << "," 
+                      << profile.print_csv_header() << ","
+                      << "Boxes,"
+                         "Steps (ns),"
+                         "Simulation Time (nt),"
+                         "Localities,"
+                         "PUs,"
+                         "Minimum Error,"
+                         "Maximum Error,"
+                         "Initialization Wall Time [s],"
+                         "Solver Wall Time [s]\n"
+                      << std::flush;
+
         std::cout << config.print_csv() << "," 
                   << profile.print_csv() << ","
                   << boxes.size() << ","
@@ -514,6 +510,7 @@ void stepLoop(
                   << init_elapsed << "," 
                   << clock.elapsed() << "\n"
                   << std::flush;
+    }
 }
 
 #if defined(CH_HPX)
@@ -549,15 +546,10 @@ int chombo_main(variables_map& vm)
     // Configuration
 
     climate_mini_app::configuration config(
-        /*nh: y and z (horizontal) extent          =*/ vm["nh"].as<std::uint64_t>()
-        /*nv: x (vertical) extent                  =*/,vm["nv"].as<std::uint64_t>()
+        /*nh: x and y (horizontal) extent          =*/ vm["nh"].as<std::uint64_t>()
+        /*nv: z (vertical) extent                  =*/,vm["nv"].as<std::uint64_t>()
         /*max_box_size                             =*/,vm["mbs"].as<std::uint64_t>()
         /*tw: width in y dimension of each tile    =*/,vm["tw"].as<std::uint64_t>()
-        #if defined(CH_LOWER_ORDER_EXPLICIT_STENCIL)
-        /*ghost_vector                             =*/,IntVect::Unit
-        #else
-        /*ghost_vector                             =*/,IntVect::Unit*3
-        #endif
         /*header: print header for CSV timing data =*/,vm.count("header")
         /*verbose: print status updates            =*/,vm.count("verbose") 
         #if defined(CH_USE_HDF5)
@@ -572,12 +564,12 @@ int chombo_main(variables_map& vm)
         /*cy=*/vm["cy"].as<Real>(),
         /*cz=*/vm["cz"].as<Real>(),
 
-        // diffusion coefficients
-        /*kx=*/vm["kx"].as<Real>(),
-
         // velocity components
-        /*ky=*/vm["vy"].as<Real>(), 
-        /*kz=*/vm["vz"].as<Real>()
+        /*vx=*/vm["vx"].as<Real>(), 
+        /*vy=*/vm["vy"].as<Real>(),
+
+        // diffusion coefficients
+        /*kz=*/vm["kz"].as<Real>()
     ); 
 
     Real nt = vm["nt"].as<Real>();
@@ -603,16 +595,13 @@ int chombo_main(variables_map& vm)
         for (std::size_t i = 0; i < clients.size(); ++i)
         {
             auto gid = hpx::naming::get_locality_from_id(clients[i].get_gid());
-            std::cout << "Creating client on " << gid << "\n";
             futures.emplace_back(
                 hpx::async<cma_step_loop_action>(gid, profile, nt));
         }
 
-        std::cout << "Created " << futures.size() << " clients\n";
-
-        for (hpx::future<void>& f : futures)
-            f.get();
-//        hpx::lcos::when_all(futures).get();
+//        for (hpx::future<void>& f : futures)
+//            f.get();
+        hpx::lcos::when_all(futures).get();
     }
     #else
         stepLoop(profile, nt);
@@ -623,13 +612,6 @@ int chombo_main(variables_map& vm)
 
 int main(int argc, char** argv)
 {
-    { 
-        int flag = 0;
-        MPI_Initialized(&flag);
-        std::cout << "MPI_Initialized() == " << flag
-                  << " at start of main()" << std::endl;
-    }
-
     boost::program_options::options_description cmdline(
         "HPX/Chombo AMR Climate Mini-App"
         );
@@ -672,19 +654,19 @@ int main(int argc, char** argv)
             default_value(2.0, "2.0")
         , "z constant")
 
-        ( "kx"
+        ( "vx"
         , boost::program_options::value<Real>()->
-            default_value(1.0e-2, "1.0e-2")
-        , "x diffusion coefficient")
-
+            default_value(1.0e-1, "1.0e-1")
+        , "x velocity component")
         ( "vy"
         , boost::program_options::value<Real>()->
             default_value(1.0e-1, "1.0e-1")
         , "y velocity component")
-        ( "vz"
+
+        ( "kz"
         , boost::program_options::value<Real>()->
-            default_value(1.0e-1, "1.0e-1")
-        , "z velocity component")
+            default_value(1.0e-2, "1.0e-2")
+        , "z diffusion coefficient")
 
         ( "header", "print header for the CSV timing data")
         ( "verbose", "display status updates")
@@ -696,13 +678,6 @@ int main(int argc, char** argv)
         , "generate HDF5 output every timestep") 
         #endif
         ; 
-
-    { 
-        int flag = 0;
-        MPI_Initialized(&flag);
-        std::cout << "MPI_Initialized() == " << flag
-                  << " after program options" << std::endl;
-    }
 
     #if defined(CH_HPX)
         return init(chombo_main, cmdline, argc, argv); // Doesn't return

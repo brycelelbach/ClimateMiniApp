@@ -26,39 +26,24 @@
 namespace climate_mini_app
 {
 
-enum boundary_type
-{
-    // Vertical
-    LOWER_X,
-    UPPER_X,
-
-    // Horizontal
-    LOWER_Y,
-    UPPER_Y,
-    LOWER_Z,
-    UPPER_Z
-};
-
 struct configuration
 {
     ///////////////////////////////////////////////////////////////////////////
     // Parameters.
 
-    std::uint64_t nh; ///< "Horizontal" extent (y and z dimensions) per core.
-    std::uint64_t nv; ///< "Vertical" extent (x dimension) per core.
+    std::uint64_t nh; ///< "Horizontal" extent (x and y dimensions) per core.
+    std::uint64_t nv; ///< "Vertical" extent (z dimension) per core.
 
     std::uint64_t max_box_size;
 
     std::uint64_t tile_width;
 
-    IntVect ghost_vector;
-
     bool header;  ///< Print header for CSV timing data.
     bool verbose; ///< Print status updates.
 
-#if defined(CH_USE_HDF5)
+    #if defined(CH_USE_HDF5)
     bool output; ///< Generate HDF5 output.
-#endif    
+    #endif    
 
     ///////////////////////////////////////////////////////////////////////////
     configuration()
@@ -66,7 +51,6 @@ struct configuration
       , nv()
       , max_box_size()
       , tile_width()
-      , ghost_vector()
       , header()
       , verbose()
       #if defined(CH_USE_HDF5)
@@ -79,7 +63,6 @@ struct configuration
       , std::uint64_t nv_
       , std::uint64_t max_box_size_
       , std::uint64_t tile_width_
-      , IntVect ghost_vector_
       , bool header_
       , bool verbose_
       #if defined(CH_USE_HDF5)
@@ -89,7 +72,6 @@ struct configuration
       : nh(nh_)
       , nv(nv_)
       , max_box_size(max_box_size_)
-      , ghost_vector(ghost_vector_)
       , tile_width(tile_width_)
       , header(header_)
       , verbose(verbose_)
@@ -119,7 +101,6 @@ struct configuration
         ar & nv;
         ar & max_box_size;
         ar & tile_width;
-        ar & ghost_vector;
         ar & header;
         ar & verbose;
         #if defined(CH_USE_HDF5)

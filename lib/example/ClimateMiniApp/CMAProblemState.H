@@ -121,8 +121,8 @@ struct problem_state
     problem_state()
     // {{{
       : U()
+      , FX()
       , FY()
-      , FZ()
       , dit_()
       , tiles_()
       #if defined(CH_HPX)
@@ -139,8 +139,8 @@ struct problem_state
         )
     // {{{
       : U()
+      , FX()
       , FY()
-      , FZ()
       , dit_()
       #if defined(CH_HPX)
       , epoch_()
@@ -159,6 +159,15 @@ struct problem_state
     { // {{{
         #if defined(CH_HPX)
             U.define(dbl, comps, ghost, tag);
+    
+            auto defineFX =
+                [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
+                {
+                    Box b = ld.disjointBoxLayout()[di];
+                    b.grow(ld.ghostVect());
+                    b = surroundingNodes(b, 0);
+                    ld[di].define(b, ld.nComp());
+                }; 
 
             auto defineFY =
                 [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
@@ -168,34 +177,23 @@ struct problem_state
                     b = surroundingNodes(b, 1);
                     ld[di].define(b, ld.nComp());
                 }; 
-    
-            auto defineFZ =
-                [] (AsyncLevelData<FArrayBox>& ld, DataIndex di)
-                {
-                    Box b = ld.disjointBoxLayout()[di];
-                    b.grow(ld.ghostVect());
-                    b = surroundingNodes(b, 2);
-                    ld[di].define(b, ld.nComp());
-                }; 
 
+            FX.define(dbl, comps, ghost, PS_TAG_ANONYMOUS, defineFX);
             FY.define(dbl, comps, ghost, PS_TAG_ANONYMOUS, defineFY);
-            FZ.define(dbl, comps, ghost, PS_TAG_ANONYMOUS, defineFZ);
             
             epoch_.define(dbl);
     
             DataIterator dit(U.dataIterator());
     
             for (dit.begin(); dit.ok(); ++dit)
-            {
                 epoch_[dit()] = 0;
-            }
         #else
             U.define(dbl, comps, ghost);
 
-            FluxFABDataFactory fluxFactoryY(1), fluxFactoryZ(2);
+            FluxFABDataFactory fluxFactoryX(0), fluxFactoryY(1);
     
+            FX.define(dbl, comps, ghost, fluxFactoryX);
             FY.define(dbl, comps, ghost, fluxFactoryY);
-            FZ.define(dbl, comps, ghost, fluxFactoryZ);
         #endif
 
         dit_ = U.dataIterator();
@@ -215,13 +213,8 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-        {
             U[dit[ibox]].copy(X.U[dit[ibox]]);
-//            FY[dit[ibox]].copy(X.FY[dit[ibox]]);
-//            FZ[dit[ibox]].copy(X.FZ[dit[ibox]]);
-        }
     } // }}}
 
     void setVal(Real val)
@@ -229,12 +222,11 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].setVal(val);
+            FX[dit[ibox]].setVal(val);
             FY[dit[ibox]].setVal(val);
-            FZ[dit[ibox]].setVal(val);
         }
     } // }}}
 
@@ -243,11 +235,8 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-        {
             U[dit[ibox]].plus(X.U[dit[ibox]], factor);
-        }
     } // }}}
 
     void plus(problem_state const& X)
@@ -255,11 +244,8 @@ struct problem_state
         DataIterator dit = U.dataIterator();
         std::size_t const nbox = dit.size();
 
-        //#pragma omp parallel for schedule(static)
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
-        {
             U[dit[ibox]].plus(X.U[dit[ibox]]);
-        }
     } // }}}
 
 #if defined(CH_HPX)
@@ -304,12 +290,12 @@ struct problem_state
     // interface compatiblity with problem_state_*
 #if defined(CH_HPX)
     AsyncLevelData<FArrayBox> U;
+    AsyncLevelData<FArrayBox> FX;
     AsyncLevelData<FArrayBox> FY;
-    AsyncLevelData<FArrayBox> FZ;
 #else
     LevelData<FArrayBox> U;
+    LevelData<FArrayBox> FX;
     LevelData<FArrayBox> FY;
-    LevelData<FArrayBox> FZ;
 #endif
 
   private:
@@ -360,36 +346,20 @@ struct problem_state_fab
     } // }}}
 
     problem_state_fab(problem_state_fab const& other) = default; 
-/*
-    // {{{
-      : ps_(other.ps_)
-      , di_(other.di_)
-      , tr_(other.tr_)
-    {} // }}}
-*/
 
     problem_state_fab& operator=(problem_state_fab const& other) = default;
-/*
-    { // {{{
-        ps_ = other.ps_;
-        di_ = other.di_;
-        tr_ = other.tr_;
-        return *this;
-    } // }}}
-*/
 
     void copy(problem_state_fab const& X)
     { // {{{
         vectorizedCopy(X.U(), U());
-        //vectorizedCopy(X.FY(), FY());
-        //vectorizedCopy(X.FZ(), FZ());
     } // }}}
 
+    // FIXME: Vectorize.
     void setVal(Real val)
     { // {{{
         U().setVal(val);
+        FX().setVal(val);
         FY().setVal(val);
-        FZ().setVal(val);
     } // }}}
 
     void plus(problem_state_fab const& X, Real factor)
@@ -414,17 +384,6 @@ struct problem_state_fab
         assert(ps_);
         LocalExchangeSync(ps_->epoch_[di_]++, di_, ps_->U);
     } // }}}
-
-/*
-    // FIXME FIXME FIXME
-    void exchangeFluxSync()
-    { // {{{
-        assert(ps_);
-        auto ffy = LocalExchangeAsync(ps_->epoch_[di_]++, di_, ps_->FY);
-        auto ffz = LocalExchangeAsync(ps_->epoch_[di_]++, di_, ps_->FZ);
-        hpx::lcos::when_all(ffy, ffz).get();
-    } // }}}
-*/
 #endif
 
     tile_range tiles() const
@@ -444,6 +403,18 @@ struct problem_state_fab
         return ps_->U[di_]; 
     } // }}}
 
+    FArrayBox& FX()
+    { // {{{
+        assert(ps_);
+        return ps_->FX[di_]; 
+    } // }}}
+
+    FArrayBox const& FX() const
+    { // {{{
+        assert(ps_);
+        return ps_->FX[di_]; 
+    } // }}}
+
     FArrayBox& FY()
     { // {{{
         assert(ps_);
@@ -456,22 +427,98 @@ struct problem_state_fab
         return ps_->FY[di_]; 
     } // }}}
 
-    FArrayBox& FZ()
-    { // {{{
-        assert(ps_);
-        return ps_->FZ[di_]; 
-    } // }}}
-
-    FArrayBox const& FZ() const
-    { // {{{
-        assert(ps_);
-        return ps_->FZ[di_]; 
-    } // }}}
-
   private:
     problem_state* ps_;
     DataIndex di_;
     tile_range tr_;
+};
+
+struct problem_state_tile
+{
+    problem_state_tile()
+    // {{{
+      : ps_(0)
+      , tile_()
+    {} // }}}
+
+    problem_state_tile(problem_state& ps, tile t)
+    // {{{
+      : ps_(&ps)
+      , tile_(t)
+    {
+    } // }}}
+
+    problem_state_tile(problem_state_tile const& other) = default; 
+
+    problem_state_tile& operator=(problem_state_tile const& other) = default;
+
+    // FIXME: Vectorize.
+    void copy(problem_state_tile const& X)
+    { // {{{
+        U().copy(X.U());
+    } // }}}
+
+    // FIXME: Vectorize.
+    void setVal(Real val)
+    { // {{{
+        U().setVal(val);
+        FX().setVal(val);
+        FY().setVal(val);
+    } // }}}
+
+#if defined(CH_HPX)
+    hpx::future<void> exchangeAsync()
+    { // {{{
+        assert(ps_);
+        return LocalExchangeAsync(ps_->epoch_[tile_.first]++, tile_.first, ps_->U);
+    } // }}}
+
+    void exchangeSync()
+    { // {{{
+        assert(ps_);
+        LocalExchangeSync(ps_->epoch_[tile_.first]++, tile_.first, ps_->U);
+    } // }}}
+#endif
+
+    FArrayBox& U()
+    { // {{{
+        assert(ps_);
+        return ps_->U[tile_.first]; 
+    } // }}}
+
+    FArrayBox const& U() const
+    { // {{{
+        assert(ps_);
+        return ps_->U[tile_.first]; 
+    } // }}}
+
+    FArrayBox& FX()
+    { // {{{
+        assert(ps_);
+        return ps_->FX[tile_.first]; 
+    } // }}}
+
+    FArrayBox const& FX() const
+    { // {{{
+        assert(ps_);
+        return ps_->FX[tile_.first]; 
+    } // }}}
+
+    FArrayBox& FY()
+    { // {{{
+        assert(ps_);
+        return ps_->FY[tile_.first]; 
+    } // }}}
+
+    FArrayBox const& FY() const
+    { // {{{
+        assert(ps_);
+        return ps_->FY[tile_.first]; 
+    } // }}}
+
+  private:
+    problem_state* ps_;
+    tile tile_;
 };
 
 problem_state_fab problem_state::operator[](std::size_t ibox)
