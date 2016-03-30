@@ -473,59 +473,6 @@ struct advection_diffusion_profile
         }
     } // }}}
 
-    void apply_vertical_operator(
-        int i
-      , int j
-      , LapackFactorization& A
-      , Box b
-      , FArrayBox& kI
-      , FArrayBox& phi
-        ) const
-    { // {{{
-        std::uint64_t const size = b.size()[2];
-
-        IntVect const lower = b.smallEnd();
-        IntVect const upper = b.bigEnd();
-
-        std::vector<Real> kI_buf(size), phi_buf(size);
-
-        for (int k = 0; k <= upper[2] - lower[2]; ++k)
-        {
-            kI_buf[k]  = kI(IntVect(i, j, k + lower[2]));
-            phi_buf[k] = phi(IntVect(i, j, k + lower[2]));
-        }
-
-        LapackWrapper::applyBandMatrix(phi_buf.data(), kI_buf.data(), A);
-
-        for (int k = 0; k <= upper[2] - lower[2]; ++k)
-            kI(IntVect(i, j, k + lower[2])) = kI_buf[k];
-    } // }}}
-
-    void vertical_solve(
-        int i
-      , int j
-      , LapackFactorization& A
-      , Box b
-      , FArrayBox& phi
-        ) const
-    { // {{{
-        std::uint64_t const size = b.size()[2];
-
-        IntVect const lower = b.smallEnd();
-        IntVect const upper = b.bigEnd();
-
-        std::vector<Real> phi_buf(size);
-
-        for (int k = 0; k <= upper[2] - lower[2]; ++k)
-            phi_buf[k] = phi(IntVect(i, j, k + lower[2]));
-
-        LapackWrapper::factorBandMatrix(A);
-        LapackWrapper::solveBandMatrix(A, phi_buf.data());
-
-        for (int k = 0; k <= upper[2] - lower[2]; ++k)
-            phi(IntVect(i, j, k + lower[2])) = phi_buf[k];
-    } // }}}
-
     template <std::size_t Stage, typename X, std::size_t TotalStages>
     void implicitOp(
         Real t
@@ -565,10 +512,7 @@ struct advection_diffusion_profile
                 build_vertical_operator_for_apply(A, b);
 
                 for (int k = 0; k <= upper[2] - lower[2]; ++k)
-                {
-                    kI_buf[k]  = kI(IntVect(i, j, k + lower[2]));
                     phi_buf[k] = phi(IntVect(i, j, k + lower[2]));
-                }
 
                 LapackWrapper::applyBandMatrix(phi_buf.data(), kI_buf.data(), A);
 
@@ -597,15 +541,26 @@ struct advection_diffusion_profile
 
         Box b(lower, upper);
 
+        std::uint64_t const size = b.size()[2];
+
         LapackFactorization A;
         define_vertical_operator(A, b);
+
+        std::vector<Real> phi_buf(size);
 
         for (int j = lower[1]; j <= upper[1]; ++j)
             for (int i = lower[0]; i <= upper[0]; ++i)
             {
                 build_vertical_operator_for_solve(A, b, dtscale);
 
-                vertical_solve(i, j, A, b, phi);
+                for (int k = 0; k <= upper[2] - lower[2]; ++k)
+                    phi_buf[k] = phi(IntVect(i, j, k + lower[2]));
+
+                LapackWrapper::factorBandMatrix(A);
+                LapackWrapper::solveBandMatrix(A, phi_buf.data());
+
+                for (int k = 0; k <= upper[2] - lower[2]; ++k)
+                    phi(IntVect(i, j, k + lower[2])) = phi_buf[k];
             }
     } // }}}
 
