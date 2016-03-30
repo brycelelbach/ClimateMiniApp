@@ -91,6 +91,8 @@ public:
     pout() << "(" << m_index << "," << m_datInd << ")" << endl;
   }
 
+  friend std::ostream& operator<<(std::ostream& os, const LayoutIndex& idx);
+
 private:
   friend class DataIterator;
   friend class LayoutIterator;
@@ -113,6 +115,11 @@ private:
     m_layoutIntPtr(a_layoutID)
   {}
 };
+
+inline std::ostream& operator<<(std::ostream& os, const LayoutIndex& idx)
+{
+    std::cout << "(" << idx.m_index << "," << idx.m_datInd << ")";
+}
 
 class DataIndex : public LayoutIndex
 {
