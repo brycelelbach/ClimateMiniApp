@@ -72,9 +72,9 @@ struct FluxFABDataFactory : DataFactory<FArrayBox>
 };
 #endif
 
-typedef std::pair<DataIndex const, Box> tile;
+typedef std::pair<DataIndex, Box> tile;
 
-typedef std::multimap<DataIndex, Box> tile_set;
+typedef std::vector<tile> tile_vector;
 
 struct tile_range
 {
@@ -85,32 +85,28 @@ struct tile_range
     tile_range& operator=(tile_range const&) = default;
     tile_range& operator=(tile_range&&) = default;
 
-    tile_range(tile_set::const_iterator b, tile_set::const_iterator e)
+    tile_range(tile_vector::const_iterator b, tile_vector::const_iterator e)
     // {{{
       : begin_(b)
       , end_(e)
     {} // }}}
 
-    tile_range(std::pair<tile_set::const_iterator, tile_set::const_iterator> r)
-    // {{{
-      : begin_(r.first)
-      , end_(r.second)
-    {} // }}}
-
-    tile_set::const_iterator begin() const
+    tile_vector::const_iterator begin() const
     { // {{{
         return begin_;
     } // }}}
 
-    tile_set::const_iterator end() const
+    tile_vector::const_iterator end() const
     { // {{{
         return end_;
     } // }}}
 
   private:
-    tile_set::const_iterator begin_;
-    tile_set::const_iterator end_;
+    tile_vector::const_iterator begin_;
+    tile_vector::const_iterator end_;
 };
+
+typedef std::map<DataIndex, tile_range> tile_map;
 
 struct problem_state_fab;
 
@@ -123,8 +119,8 @@ struct problem_state
       : U()
       , FX()
       , FY()
-      , dit_()
-      , tiles_()
+      , tile_vector_()
+      , tile_map_()
       #if defined(CH_HPX)
       , epoch_()
       #endif
@@ -141,7 +137,8 @@ struct problem_state
       : U()
       , FX()
       , FY()
-      , dit_()
+      , tile_vector_()
+      , tile_map_()
       #if defined(CH_HPX)
       , epoch_()
       #endif
@@ -196,12 +193,8 @@ struct problem_state
             FY.define(dbl, comps, ghost, fluxFactoryY);
         #endif
 
-        dit_ = U.dataIterator();
-
-        make_tiles(tile_width);
+        make_tiles(ghost, tile_width);
     } // }}}
-
-    problem_state_fab operator[](std::size_t ibox);
 
     DataIterator dataIterator()
     { // {{{
@@ -273,13 +266,28 @@ struct problem_state
 
     tile_range tiles() const
     { // {{{
-        return tile_range(tiles_.begin(), tiles_.end());
+        return tile_range(tile_vector_.begin(), tile_vector_.end());
+    } // }}}
+
+    tile_range tiles(std::size_t ibox) const
+    { // {{{
+        DataIterator dit(U.dataIterator());
+
+        std::size_t const nbox = dit.size();
+
+        assert(ibox <= nbox);
+
+        return tile_map_.at(dit[ibox]);
     } // }}}
 
     tile_range tiles(DataIndex di) const
     { // {{{
-        return tile_range(tiles_.equal_range(di));
+        return tile_map_.at(di);
     } // }}}
+
+    problem_state_fab operator[](std::size_t ibox);
+
+    problem_state_tile operator[](tile t);
 
     friend struct problem_state_fab;
 
@@ -292,35 +300,64 @@ struct problem_state
     AsyncLevelData<FArrayBox> U;
     AsyncLevelData<FArrayBox> FX;
     AsyncLevelData<FArrayBox> FY;
+
+    AsyncLevelData<FArrayBox> A;
+    AsyncLevelData<FArrayBox> B;
+    AsyncLevelData<FArrayBox> C;
 #else
     LevelData<FArrayBox> U;
     LevelData<FArrayBox> FX;
     LevelData<FArrayBox> FY;
+
+    LevelData<FArrayBox> A;
+    LevelData<FArrayBox> B;
+    LevelData<FArrayBox> C;
 #endif
 
   private:
-    void make_tiles(std::uint64_t tile_width) 
-    {
+    void make_tiles(IntVect ghost, std::uint64_t tile_width) 
+    { // {{{
         DataIterator dit = U.dataIterator();
         for (dit.begin(); dit.ok(); ++dit)
         {
             Box b = U.disjointBoxLayout()[dit()];
+            b.grow(ghost);
 
             assert(0 == (b.size()[1] % tile_width));
 
-            for (int i = b.smallEnd(1); i <= b.bigEnd(1);)
+            std::size_t const begin_idx = tile_vector_.size();
+
+            std::size_t end_idx = begin_idx;
+
+            for (int i = b.smallEnd(1); i + tile_width <= b.bigEnd(1); ++end_idx)
             { 
                 Box blo = b;
                 // b is "bhi" after chop.
                 b = blo.chop(1, i += tile_width); 
-                tiles_.emplace(dit(), blo);
+                tile_vector_.emplace_back(dit(), blo);
             }
+
+            tile_vector_.emplace_back(dit(), b);
+            ++end_idx;
+
+            auto begin_it = tile_vector_.begin();
+            std::advance(begin_it, begin_idx);
+
+            auto end_it = tile_vector_.begin();
+            std::advance(end_it, end_idx);
+
+            std::pair<DataIndex, tile_range> p(
+                dit(), tile_range(begin_it, end_it)
+            );
+
+            bool r = tile_map_.insert(p).second;
+
+            assert(r);
         }
-    }
+    } // }}}
 
-    DataIterator dit_; // Workaround for RefCountedPtr being not thread-safe.
-
-    tile_set tiles_;
+    tile_vector tile_vector_;
+    tile_map tile_map_;
 
 #if defined(CH_HPX)
     LayoutData<std::size_t> epoch_;
@@ -385,6 +422,12 @@ struct problem_state_fab
         LocalExchangeSync(ps_->epoch_[di_]++, di_, ps_->U);
     } // }}}
 #endif
+
+    Box box() const
+    { // {{{
+        assert(ps_);
+        return ps_->U[di_].box(); 
+    } // }}}
 
     tile_range tiles() const
     { // {{{
@@ -480,6 +523,11 @@ struct problem_state_tile
     } // }}}
 #endif
 
+    Box box() const
+    { // {{{
+        return tile_.second; 
+    } // }}}
+
     FArrayBox& U()
     { // {{{
         assert(ps_);
@@ -523,11 +571,18 @@ struct problem_state_tile
 
 problem_state_fab problem_state::operator[](std::size_t ibox)
 { // {{{
-    std::size_t const nbox = dit_.size();
+    DataIterator dit(U.dataIterator());
+
+    std::size_t const nbox = dit.size();
 
     assert(ibox <= nbox);
 
-    return problem_state_fab(*this, dit_[ibox]);
+    return problem_state_fab(*this, dit[ibox]);
+} // }}}
+
+problem_state_tile problem_state::operator[](tile t)
+{ // {{{
+    return problem_state_tile(*this, t);
 } // }}}
 
 }

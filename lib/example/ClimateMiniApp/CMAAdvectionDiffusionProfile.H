@@ -207,7 +207,7 @@ struct advection_diffusion_profile
         auto& FX    = phi_[Stage].FX();
         auto& FY    = phi_[Stage].FY();
 
-        Box const b = phi.box();
+        Box const b = state_.box();
 
         IntVect const lower_phi = b.smallEnd(); // FIXME: Better names.
         IntVect const upper_phi = b.bigEnd();   // FIXME: Better names.
@@ -431,7 +431,7 @@ struct advection_diffusion_profile
         Real const dv = dp()[2]; 
 
         Real const coef = c2 / (12.0 * dv * dv); // for 4th-order
-        Real const s[]={0.0, -1.0, 16.0, -30.0, 16.0, -1.0, 0.0};
+        Real const s[] = {0.0, -1.0, 16.0, -30.0, 16.0, -1.0, 0.0};
 
         int const KU = 3;
         int const KL = 3;
@@ -526,36 +526,54 @@ struct advection_diffusion_profile
             phi(IntVect(i, j, k + lower[2])) = phi_buf[k];
     } // }}}
 
-    template <std::size_t Stage, typename X>
+    template <std::size_t Stage, typename X, std::size_t TotalStages>
     void implicitOp(
         Real t
-      , X&& kI_
-      , X&& phi_
+      , Real dt
+      , Real const s_aI[TotalStages][TotalStages]
+      , Real const s_b[TotalStages]
+      , X& state_
+      , X& kI_
+      , std::array<X, TotalStages>& phi_
         ) const
     { // {{{
         if (implicitOpDisabled())
             return;
 
+        auto& state = state_.U();
         auto& kI  = kI_.U();
-        auto& phi = phi_.U();
+        auto& phi = phi_[Stage].U();
  
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd(); 
+        IntVect lower = state_.box().smallEnd();
+        IntVect upper = state_.box().bigEnd(); 
 
         lower.shift(ghostVect());
         upper.shift(-1*ghostVect());
 
         Box b(lower, upper);
 
+        std::uint64_t const size = b.size()[2];
+
         LapackFactorization A;
         define_vertical_operator(A, b);
+
+        std::vector<Real> kI_buf(size), phi_buf(size);
 
         for (int j = lower[1]; j <= upper[1]; ++j)
             for (int i = lower[0]; i <= upper[0]; ++i)
             {
                 build_vertical_operator_for_apply(A, b);
 
-                apply_vertical_operator(i, j, A, b, kI, phi);
+                for (int k = 0; k <= upper[2] - lower[2]; ++k)
+                {
+                    kI_buf[k]  = kI(IntVect(i, j, k + lower[2]));
+                    phi_buf[k] = phi(IntVect(i, j, k + lower[2]));
+                }
+
+                LapackWrapper::applyBandMatrix(phi_buf.data(), kI_buf.data(), A);
+
+                for (int k = 0; k <= upper[2] - lower[2]; ++k)
+                    kI(IntVect(i, j, k + lower[2])) = kI_buf[k];
             }
     } // }}}
 
@@ -571,8 +589,8 @@ struct advection_diffusion_profile
 
         auto& phi = phi_.U();
 
-        IntVect lower = phi.smallEnd();
-        IntVect upper = phi.bigEnd(); 
+        IntVect lower = phi_.box().smallEnd();
+        IntVect upper = phi_.box().bigEnd(); 
 
         lower.shift(ghostVect());
         upper.shift(-1*ghostVect());

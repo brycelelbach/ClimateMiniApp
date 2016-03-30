@@ -389,7 +389,6 @@ void stepLoop(
             climate_mini_app::problem_state
           , climate_mini_app::problem_state_scratch<false>
           , Profile
-          , false
         > ark_type;
   
         ark_type ark(profile, profile.dt()); 
