@@ -27,14 +27,13 @@ struct TestData
       , IntVect a_ghostVect
       , std::uint64_t a_tile_width
         )
-      : m_tile_width(a_tile_width)
-      , m_tiles()
+      : m_tiles()
     {
         U.define(a_layout, a_nComp, a_ghostVect);
-        A.define(a_layout, a_nComp, IntVect::Zero);
-        B.define(a_layout, a_nComp, IntVect::Zero);
-        C.define(a_layout, a_nComp, IntVect::Zero);
-        makeTiles();
+        A.define(a_layout, a_nComp, a_ghostVect);
+        B.define(a_layout, a_nComp, a_ghostVect);
+        C.define(a_layout, a_nComp, a_ghostVect);
+        makeTiles(a_ghostVect, a_tile_width);
     }
 
     void exchange()
@@ -70,27 +69,28 @@ struct TestData
     LevelData<FArrayBox> C;
 
   private:
-    void makeTiles() 
+    void makeTiles(IntVect a_ghostVect, std::uint64_t a_tile_width)
     {
         DataIterator dit = U.dataIterator();
         for (dit.begin(); dit.ok(); ++dit)
         {
-            // FIXME - hardwired 2 boxes per dit. Need to tile here
             Box b = U.disjointBoxLayout()[dit()];
+            b.grow(a_ghostVect);
 
-            assert(0 == (b.size()[1] % m_tile_width));
+            assert(0 == (b.size()[1] % a_tile_width));
 
-            for (int i = b.smallEnd(1); i <= b.bigEnd(1);)
+            for (int i = b.smallEnd(1); i + a_tile_width <= b.bigEnd(1);)
             { 
                 Box blo = b;
                 // b is "bhi" after chop.
-                b = blo.chop(1, i += m_tile_width); 
-                m_tiles.push_back(std::pair<DataIndex,Box>(dit(), blo));
+                b = blo.chop(1, i += a_tile_width); 
+                m_tiles.push_back(std::pair<DataIndex, Box>(dit(), blo));
             }
+
+            m_tiles.push_back(std::pair<DataIndex, Box>(dit(), b));
         }
     }
 
-    std::uint64_t m_tile_width;
     std::vector<std::pair<DataIndex, Box> > m_tiles;
 };
 
