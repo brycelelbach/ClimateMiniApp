@@ -130,19 +130,19 @@ class LapackFactorization
                 {
                     //int abrow = m_kl+m_ku+1-band;
                     //pout() << m_LU[abrow-1+j*m_nrows];
-                    pout() << (*this)(i,j);
+                    std::cout << (*this)(i,j);
                 }
 
                 else
-                    pout() << 0;
+                    std::cout << 0;
 
                 if (j==(m_ncols-1))
-                    pout() << ";";
+                    std::cout << ";";
 
-                else pout() << ",";
+                else std::cout << ",";
             }
 
-            pout() << endl;
+            std::cout << endl;
         }
     }
   

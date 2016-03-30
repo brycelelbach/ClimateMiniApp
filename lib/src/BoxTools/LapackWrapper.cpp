@@ -80,12 +80,11 @@ void LapackWrapper::factorBandMatrix(LapackFactorization& A)
     int INFO = 0;
 
     // Factorization
-    // dgtf2 is the unblocked version of dgbtrf
+    // dgbtf2 is the unblocked version of dgbtrf
     dgbtf2_(&M, &N, &KL, &KU, A.luPtr(), &LDAB, A.pivotPtr(), &INFO);
 
     CH_assert(INFO == 0);
 }
-
 
 void LapackWrapper::solveBandMatrix(LapackFactorization& A, Real* inout)
 {
