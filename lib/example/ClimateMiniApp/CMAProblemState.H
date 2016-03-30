@@ -218,8 +218,6 @@ struct problem_state
         for (std::size_t ibox = 0; ibox < nbox; ++ibox)
         {
             U[dit[ibox]].setVal(val);
-            FX[dit[ibox]].setVal(val);
-            FY[dit[ibox]].setVal(val);
         }
     } // }}}
 
@@ -395,8 +393,6 @@ struct problem_state_fab
     void setVal(Real val)
     { // {{{
         U().setVal(val);
-        FX().setVal(val);
-        FY().setVal(val);
     } // }}}
 
     void plus(problem_state_fab const& X, Real factor)
@@ -498,15 +494,28 @@ struct problem_state_tile
     // FIXME: Vectorize.
     void copy(problem_state_tile const& X)
     { // {{{
-        U().copy(X.U());
+        assert(tile_.second == X.tile_.second);
+        U().copy(X.U(), tile_.second, 0, tile_.second, 0, 1);
     } // }}}
 
     // FIXME: Vectorize.
     void setVal(Real val)
     { // {{{
-        U().setVal(val);
-        FX().setVal(val);
-        FY().setVal(val);
+        U().setVal(val, tile_.second, 0);
+    } // }}}
+
+    // FIXME: Vectorize.
+    void plus(problem_state_tile const& X, Real factor)
+    { // {{{
+        assert(tile_.second == X.tile_.second);
+        U().plus(X.U(), tile_.second, tile_.second, factor, 0, 0, 1);
+    } // }}}
+
+    // FIXME: Vectorize.
+    void plus(problem_state_tile const& X)
+    { // {{{
+        assert(tile_.second == X.tile_.second);
+        U().plus(X.U(), tile_.second, tile_.second, 0, 0, 1);
     } // }}}
 
 #if defined(CH_HPX)

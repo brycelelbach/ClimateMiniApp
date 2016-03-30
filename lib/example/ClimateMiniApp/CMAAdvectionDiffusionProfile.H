@@ -521,7 +521,15 @@ struct advection_diffusion_profile
                 LapackWrapper::applyBandMatrix(phi_buf.data(), kI_buf.data(), A);
 
                 for (int k = 0; k <= upper[2] - lower[2]; ++k)
-                    kI(IntVect(i, j, k + lower[2])) = kI_buf[k];
+                {
+                    #pragma unroll
+                    for (std::size_t s = Stage + 1; s < TotalStages; ++s)
+                        phi_[s].U()(IntVect(i, j, k + lower[2]))
+                            += kI_buf[k] * dt * s_aI[s][Stage];
+
+                    state(IntVect(i, j, k + lower[2]))
+                        += kI_buf[k] * dt * s_b[Stage];
+                }
             }
     } // }}}
 

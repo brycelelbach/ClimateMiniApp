@@ -151,23 +151,10 @@ void OMPARK4<X, Scratch, ImExOp>::advanceStage(Real t, X& state)
                                  , this_state, this_kE, this_phi);
         m_opImEx.implicitOp<Stage>(stage_t, m_dt, s_aI, s_b
                                  , this_state, this_kI, this_phi);
-//        if (!m_opImEx.implicitOpDisabled())
-//            m_opImEx.implicitOp<Stage>(stage_t, this_kI, this_phi[Stage]);
-
-        // Add the known stage operator values to future solves 
-        for (std::size_t k = Stage + 1; k < s_nStages; ++k)
-        {
-            if (!m_opImEx.implicitOpDisabled())
-                this_phi[k].plus(this_kI, m_dt*s_aI[k][Stage]); 
-        }
-    
-        // Accumulate the final solution and accum registers
-        if (!m_opImEx.implicitOpDisabled())
-            this_state.plus(this_kI, m_dt*s_b[Stage]);
 
         if ((Stage + 1) < s_nStages)
         {
-            Real next_t = t + s_c[Stage + 1]*m_dt;
+            Real next_t = t + s_c[Stage + 1] * m_dt;
 
             // Do the solve - copy rhs from phi[stage]
             this_phi[Stage + 1].plus(this_phi[0]);
