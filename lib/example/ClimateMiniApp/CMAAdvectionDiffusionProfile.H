@@ -407,19 +407,6 @@ struct advection_diffusion_profile
         build_vertical_operator(A, b, c1, c2);
     } // }}}
 
-    void define_vertical_operator(
-        LapackFactorization& A
-      , Box b
-        ) const
-    { // {{{
-        std::uint64_t const size = b.size()[2];
-
-        int const KU = 3;
-        int const KL = 3;
-
-        A.define(size, KL, KU);
-    } // }}}
-
     void build_vertical_operator(
         LapackFactorization& A
       , Box b
@@ -430,8 +417,8 @@ struct advection_diffusion_profile
         std::uint64_t const size = b.size()[2];
         Real const dv = dp()[2]; 
 
-        Real const coef = c2 / (12.0 * dv * dv); // for 4th-order
-        Real const s[] = {0.0, -1.0, 16.0, -30.0, 16.0, -1.0, 0.0};
+        Real const coef = c2 / (1.0 * dv * dv); 
+        Real const s[] = {0.0, 0.0, 1.0, -2.0, 1.0, 0.0, 0.0};
 
         int const KU = 3;
         int const KL = 3;
@@ -448,7 +435,10 @@ struct advection_diffusion_profile
             }
         
         // Fix the diagonal ends for the homogeneous Neumann bcs
+        A(0, 0) = c1 - 1.0 * coef;
+        A(ncol - 1, ncol - 1) = c1 - 1.0 * coef;
 
+/*
         // The gradient flux for the first interior face
         int const lenG = 4;
         Real const sG1[] = {-145.0, 159.0, -15.0, 1.0};
@@ -471,6 +461,20 @@ struct advection_diffusion_profile
             A(ncol - 2, ixflip) =
                 ((ix == 1) ? c1 : 0) + sG2[ix] * coefG2 - sG1[ix] * coefG1;
         }
+*/
+    } // }}}
+
+    void define_vertical_operator(
+        LapackFactorization& A
+      , Box b
+        ) const
+    { // {{{
+        std::uint64_t const size = b.size()[2];
+
+        int const KU = 3;
+        int const KL = 3;
+
+        A.define(size, KL, KU);
     } // }}}
 
     template <std::size_t Stage, typename X, std::size_t TotalStages>
