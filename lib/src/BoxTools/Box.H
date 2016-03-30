@@ -254,7 +254,7 @@ public:
   friend std::istream& operator>> (std::istream&   is,
                                    IndexType& itype);
 
-  friend void swap(IndexType& lhs, IndexType& rhs) CH_NOEXCEPT;
+  friend void swap(IndexType& lhs, IndexType& rhs) noexcept;
 
 private:
   //
@@ -447,7 +447,7 @@ IndexType::ixType () const
 
 inline
 void
-swap (IndexType& lhs, IndexType& rhs) CH_NOEXCEPT 
+swap (IndexType& lhs, IndexType& rhs) noexcept 
 {
   using std::swap;
   swap(lhs.itype, rhs.itype);
@@ -1647,7 +1647,7 @@ public:
   /** Doesn't print the IndexType, and uses square outer brackets. */
   static void setTempestOutputFormat( bool );
 
-  friend void swap(Box& lhs, Box& rhs) CH_NOEXCEPT;
+  friend void swap(Box& lhs, Box& rhs) noexcept;
 
 protected:
   friend class HDF5Handle;
@@ -2426,7 +2426,7 @@ Box::operator& (const Box& rhs) const
 }
 
 inline
-void swap (Box& lhs, Box& rhs) CH_NOEXCEPT
+void swap (Box& lhs, Box& rhs) noexcept
 {
   using std::swap; // ADL
   swap(lhs.smallend, rhs.smallend);

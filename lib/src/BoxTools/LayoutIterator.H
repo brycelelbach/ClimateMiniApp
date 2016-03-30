@@ -78,16 +78,14 @@ public:
   /** The iterator will be !ok() afterwards. */
   void end();
 
-
-
   const LayoutIndex& operator[](int ivec) const
   {
-    return (*this->m_indicies)[ivec];
+    return (*this->m_indices)[ivec];
   }
 
   LayoutIndex& operator[](int ivec)
   {
-    return (*this->m_indicies)[ivec];
+    return (*this->m_indices)[ivec];
   }
 
 protected:
@@ -98,7 +96,7 @@ protected:
                  const int*       a_layoutID);
 
   BoxLayout    m_layout;
-  RefCountedPtr<Vector<LayoutIndex> > m_indicies;
+  std::shared_ptr<Vector<LayoutIndex> > m_indices;
 
   int m_current;
 };
@@ -106,7 +104,7 @@ protected:
 inline const LayoutIndex& LayoutIterator::operator () () const
 {
   CH_assert(ok());
-  return (*m_indicies)[m_current];
+  return (*m_indices)[m_current];
 }
 
 inline void LayoutIterator::operator ++ ()

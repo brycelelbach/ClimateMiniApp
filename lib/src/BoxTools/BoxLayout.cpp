@@ -63,7 +63,7 @@ BoxLayout::BoxLayout()
    m_layout(new int),
    m_closed(new bool(false)),
    m_sorted(new bool(false)),
-   m_dataIterator(RefCountedPtr<DataIterator>()),
+   m_dataIterator(),
    m_indicies(new Vector<LayoutIndex>())
 {
 }
@@ -100,7 +100,7 @@ void BoxLayout::closeNoSort(int a_thisProc)
       *m_sorted = false;
       *m_closed = true;
       buildDataIndex(a_thisProc);
-      m_dataIterator = RefCountedPtr<DataIterator>(new DataIterator(*this, m_layout));
+      m_dataIterator = std::shared_ptr<DataIterator>(new DataIterator(*this, m_layout.get()));
     }
 }
 
@@ -111,7 +111,7 @@ void BoxLayout::close(int a_thisProc)
       sort();
       *m_closed = true;
       buildDataIndex(a_thisProc);
-      m_dataIterator = RefCountedPtr<DataIterator>(new DataIterator(*this, m_layout));
+      m_dataIterator = std::shared_ptr<DataIterator>(new DataIterator(*this, m_layout.get()));
     }
 }
 
@@ -126,7 +126,7 @@ void BoxLayout::buildDataIndex(int a_thisProc)
     p = CHprocID();
   else
     p = a_thisProc;
-  m_localProcID = RefCountedPtr<int>(new int(p));
+  m_localProcID = std::shared_ptr<int>(new int(p));
   int count=0;
   const Entry* box;
 
@@ -135,7 +135,7 @@ void BoxLayout::buildDataIndex(int a_thisProc)
       box = &(*(m_boxes))[index];
       if (box->m_procID == p)
         {
-          DataIndex current(index, datIn, m_layout);
+          DataIndex current(index, datIn, m_layout.get());
           dlist.push_back(current);
           count++;
           datIn++;
@@ -143,7 +143,7 @@ void BoxLayout::buildDataIndex(int a_thisProc)
       ++index;
     }
 
-  m_dataIndex = RefCountedPtr<Vector<DataIndex> >(new Vector<DataIndex>(count));
+  m_dataIndex = std::shared_ptr<Vector<DataIndex> >(new Vector<DataIndex>(count));
   std::list<DataIndex>::iterator b=dlist.begin();
   for (int i=0; i<count; ++i, ++b)
     {
@@ -180,13 +180,13 @@ DataIterator BoxLayout::dataIterator() const
 TimedDataIterator BoxLayout::timedDataIterator() const
 {
   CH_assert(*m_closed);
-  TimedDataIterator rtn(*this, m_layout);
+  TimedDataIterator rtn(*this, m_layout.get());
   return rtn;
 }
 
 LayoutIterator BoxLayout::layoutIterator() const
 {
-  return LayoutIterator(*this, m_layout);
+  return LayoutIterator(*this, m_layout.get());
 }
 
 BoxLayout::BoxLayout(const Vector<Box>& a_boxes, const Vector<int>& assignments, bool a_ignoreNumProc, int a_thisProc)
@@ -266,7 +266,7 @@ BoxLayout::define(const LayoutData<Box>& a_newLayout, int a_thisProc)
   const BoxLayout& baseLayout = a_newLayout.boxLayout();
 
   // First copy from the base layout.
-  m_boxes =  RefCountedPtr<Vector<Entry> >(
+  m_boxes =  std::shared_ptr<Vector<Entry> >(
                new Vector<Entry>(*(baseLayout.m_boxes)));
   m_layout = baseLayout.m_layout;
 #if defined(CH_MPI) || defined(CH_HPX)
@@ -338,7 +338,7 @@ BoxLayout::define(const LayoutData<Box>& a_newLayout, int a_thisProc)
 void
 BoxLayout::deepCopy(const BoxLayout& a_source)
 {
-  m_boxes =  RefCountedPtr<Vector<Entry> >(
+  m_boxes =  std::shared_ptr<Vector<Entry> >(
                 new Vector<Entry>(*(a_source.m_boxes)));
   m_layout = a_source.m_layout;
 #if defined(CH_MPI) || defined(CH_HPX)
@@ -357,7 +357,6 @@ bool BoxLayout::sameBoxes(const BoxLayout& a_layout) const
 
       for (int iBox = 0; iBox < size(); ++iBox)
         {
-          //RefCountedPtr<Vector<Entry> > m_boxes;
           if ((*m_boxes)[iBox].box != (*a_layout.m_boxes)[iBox].box)
             {
               retval = false;
@@ -390,7 +389,7 @@ coarsen(BoxLayout& a_output, const BoxLayout& a_input, int a_refinement)
       MayDay::Error("output of coarsen must be called on open BoxLayout");
     }
   //a_output.deepCopy(a_input);
-  a_output.m_boxes      = RefCountedPtr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
+  a_output.m_boxes      = std::shared_ptr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
   a_output.m_layout     = a_input.m_layout;
 #if defined(CH_MPI) || defined(CH_HPX)
   a_output.m_dataIndex  = a_input.m_dataIndex;
@@ -415,7 +414,7 @@ coarsen(BoxLayout& a_output, const BoxLayout& a_input, const IntVect& a_refineme
       MayDay::Error("output of coarsen must be called on open BoxLayout");
     }
   //a_output.deepCopy(a_input);
-  a_output.m_boxes      = RefCountedPtr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
+  a_output.m_boxes      = std::shared_ptr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
   a_output.m_layout     = a_input.m_layout;
 #if defined(CH_MPI) || defined(CH_HPX)
   a_output.m_dataIndex  = a_input.m_dataIndex;

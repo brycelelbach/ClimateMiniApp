@@ -379,7 +379,7 @@ void BoxLayoutData<T>::unpackReceivesToMe(BoxLayoutData<T>& a_dest,
 }
 
 template<class T>
-void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                                                  const Interval&   a_destComps,
                                                  int ncomp,
                                                  const DataFactory<T>& factory,
@@ -822,7 +822,7 @@ void BoxLayoutData<T>::unpackReceivesToMe(BoxLayoutData<T>& a_dest,
 }
 
 template<class T>
-void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                                                  const Interval&   a_destComps,
                                                  int ncomp,
                                                  const DataFactory<T>& factory,
@@ -848,10 +848,10 @@ void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr
       {
         const CopierBuffer::bufEntry& entry = m_buff->m_toMe[i];
         const MotionItem& item = *(entry.item);
-        RefCountedPtr<T> newT( factory.create(item.toRegion, ncomp, item.toIndex) );;
+        std::unique_ptr<T> newT( factory.create(item.toRegion, ncomp, item.toIndex) );;
 
         a_op.linearIn(*newT, entry.bufPtr, item.toRegion, a_destComps);
-        a_dest[item.toIndex].push_back(newT);
+        a_dest[item.toIndex].emplace_back(std::move(newT));
       }
   }
 
@@ -861,7 +861,7 @@ void BoxLayoutData<T>::unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr
 
 template <class T>
 void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
-                                     LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+                                     LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                                      const Interval& a_srcComps,
                                      const ProblemDomain& a_domain,
                                      const Copier& a_copier,
@@ -906,14 +906,14 @@ void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
   for (int i=0; i<items; i++)
     {
       const MotionItem& item = it[i];
-      RefCountedPtr<T> newT( factory.create(item.toRegion, ncomp, item.toIndex) );
+      std::unique_ptr<T> newT( factory.create(item.toRegion, ncomp, item.toIndex) );
 
       a_op.op(*newT, item.fromRegion,
               destComps,
               item.toRegion,
               this->operator[](item.fromIndex),
               a_srcComps);
-      a_dest[item.toIndex].push_back(newT);
+      a_dest[item.toIndex].emplace_back(std::move(newT));
     }
 
   // Uncomment and Move this out of unpackReceivesToMe()  (ndk)
@@ -924,7 +924,7 @@ void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
 
 template <class T>
 void BoxLayoutData<T>::generalCopyTo(const BoxLayout& a_destGrids,
-                                     LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+                                     LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                                      const Interval& a_srcComps,
                                      const ProblemDomain& a_domain,
                                      const DataFactory<T>& factory) const

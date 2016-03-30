@@ -11,9 +11,10 @@
 #ifndef _BOXLAYOUT_H_
 #define _BOXLAYOUT_H_
 
+#include <memory>
+
 #include "Box.H"
 #include "Vector.H"
-#include "RefCountedPtr.H"
 #include "DataIndex.H"
 #include "SPMD.H"
 #include "LoHiSide.H"
@@ -309,17 +310,10 @@ public:
   operator==(const BoxLayout& rhs) const ;
 
   /**
-     RefCounted pointer compare.  Need this to use DisjointBoxLayout as a Key in a std::map
+     pointer compare.  Need this to use DisjointBoxLayout as a Key in a std::map
   */
   inline bool operator<(const BoxLayout& rhs) const ;
 
-  /**
-      current ref count for this object
-  */
-  int refCount() const
-  {
-    return m_boxes.refCount();
-  }
   ///
   /** Refcounted pointer check.  Return <tt>true</tt> if these two objects
       share the same implementation.
@@ -347,7 +341,7 @@ public:
   /** not a user function
    */
   bool check(const LayoutIndex& index) const
-    { return index.m_layoutIntPtr == m_layout;}
+    { return index.m_layoutIntPtr == m_layout.get();}
 
   ///
   /**
@@ -648,16 +642,16 @@ protected:
   friend class LayoutIterator;
   friend class DataIterator;
 
-  RefCountedPtr<Vector<Entry> >        m_boxes;
-  RefCountedPtr<int>                   m_layout;
-  RefCountedPtr<bool>                  m_closed;
-  RefCountedPtr<bool>                  m_sorted;
-  RefCountedPtr<DataIterator>          m_dataIterator;
-  RefCountedPtr<Vector<LayoutIndex> >  m_indicies;
+  std::shared_ptr<Vector<Entry> >        m_boxes;
+  std::shared_ptr<int>                   m_layout;
+  std::shared_ptr<bool>                  m_closed;
+  std::shared_ptr<bool>                  m_sorted;
+  std::shared_ptr<DataIterator>          m_dataIterator;
+  std::shared_ptr<Vector<LayoutIndex> >  m_indicies;
 
 #if defined(CH_MPI) || defined(CH_HPX)
-  RefCountedPtr<Vector<DataIndex> >    m_dataIndex;
-  RefCountedPtr<int>                   m_localProcID;
+  std::shared_ptr<Vector<DataIndex> >    m_dataIndex;
+  std::shared_ptr<int>                   m_localProcID;
 #endif
 
   void checkDefine(const Vector<Box>& a_boxes, const Vector<int>& procIDs);

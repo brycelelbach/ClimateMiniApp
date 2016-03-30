@@ -277,14 +277,14 @@ public:
      @param factory optional data factory for template classes that have non-trivial construction
   */
   void generalCopyTo(const BoxLayout& a_destGrids,
-                     LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+                     LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                      const Interval& a_interval,
                      const ProblemDomain& a_domain,
                      const DataFactory<T>& factory = DefaultDataFactory<T>()) const ;
 
   ///
   void generalCopyTo(const BoxLayout& a_destGrids,
-                     LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+                     LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                      const Interval& a_interval,
                      const ProblemDomain& a_domain,
                      const Copier& a_copier,
@@ -400,7 +400,7 @@ protected:
                           const Interval&   a_destComps,
                           const LDOperator<T>& a_op) const ;
 
-  void unpackReceivesToMe_append(LayoutData<Vector<RefCountedPtr<T> > >& a_dest,
+  void unpackReceivesToMe_append(LayoutData<Vector<std::unique_ptr<T> > >& a_dest,
                                  const Interval&   a_destComps,
                                  int ncomp,
                                  const DataFactory<T>& factory,

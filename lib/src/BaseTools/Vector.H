@@ -291,17 +291,24 @@ public:
   {
     v.swap(other.v);
   }
-  ///
-  /**
-  */
+  
   inline
   void push_back(const T& in)
   {
 #ifdef CH_USE_MEMORY_TRACKING
     increment(1);
 #endif
-    //  (static_cast<vector<T>* >(this))->push_back(in);
     v.push_back(in);
+  }
+
+  template <typename... Args>
+  inline
+  void emplace_back(Args&&... args)
+  {
+#ifdef CH_USE_MEMORY_TRACKING
+    increment(1);
+#endif
+    v.emplace_back(std::forward<Args>(args)...);
   }
 
   ///

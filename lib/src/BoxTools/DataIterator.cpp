@@ -14,7 +14,7 @@
 #if defined(CH_MPI) || defined(CH_HPX)
 DataIterator::DataIterator(const BoxLayout& plan,
                            const int* layoutID)
-  :m_layout(plan), m_indices(plan.m_dataIndex), m_current(0)
+  :m_layout(plan), m_indices(plan.m_dataIndex.get()), m_current(0)
 {
 
 }

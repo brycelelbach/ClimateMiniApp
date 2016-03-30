@@ -528,13 +528,11 @@ public:
   static int testBoxAndComp();
 
   template <typename R>
-  friend void swap(BaseFab<R>& lhs, BaseFab<R>& rhs) CH_NOEXCEPT;
+  friend void swap(BaseFab<R>& lhs, BaseFab<R>& rhs) noexcept;
 
-#if defined(CH_CXX11)
   // Make FAB a movable type.
   BaseFab<T>&& operator= (BaseFab<T>&& rhs);
   BaseFab (BaseFab<T>&& rhs);
-#endif
 
 protected:
   //

@@ -1545,7 +1545,7 @@ getMaskInteriorNodes(LevelData<NodeFArrayBox>& a_mask,
   a_mask.define(a_dest, 1);
   // BoxLayoutData< BaseFab<int> > destCount(destNodes, 1);
   { // scope of intCount
-    LayoutData < Vector< RefCountedPtr< BaseFab<int> > > > intCount;
+    LayoutData < Vector< std::unique_ptr< BaseFab<int> > > > intCount;
     const Interval intvl0(0, 0);
 
     // pdNodes is NODE-centered version of a_domain.
@@ -1559,7 +1559,7 @@ getMaskInteriorNodes(LevelData<NodeFArrayBox>& a_mask,
     srcCount.generalCopyTo(destNodes, intCount, intvl0, pdNodes);
     for (DataIterator ditDst = destNodes.dataIterator(); ditDst.ok(); ++ditDst)
       {
-        Vector< RefCountedPtr< BaseFab<int> > >& intFab = intCount[ditDst];
+        Vector< std::unique_ptr< BaseFab<int> > >& intFab = intCount[ditDst];
         Box bxNodes = destNodes.get(ditDst);
         BaseFab<int> sumFab(bxNodes, 1);
         // plusReduce(sumFab, intFab);

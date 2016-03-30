@@ -30,14 +30,8 @@ struct MPIInitializer
         #endif
     }
 
-#if !defined(CH_CXX11)
-  private:
-    MPIInitializer (MPIInitializer const&);
-    MPIInitializer& operator= (MPIInitializer const&);
-#else
     MPIInitializer (MPIInitializer const&) = delete;
     MPIInitializer& operator= (MPIInitializer const&) = delete;
-#endif
 };
 
 #endif

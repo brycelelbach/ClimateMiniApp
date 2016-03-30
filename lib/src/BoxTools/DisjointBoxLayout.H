@@ -335,10 +335,10 @@ protected:
 
   // The "pair" here : the first int is the index of the periodic shift iterator, the second unsigned int is
   // the box index.  an unshifted box is stored with a -1 shift index.
-  RefCountedPtr<Vector<Vector<std::pair<int, LayoutIndex> > > > m_neighbors; //what a mouthful
+  std::shared_ptr<Vector<Vector<std::pair<int, LayoutIndex> > > > m_neighbors; //what a mouthful
 
   void computeNeighbors();
-  virtual void closeN( RefCountedPtr<Vector<Vector<std::pair<int, LayoutIndex> > > > neighbors);
+  virtual void closeN( std::shared_ptr<Vector<Vector<std::pair<int, LayoutIndex> > > > neighbors);
   virtual void closeNO(); // close, but don't bother building neighbors
 
 };

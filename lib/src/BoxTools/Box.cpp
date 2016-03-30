@@ -822,7 +822,8 @@ Box::chop (int dir,
     //
     // NODE centered Box.
     //
-    CH_assert(chop_pnt > smallend[dir] && chop_pnt < bigend[dir]);
+    CH_assert(chop_pnt > smallend[dir]);
+    CH_assert(chop_pnt < bigend[dir]);
     //
     // Shrink original Box to just contain chop_pnt.
     //
@@ -833,7 +834,8 @@ Box::chop (int dir,
     //
     // CELL centered Box.
     //
-    CH_assert(chop_pnt > smallend[dir] && chop_pnt <= bigend[dir]);
+    CH_assert(chop_pnt > smallend[dir]);
+    CH_assert(chop_pnt <= bigend[dir]);
     //
     // Shrink origional Box to one below chop_pnt.
     //

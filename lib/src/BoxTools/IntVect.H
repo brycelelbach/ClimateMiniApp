@@ -11,8 +11,6 @@
 #ifndef _INTVECT_H_
 #define _INTVECT_H_
 
-#include "DetectCXX11.H"
-
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -639,7 +637,7 @@ public:
 
   /*@}*/
 
-  friend void swap(IntVect& lhs, IntVect& rhs) CH_NOEXCEPT;
+  friend void swap(IntVect& lhs, IntVect& rhs) noexcept;
 
 protected:
   //
@@ -1256,7 +1254,7 @@ IntVect::coarsen (const IntVect& p)
 }
 
 inline
-void swap (IntVect& lhs, IntVect& rhs) CH_NOEXCEPT
+void swap (IntVect& lhs, IntVect& rhs) noexcept
 {
   using std::swap;
   swap(lhs.vect, rhs.vect);

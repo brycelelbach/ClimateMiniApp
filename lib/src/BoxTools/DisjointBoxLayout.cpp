@@ -108,8 +108,8 @@ DisjointBoxLayout::close(int a_thisProc)
       CH_assert(isDisjoint());
       *m_closed = true;
       buildDataIndex(a_thisProc);
-      m_dataIterator = RefCountedPtr<DataIterator>(
-                        new DataIterator(*this, m_layout));
+      m_dataIterator = std::shared_ptr<DataIterator>(
+                        new DataIterator(*this, m_layout.get()));
       computeNeighbors();
     }
 }
@@ -121,8 +121,8 @@ DisjointBoxLayout::closeNO()
       sort();
       CH_assert(isDisjoint());
       *m_closed = true;
-      m_dataIterator = RefCountedPtr<DataIterator>(
-                        new DataIterator(*this, m_layout));
+      m_dataIterator = std::shared_ptr<DataIterator>(
+                        new DataIterator(*this, m_layout.get()));
       //computeNeighbors(); don't build neighbors
     }
 }
@@ -136,14 +136,14 @@ DisjointBoxLayout::closeNoSort(int a_thisProcID)
       CH_assert(isDisjoint());
       *m_sorted = false;
       *m_closed = true;
-      m_dataIterator = RefCountedPtr<DataIterator>(
-                        new DataIterator(*this, m_layout));
+      m_dataIterator = std::shared_ptr<DataIterator>(
+                        new DataIterator(*this, m_layout.get()));
       //computeNeighbors(); don't build neighbors
     }
 }
 
 void
-DisjointBoxLayout::closeN(RefCountedPtr<Vector<Vector<std::pair<int, LayoutIndex> > > > neighbors)
+DisjointBoxLayout::closeN(std::shared_ptr<Vector<Vector<std::pair<int, LayoutIndex> > > > neighbors)
 
 {
   if (!*m_closed)  //do nothing if already closed
@@ -151,8 +151,8 @@ DisjointBoxLayout::closeN(RefCountedPtr<Vector<Vector<std::pair<int, LayoutIndex
       sort();
       CH_assert(isDisjoint());
       *m_closed = true;
-      m_dataIterator = RefCountedPtr<DataIterator>(
-                        new DataIterator(*this, m_layout));
+      m_dataIterator = std::shared_ptr<DataIterator>(
+                        new DataIterator(*this, m_layout.get()));
       m_neighbors = neighbors;
     }
 }
@@ -208,12 +208,12 @@ void DisjointBoxLayout::computeNeighbors()
   unsigned int id = 0;
   unsigned int start = 0;
   unsigned int end   = size();
-  m_neighbors = RefCountedPtr<Vector<Vector<std::pair<int, LayoutIndex > > > >(
+  m_neighbors = std::shared_ptr<Vector<Vector<std::pair<int, LayoutIndex > > > >(
             new Vector<Vector<std::pair<int, LayoutIndex> > >());
   DataIterator dit = dataIterator();
   m_neighbors->resize(size());
   LayoutIterator lit = layoutIterator();
-  const Vector<LayoutIndex>& vecLayoutIndex = *(lit.m_indicies);
+  const Vector<LayoutIndex>& vecLayoutIndex = *(lit.m_indices);
 
   for (DataIterator dit=dataIterator(); dit.ok(); ++dit)
     {
@@ -508,7 +508,7 @@ coarsen(DisjointBoxLayout& a_output, const DisjointBoxLayout& a_input,
 
   // copy first, then coarsen everything
   // a_output.deepCopy(a_input);
-  a_output.m_boxes      = RefCountedPtr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
+  a_output.m_boxes      = std::shared_ptr<Vector<Entry> >(new Vector<Entry>(*(a_input.m_boxes)));
   a_output.m_layout     = a_input.m_layout;
 #if defined(CH_MPI) || defined(CH_HPX)
   a_output.m_dataIndex  = a_input.m_dataIndex;
